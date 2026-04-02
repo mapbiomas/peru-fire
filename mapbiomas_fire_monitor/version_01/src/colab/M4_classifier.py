@@ -8,10 +8,11 @@ Maneja:
   3. Extraer fragmentos desde el mosaico nacional (VRT de fragmentos GEE)
   4. Inferencia DNN por fragmento
   5. Salida: los píxeles quemados obtienen el valor dayOfYear (no 1 binario)
-  6. Filtros morfológicos (apertura/cierre)
-  7. Subir fragmentos clasificados de nuevo a GCS + GEE Asset
-  8. Enmascarar el perímetro del fragmento (límite de la región)
-  9. Interfaz de ipywidgets para el flujo de trabajo de la campaña de Colab
+  11. Filtros morfológicos (apertura/cierre)
+  12. Subir fragmentos clasificados de nuevo a GCS + GEE Asset
+  13. Enmascarar el perímetro del fragmento (límite de la región)
+  14. Reconstrucción dinámica de imágenes multibanda desde archivos por banda en GCS
+  15. Interfaz de ipywidgets para el flujo de trabajo de la campaña de Colab
 """
 
 import ee
@@ -85,12 +86,14 @@ def generate_dynamic_grid(geometry, tile_size_deg=None):
 def download_mosaic_tile(year, month, tile_info, period='monthly',
                           tmp_dir=None):
     """
-    Extraer un fragmento específico desde los archivos exportados por GEE.
-    GEE exporta el país en fragmentos grandes (shards). Esta función construye
-    un VRT local de esos shards y extrae la ventana correspondiente al tile_id.
+    Extraer un fragmento específico desde los archivos por banda exportados por GEE.
+    GEE exporta archivos individuales para cada banda (ej: ..._blue-00-00.tif).
+    Esta función reconstruye un stack multiband virtual y extrae la ventana del tile.
     """
+    import re
     tile_id = tile_info['tile_id']
     bounds  = tile_info['bounds']  # [x0, y0, x1, y1]
+    all_bands = CONFIG['bands_all']
     
     if period == 'monthly':
         prefix = monthly_chunk_path(year, month)
@@ -100,30 +103,48 @@ def download_mosaic_tile(year, month, tile_info, period='monthly',
         m_name = mosaic_name(year, period='yearly')
 
     dst = os.path.join(tmp_dir or '/tmp', f"{m_name}_{tile_id}.tif")
-    vrt_path = os.path.join(tmp_dir or '/tmp', f"{m_name}_input.vrt")
+    vrt_master = os.path.join(tmp_dir or '/tmp', f"{m_name}_stack.vrt")
 
-    # 1. Crear VRT si no existe (conecta todos los shards de GCS)
-    if not os.path.exists(vrt_path):
-        print(f"      📦 Creando VRT de fragmentos nativos de GEE...")
-        # Descargamos solo los archivos .tif del prefijo para construir el VRT local
-        # O mejor: usamos /vsigs/ para no descargar todo
+    # 1. Crear VRT maestro si no existe (conecta todas las bandas)
+    if not os.path.exists(vrt_master):
+        print(f"      📦 Reconstruyendo stack multibanda desde GCS...")
+        # Enumerar todos los fragmentos
         res = subprocess.run(['gsutil', 'ls', f"gs://{CONFIG['bucket']}/{prefix}/*.tif"],
                              capture_output=True, text=True)
-        gcs_files = [line.strip().replace('gs://', '/vsigs/') for line in res.stdout.splitlines()]
+        gcs_files = [line.strip() for line in res.stdout.splitlines()]
         
         if not gcs_files:
             return None
-            
-        subprocess.run(['gdalbuildvrt', vrt_path] + gcs_files, check=True)
 
-    # 2. Extraer la ventana del tile del VRT
+        band_vrts = []
+        for band in all_bands:
+            # Filtrar fragmentos que pertenecen a esta banda
+            # GEE usa el formato: prefix/m_name_banda-0000000000-0000000000.tif
+            pattern = re.compile(rf"{m_name}_{band}(-\d+)?(-\d+)?\.tif$")
+            shards = [f.replace('gs://', '/vsigs/') for f in gcs_files if pattern.search(f)]
+            
+            if not shards:
+                print(f"      ⚠️  No se han encontrado fragmentos para la banda: {band}")
+                continue
+                
+            bvrt = os.path.join(tmp_dir or '/tmp', f"{m_name}_{band}.vrt")
+            subprocess.run(['gdalbuildvrt', bvrt] + shards, check=True)
+            band_vrts.append(bvrt)
+
+        if not band_vrts:
+            return None
+            
+        # Stackear bandas: crear VRT maestro con -separate
+        subprocess.run(['gdalbuildvrt', '-separate', vrt_master] + band_vrts, check=True)
+
+    # 2. Extraer la ventana del tile del VRT maestro
     # gdal_translate -projwin <ulx> <uly> <lrx> <lry>
     ulx, uly, lrx, lry = bounds[0], bounds[3], bounds[2], bounds[1]
     
     subprocess.run([
         'gdal_translate', '-of', 'GTiff',
         '-projwin', str(ulx), str(uly), str(lrx), str(lry),
-        vrt_path, dst
+        vrt_master, dst
     ], check=True)
 
     return dst
@@ -146,8 +167,9 @@ def read_tif_as_array(tif_path, selected_bands_idx):
         for b_idx in selected_bands_idx:
             bands.append(src.read(b_idx + 1).astype(np.float32))
 
-        # banda dayOfYear (siempre la última banda = índice 6 en el mosaico de 7 bandas)
-        doy_band = src.read(7)  # int16, día juliano 1–366
+        # banda dayOfYear (es la última banda en CONFIG['bands_all'])
+        dayOfYear_index = CONFIG['bands_all'].index('dayOfYear')
+        doy_band = src.read(dayOfYear_index + 1)  # int16, día juliano 1–366
 
         data = np.stack(bands, axis=-1)  # (H, W, C)
 
@@ -427,10 +449,11 @@ class ClassifierUI:
         self.w_version = widgets.Text(value='v1', description='Versión del modelo:',
                                        style={'description_width': '120px'},
                                        layout=widgets.Layout(width='250px'))
-        self.w_year = widgets.IntSlider(
-            value=2024, min=2017, max=2026, step=1,
-            description='Año:', style={'description_width': '80px'},
-            layout=widgets.Layout(width='350px')
+        self.w_years = widgets.SelectMultiple(
+            options=range(2017, 2027),
+            value=[2024], description='Años:',
+            style={'description_width': '100px'},
+            layout=widgets.Layout(height='100px', width='120px')
         )
         self.w_months = widgets.SelectMultiple(
             options=[(f'{m:02d} — {cal.month_name[m]}', m) for m in range(1, 13)],
@@ -455,8 +478,10 @@ class ClassifierUI:
             title,
             widgets.HBox([
                 widgets.VBox([self.w_regions, self.w_version]),
-                widgets.VBox([self.w_year, self.w_months,
-                               self.w_morph, self.w_upload_gee]),
+                widgets.VBox([
+                    widgets.HBox([self.w_years, self.w_months]),
+                    self.w_morph, self.w_upload_gee
+                ]),
             ]),
             widgets.HBox([self.btn_run, self.btn_status]),
             self.out,
@@ -470,38 +495,42 @@ class ClassifierUI:
             clear_output()
             regions = list(self.w_regions.value)
             months  = list(self.w_months.value)
-            year    = self.w_year.value
+            years   = list(self.w_years.value)
             version = self.w_version.value
 
             if not regions:
                 print("  ⚠️  Seleccione al menos una región.")
                 return
 
-            run_classification_campaign(
-                year=year, months=months, regions=regions,
-                version=version, out_widget=self.out
-            )
+            for year in years:
+                run_classification_campaign(
+                    year=year, months=months, regions=regions,
+                    version=version, out_widget=self.out
+                )
+                print("-" * 50)
 
     def _on_status(self, _):
         with self.out:
             clear_output()
-            year    = self.w_year.value
+            years   = list(self.w_years.value)
             months  = list(self.w_months.value)
             regions = list(self.w_regions.value)
             version = self.w_version.value
 
-            print(f"🔍 Comprobando el estado de la clasificación — {year}")
-            for month in months:
-                name   = classification_name(regions, version, year, month)
-                folder = (f"{CONFIG['base_path']}/classifications/monthly/"
-                          f"{year}/{month:02d}")
-                result = subprocess.run(
-                    ['gsutil', 'ls', f"gs://{CONFIG['bucket']}/{folder}/"],
-                    capture_output=True, text=True
-                )
-                files = [l.strip() for l in result.stdout.splitlines() if l.strip()]
-                icon  = '✅' if files else '❌'
-                print(f"  {icon}  {year}-{month:02d}  |  {len(files)} fragmentos")
+            for year in years:
+                print(f"🔍 Comprobando el estado de la clasificación — {year}")
+                for month in months:
+                    name   = classification_name(regions, version, year, month)
+                    folder = (f"{CONFIG['base_path']}/classifications/monthly/"
+                              f"{year}/{month:02d}")
+                    result = subprocess.run(
+                        ['gsutil', 'ls', f"gs://{CONFIG['bucket']}/{folder}/"],
+                        capture_output=True, text=True
+                    )
+                    files = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+                    icon  = '✅' if files else '❌'
+                    print(f"  {icon}  {year}-{month:02d}  |  {len(files)} fragmentos")
+                print("-" * 40)
 
     def show(self):
         display(self.ui)

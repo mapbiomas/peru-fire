@@ -264,11 +264,11 @@ class SampleManagerUI:
             style={'description_width': '100px'},
             layout=widgets.Layout(width='380px')
         )
-        self.w_years = widgets.Text(
-            placeholder='p. ej. 2022,2023,2024',
-            description='Años:', value='',
+        self.w_years = widgets.SelectMultiple(
+            options=range(2017, 2027),
+            value=[2024], description='Años:',
             style={'description_width': '100px'},
-            layout=widgets.Layout(width='300px')
+            layout=widgets.Layout(height='100px', width='120px')
         )
 
         # ── Selector de bandas
@@ -322,7 +322,7 @@ class SampleManagerUI:
             version   = self.w_version.value.strip() or None
             period    = None if self.w_period.value == 'both' else self.w_period.value
             regions   = [r.strip() for r in self.w_regions.value.splitlines() if r.strip()] or None
-            years     = [int(y) for y in self.w_years.value.split(',') if y.strip().isdigit()] or None
+            years     = list(self.w_years.value)
 
             print(f"🔍 Cargando colección: {coll_name}")
             fc = load_sample_fc(coll_name)

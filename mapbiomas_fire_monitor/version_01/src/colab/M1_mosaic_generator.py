@@ -189,8 +189,7 @@ def export_to_asset(mosaic, name, year, month=None, period='monthly'):
 
 def export_to_gcs(mosaic, name, year, month=None, period='monthly'):
     """
-    Enviar una única tarea de exportación de GEE a GCS para todo el país.
-    GEE dividirá automáticamente en fragmentos grandes si es necesario.
+    Enviar tareas de exportación de GEE a GCS para cada banda por separado.
     """
     geometry = get_country_geometry()
     
@@ -199,19 +198,23 @@ def export_to_gcs(mosaic, name, year, month=None, period='monthly'):
     else:
         folder = yearly_chunk_path(year)
 
-    task = ee.batch.Export.image.toCloudStorage(
-        image           = mosaic.clip(geometry),
-        description     = f'GCS_{name}',
-        bucket          = CONFIG['bucket'],
-        fileNamePrefix  = f"{folder}/{name}",
-        region          = geometry.bounds(),
-        scale           = 10,
-        maxPixels       = 1e13,
-        fileFormat      = 'GeoTIFF',
-        formatOptions   = {'cloudOptimized': True},
-    )
-    task.start()
-    return task
+    tasks = []
+    for band in CONFIG['bands_all']:
+        band_name = f"{name}_{band}"
+        task = ee.batch.Export.image.toCloudStorage(
+            image           = mosaic.select(band).clip(geometry),
+            description     = f'GCS_{band_name}',
+            bucket          = CONFIG['bucket'],
+            fileNamePrefix  = f"{folder}/{band_name}",
+            region          = geometry.bounds(),
+            scale           = 10,
+            maxPixels       = 1e13,
+            fileFormat      = 'GeoTIFF',
+            formatOptions   = {'cloudOptimized': True},
+        )
+        task.start()
+        tasks.append(task)
+    return tasks
 
 
 # ─── VERIFICACIÓN DE ESTADO DE GCS ────────────────────────────────────────────
@@ -326,12 +329,8 @@ def assemble_country_mosaic(year, month=None, period='monthly'):
 
 class MosaicGeneratorUI:
     """
-    Interfaz interactiva de widgets de Colab para la generación y el seguimiento de mosaicos.
-    Características:
-      - Selección de año / mes
-      - Período: alternar mensual / anual
-      - Verificación de estado: qué se ha exportado ya
-      - Disparador de incendio: enviar tareas de exportación de GEE
+    Interfaz para enviar tareas de exportación de GEE (Asset y GCS).
+    Permite seleccionar múltiples años y meses.
     """
 
     def __init__(self):
@@ -397,7 +396,7 @@ class MosaicGeneratorUI:
                 self.w_period,
                 widgets.VBox([self.w_export_asset, self.w_export_gcs])
             ]),
-            widgets.HBox([self.btn_status, self.btn_dispatch, self.btn_assemble]),
+            widgets.HBox([self.btn_status, self.btn_dispatch]),
         ], layout=widgets.Layout(padding='10px'))
 
         self.ui = widgets.VBox([title, controls, self.out])
@@ -405,7 +404,6 @@ class MosaicGeneratorUI:
         # ── Funciones de llamada
         self.btn_status.on_click(self._on_status)
         self.btn_dispatch.on_click(self._on_dispatch)
-        self.btn_assemble.on_click(self._on_assemble)
 
     def _get_params(self):
         years  = list(self.w_years.value)
@@ -456,8 +454,8 @@ class MosaicGeneratorUI:
                             print(f"  📦  Tarea de Asset enviada: {name} [{t.status()['state']}]")
 
                         if self.w_export_gcs.value:
-                            t = export_to_gcs(mosaic, name, year, month, 'monthly')
-                            print(f"  ☁️   Tarea de GCS enviada: {name} [{t.status()['state']}]")
+                            ts = export_to_gcs(mosaic, name, year, month, 'monthly')
+                            print(f"  ☁️   {len(ts)} tareas de GCS (por banda) enviadas para {name}")
 
                 if period in ('yearly', 'both'):
                     name = mosaic_name(year, period='yearly')
@@ -472,25 +470,65 @@ class MosaicGeneratorUI:
                         print(f"  📦  Tarea de Asset enviada: {name} [{t.status()['state']}]")
 
                     if self.w_export_gcs.value:
-                        t = export_to_gcs(mosaic, name, year, period='yearly')
-                        print(f"  ☁️   Tarea de GCS enviada: {name} [{t.status()['state']}]")
-                print("-" * 40)
+                        ts = export_to_gcs(mosaic, name, year, period='yearly')
+                        print(f"  ☁️   {len(ts)} tareas de GCS (por banda) enviadas para {name}")
+                print("\n✅ Todas las tareas enviadas. Supervise en el Administrador de tareas de GEE.")
 
-            print("\n✅ Todas las tareas enviadas. Supervise en el Administrador de tareas de GEE.")
+    def show(self):
+        display(self.ui)
+
+
+class MosaicAssemblerUI:
+    """
+    Interfaz para ensamblar fragmentos de GCS en mosaicos nacionales (COG).
+    Proporciona enlaces de descarga directa para el equipo.
+    """
+    def __init__(self):
+        self._build_ui()
+
+    def _build_ui(self):
+        from ipywidgets import HTML
+        title = HTML("""
+            <div style="background:linear-gradient(135deg,#003300,#004d00);color:#b3ffb3;padding:14px;border-radius:10px;">
+                🗺️ <b>Ensamblador de Mosaicos</b> — GCS Shards → COG Nacional
+            </div>
+        """)
+        self.w_years = widgets.SelectMultiple(
+            options=range(2017, 2027), value=[2024], description='Años:',
+            style={'description_width': '80px'}, layout=widgets.Layout(width='150px')
+        )
+        self.w_months = widgets.SelectMultiple(
+            options=[(f'{m:02d}', m) for m in range(1, 13)], value=[1], description='Meses:',
+            style={'description_width': '60px'}, layout=widgets.Layout(width='120px')
+        )
+        self.btn_assemble = widgets.Button(description='🏗️ Ensamblar Mosaicos', button_style='success')
+        self.out = widgets.Output()
+        self.ui = widgets.VBox([title, widgets.HBox([self.w_years, self.w_months, self.btn_assemble]), self.out])
+        self.btn_assemble.on_click(self._on_assemble)
 
     def _on_assemble(self, _):
-        years, months, period = self._get_params()
+        years  = list(self.w_years.value)
+        months = list(self.w_months.value)
         with self.out:
             clear_output()
-            print(f"🗺️  Ensamblando mosaicos nacionales — Años: {years} | período: {period}\n")
             for year in years:
-                if period in ('monthly', 'both'):
-                    for month in months:
-                        print(f"\n  📅  {year}-{month:02d}")
-                        assemble_country_mosaic(year, month, 'monthly')
-                if period in ('yearly', 'both'):
-                    print(f"\n  📅  {year} (anual)")
-                    assemble_country_mosaic(year, period='yearly')
+                for month in months:
+                    print(f"\n📂 Procesando {year}-{month:02d}...")
+                    assemble_country_mosaic(year, month)
+                    self._show_download_links(year, month)
+
+    def _show_download_links(self, year, month):
+        prefix = monthly_chunk_path(year, month)
+        m_name = mosaic_name(year, month)
+        
+        # Generar enlaces a GCS Console
+        links_html = f"<b>📥 Enlaces GCS ({year}-{month:02d}):</b><br>"
+        for band in CONFIG['bands_all']:
+            # Enlace a la consola de Google Cloud para fácil acceso/descarga
+            url = f"https://console.cloud.google.com/storage/browser/{CONFIG['bucket']}/{prefix};tab=objects"
+            links_html += f"• <a href='{url}' target='_blank' style='color:#4caf50;'>{band}</a> &nbsp;"
+        
+        display(widgets.HTML(f"<div style='background:#111;padding:8px;border-left:4px solid #4caf50;margin-top:5px;'>{links_html}</div>"))
 
     def show(self):
         display(self.ui)
@@ -498,7 +536,14 @@ class MosaicGeneratorUI:
 
 # ─── EJECUCIÓN RÁPIDA ──────────────────────────────────────────────────────────
 
+def run_generator_ui():
+    MosaicGeneratorUI().show()
+
+def run_assembler_ui():
+    MosaicAssemblerUI().show()
+
 def run_ui():
-    """Iniciar la interfaz del generador de mosaicos en Colab."""
-    ui = MosaicGeneratorUI()
-    ui.show()
+    """Iniciar ambas interfaces en celdas separadas (predeterminado)."""
+    run_generator_ui()
+    print("\n" + "-"*80 + "\n")
+    run_assembler_ui()

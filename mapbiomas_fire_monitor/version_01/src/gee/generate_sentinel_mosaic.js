@@ -276,7 +276,7 @@ function export_mosaic(mosaic, name, region, year, month, period) {
     });
   }
 
-  // ── 2. Export to GCS (full country — GEE tiles naturally) ─────────────
+  // ── 2. Export to GCS (per band) ─────────────────────────────
   if (config.export_to_gcs) {
     var period_path = period === 'monthly'
       ? 'monthly/chunks/' + year + '/' + (month < 10 ? '0' + month : '' + month)
@@ -284,16 +284,19 @@ function export_mosaic(mosaic, name, region, year, month, period) {
 
     var gcs_folder = config.bucket_base + '/' + period_path;
 
-    Export.image.toCloudStorage({
-      image:       mosaic_with_meta,
-      description: 'GCS_' + name,
-      bucket:      config.bucket,
-      fileNamePrefix: gcs_folder + '/' + name,
-      region:      country_bounds,
-      scale:       10,
-      maxPixels:   1e13,
-      fileFormat:  'GeoTIFF',
-      formatOptions: { cloudOptimized: true },
+    BANDS_ALL.forEach(function(band) {
+      var band_name = name + '_' + band;
+      Export.image.toCloudStorage({
+        image:       mosaic_with_meta.select(band),
+        description: 'GCS_' + band_name,
+        bucket:      config.bucket,
+        fileNamePrefix: gcs_folder + '/' + band_name,
+        region:      country_bounds,
+        scale:       10,
+        maxPixels:   1e13,
+        fileFormat:  'GeoTIFF',
+        formatOptions: { cloudOptimized: true },
+      });
     });
   }
 }
