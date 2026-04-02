@@ -23,7 +23,8 @@ var config = {
   ee_project: 'mapbiomas-peru',
 
   // GEE Asset destination
-  asset_folder: 'projects/mapbiomas-mosaics/assets/SENTINEL/FIRE/mosaics-countries',
+  asset_folder_monthly: 'projects/mapbiomas-mosaics/assets/SENTINEL/FIRE/quaity_mosaics_nbr_countries_monthly-01',
+  asset_folder_yearly:  'projects/mapbiomas-mosaics/assets/SENTINEL/FIRE/quaity_mosaics_nbr_countries_yearly-01',
 
   // GCS destination
   bucket: 'mapbiomas-fire',
@@ -263,10 +264,11 @@ function export_mosaic(mosaic, name, region, year, month, period) {
 
   // ── 1. Export to GEE Asset (full country mosaic) ──────────────────────────
   if (config.export_to_asset) {
+    var asset_folder = period === 'monthly' ? config.asset_folder_monthly : config.asset_folder_yearly;
     Export.image.toAsset({
       image:       mosaic_with_meta,
       description: 'ASSET_' + name,
-      assetId:     config.asset_folder + '/' + name,
+      assetId:     asset_folder + '/' + name,
       region:      country_bounds,
       scale:       10,
       maxPixels:   1e13,
@@ -274,7 +276,7 @@ function export_mosaic(mosaic, name, region, year, month, period) {
     });
   }
 
-  // ── 2. Export to GCS as COG chunks (per tile of dynamic grid) ─────────────
+  // ── 2. Export to GCS (full country — GEE tiles naturally) ─────────────
   if (config.export_to_gcs) {
     var period_path = period === 'monthly'
       ? 'monthly/chunks/' + year + '/' + (month < 10 ? '0' + month : '' + month)
@@ -282,28 +284,16 @@ function export_mosaic(mosaic, name, region, year, month, period) {
 
     var gcs_folder = config.bucket_base + '/' + period_path;
 
-    // Generate dynamic grid for this country
-    var grid = generate_grid(country_geometry);
-
-    // Evaluate grid client-side and submit one export per tile
-    grid.evaluate(function(grid_info) {
-      grid_info.features.forEach(function(tile) {
-        var tile_id   = tile.properties.tile_id;
-        var tile_geom = ee.Geometry(tile.geometry);
-        var tile_name = name + '_' + tile_id;
-
-        Export.image.toCloudStorage({
-          image:       mosaic_with_meta.clip(tile_geom),
-          description: 'GCS_' + tile_name,
-          bucket:      config.bucket,
-          fileNamePrefix: gcs_folder + '/' + tile_name,
-          region:      tile_geom,
-          scale:       10,
-          maxPixels:   1e13,
-          fileFormat:  'GeoTIFF',
-          formatOptions: { cloudOptimized: true },
-        });
-      });
+    Export.image.toCloudStorage({
+      image:       mosaic_with_meta,
+      description: 'GCS_' + name,
+      bucket:      config.bucket,
+      fileNamePrefix: gcs_folder + '/' + name,
+      region:      country_bounds,
+      scale:       10,
+      maxPixels:   1e13,
+      fileFormat:  'GeoTIFF',
+      formatOptions: { cloudOptimized: true },
     });
   }
 }

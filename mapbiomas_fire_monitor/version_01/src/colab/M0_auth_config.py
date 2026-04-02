@@ -36,7 +36,8 @@ CONFIG = {
     'base_path':  'sudamerica/peru/monitor',
 
     # ── Rutas de GEE Asset
-    'asset_mosaics':         'projects/mapbiomas-mosaics/assets/SENTINEL/FIRE/mosaics-countries',
+    'asset_mosaics_monthly': 'projects/mapbiomas-mosaics/assets/SENTINEL/FIRE/quaity_mosaics_nbr_countries_monthly-01',
+    'asset_mosaics_yearly':  'projects/mapbiomas-mosaics/assets/SENTINEL/FIRE/quaity_mosaics_nbr_countries_yearly-01',
     'asset_classification':  'projects/mapbiomas-peru/assets/FIRE/MONITOR/classification',
     'asset_regions':         'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
 

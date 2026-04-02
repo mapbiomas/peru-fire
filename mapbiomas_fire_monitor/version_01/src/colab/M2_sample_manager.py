@@ -87,13 +87,11 @@ def get_sample_stats(fc):
 
 # ─── CONVERSIÓN DE MUESTRA → TIF ──────────────────────────────────────────────
 
-def samples_to_array(fc, selected_bands, mosaic_asset_root, max_samples=None):
+def samples_to_array(fc, selected_bands, max_samples=None):
     """
     Para cada punto de muestra, extraer los valores de las bandas del mosaico correspondiente.
     Devuelve matrices numpy (X, y).
 
-    mosaic_asset_root: ruta de GEE donde se almacenan los mosaicos
-                       (p. ej. 'projects/mapbiomas-mosaics/assets/SENTINEL/FIRE/mosaics-countries')
     selected_bands: lista de nombres de bandas a extraer
     """
     import math
@@ -111,13 +109,16 @@ def samples_to_array(fc, selected_bands, mosaic_asset_root, max_samples=None):
 
         # Construir el nombre del mosaico para esta muestra
         month_str = month.format('%02d')
-        mosaic_name = ee.Algorithms.If(
+        
+        # Seleccionar la colección correcta según el período
+        m_name = ee.String('s2_fire_peru_').cat(year.format('%d'))
+        mosaic_path = ee.Algorithms.If(
             period.equals('monthly'),
-            ee.String('s2_fire_peru_').cat(year.format('%d')).cat('_').cat(month_str),
-            ee.String('s2_fire_peru_').cat(year.format('%d'))
+            ee.String(CONFIG['asset_mosaics_monthly']).cat('/').cat(m_name).cat('_').cat(month_str),
+            ee.String(CONFIG['asset_mosaics_yearly']).cat('/').cat(m_name)
         )
 
-        mosaic = ee.Image(ee.String(mosaic_asset_root).cat('/').cat(mosaic_name))
+        mosaic = ee.Image(mosaic_path)
 
         sampled = mosaic.select(selected_bands).reduceRegion(
             reducer  = ee.Reducer.first(),
@@ -146,18 +147,20 @@ def samples_to_array(fc, selected_bands, mosaic_asset_root, max_samples=None):
     return X, y
 
 
-def export_samples_to_gcs(fc, selected_bands, mosaic_asset_root,
-                           version, region, output_prefix):
+def export_samples_to_gcs(fc, selected_bands, version, region, output_prefix):
     """
     Exportar .tif de muestra a GCS para el entrenamiento.
     Utiliza sampleRegions en el mosaico para exportar una tabla plana.
     """
     def build_mosaic_for_sample(year, month, period):
+        m_name = f"s2_fire_peru_{year}"
         if period == 'monthly':
-            name = f"s2_fire_peru_{year}_{month:02d}"
+            asset_root = CONFIG['asset_mosaics_monthly']
+            name = f"{m_name}_{month:02d}"
         else:
-            name = f"s2_fire_peru_{year}"
-        return ee.Image(f"{mosaic_asset_root}/{name}")
+            asset_root = CONFIG['asset_mosaics_yearly']
+            name = m_name
+        return ee.Image(f"{asset_root}/{name}")
 
     # Agrupar muestras por año+mes+período
     years   = fc.aggregate_array('year').distinct().getInfo()

@@ -5,7 +5,7 @@ MapBiomas Fuego Sentinel Monitor — Piloto Perú
 Maneja:
   1. Generación de mosaicos Sentinel-2 a través de GEE (mensual + anual)
   2. Exportación a GEE Asset (país completo)
-  3. Exportación a GCS como fragmentos COG (por mosaico de cuadrícula dinámica)
+  3. Exportación a GCS (país completo — GEE divide en fragmentos grandes automáticamente)
   4. Verificación de estado: qué mosaicos ya han sido exportados
   5. Ensamblaje del mosaico nacional: VRT → COG desde fragmentos de GCS
   6. Interfaz de ipywidgets para Colab
@@ -116,21 +116,18 @@ def build_mosaic(start_date, end_date, geometry, apply_focus_mask=False,
     return spectral.addBands(doy)
 
 
-# ─── CUADRÍCULA DINÁMICA ──────────────────────────────────────────────────────
+# ─── CUADRÍCULA (Opcional, para referencia/depuración) ───────────────────────
 
 def generate_grid(geometry, tile_size_deg=None):
     """
-    Generar una cuadrícula de mosaicos (~1/4 de escena Landsat) que cubra la geometría.
-    Devuelve una lista de diccionarios: [{tile_id, geometry, col, row}]
-    Cálculo en el lado del cliente después de .getInfo().
+    Generar una cuadrícula de mosaicos para referencia.
+    Nota: La exportación a GCS ahora usa la división nativa de GEE.
     """
     tile_size = tile_size_deg or CONFIG['tile_size_deg']
     bounds = geometry.bounds().coordinates().getInfo()[0]
 
-    xmin = bounds[0][0]
-    ymin = bounds[0][1]
-    xmax = bounds[2][0]
-    ymax = bounds[2][1]
+    xmin, ymin = bounds[0][0], bounds[0][1]
+    xmax, ymax = bounds[2][0], bounds[2][1]
 
     ncols = math.ceil((xmax - xmin) / tile_size)
     nrows = math.ceil((ymax - ymin) / tile_size)
@@ -138,21 +135,10 @@ def generate_grid(geometry, tile_size_deg=None):
     tiles = []
     for col in range(ncols):
         for row in range(nrows):
-            x0 = xmin + col * tile_size
-            y0 = ymin + row * tile_size
-            x1 = x0 + tile_size
-            y1 = y0 + tile_size
+            x0, y0 = xmin + col * tile_size, ymin + row * tile_size
+            x1, y1 = x0 + tile_size, y1 + row + tile_size
             tile_geom = ee.Geometry.Rectangle([x0, y0, x1, y1])
-            intersection = tile_geom.intersection(geometry, ee.ErrorMargin(1))
-            tile_id = f"c{col:02d}r{row:02d}"
-            tiles.append({
-                'tile_id': tile_id,
-                'geometry': tile_geom,
-                'intersection': intersection,
-                'col': col,
-                'row': row,
-            })
-
+            tiles.append({'tile_id': f"c{col:02d}r{row:02d}", 'geometry': tile_geom})
     return tiles
 
 
@@ -183,10 +169,15 @@ def export_to_asset(mosaic, name, year, month=None, period='monthly'):
             'name':     name,
         })
 
+    if period == 'monthly':
+        asset_id = f"{CONFIG['asset_mosaics_monthly']}/{name}"
+    else:
+        asset_id = f"{CONFIG['asset_mosaics_yearly']}/{name}"
+
     task = ee.batch.Export.image.toAsset(
         image       = img,
         description = f'ASSET_{name}',
-        assetId     = f"{CONFIG['asset_mosaics']}/{name}",
+        assetId     = asset_id,
         region      = country_geom.bounds(),
         scale       = 10,
         maxPixels   = 1e13,
@@ -196,40 +187,31 @@ def export_to_asset(mosaic, name, year, month=None, period='monthly'):
     return task
 
 
-def export_to_gcs_chunks(mosaic, name, year, month=None, period='monthly', tiles=None):
+def export_to_gcs(mosaic, name, year, month=None, period='monthly'):
     """
-    Enviar tareas de exportación de GEE a GCS: un COG por mosaico de la cuadrícula.
-    Devuelve una lista de tuplas (tile_id, task).
+    Enviar una única tarea de exportación de GEE a GCS para todo el país.
+    GEE dividirá automáticamente en fragmentos grandes si es necesario.
     """
-    if tiles is None:
-        geometry = get_country_geometry()
-        tiles = generate_grid(geometry)
-
+    geometry = get_country_geometry()
+    
     if period == 'monthly':
         folder = monthly_chunk_path(year, month)
     else:
         folder = yearly_chunk_path(year)
 
-    tasks = []
-    for tile in tiles:
-        tile_name = f"{name}_{tile['tile_id']}"
-        img = mosaic.clip(tile['intersection'])
-
-        task = ee.batch.Export.image.toCloudStorage(
-            image           = img,
-            description     = f'GCS_{tile_name}',
-            bucket          = CONFIG['bucket'],
-            fileNamePrefix  = f"{folder}/{tile_name}",
-            region          = tile['intersection'].bounds(),
-            scale           = 10,
-            maxPixels       = 1e13,
-            fileFormat      = 'GeoTIFF',
-            formatOptions   = {'cloudOptimized': True},
-        )
-        task.start()
-        tasks.append((tile['tile_id'], task))
-
-    return tasks
+    task = ee.batch.Export.image.toCloudStorage(
+        image           = mosaic.clip(geometry),
+        description     = f'GCS_{name}',
+        bucket          = CONFIG['bucket'],
+        fileNamePrefix  = f"{folder}/{name}",
+        region          = geometry.bounds(),
+        scale           = 10,
+        maxPixels       = 1e13,
+        fileFormat      = 'GeoTIFF',
+        formatOptions   = {'cloudOptimized': True},
+    )
+    task.start()
+    return task
 
 
 # ─── VERIFICACIÓN DE ESTADO DE GCS ────────────────────────────────────────────
@@ -376,10 +358,11 @@ class MosaicGeneratorUI:
         """.format(**CONFIG))
 
         # ── Controles
-        self.w_year = widgets.IntSlider(
-            value=2024, min=2017, max=2026, step=1,
-            description='Año:', style={'description_width': '80px'},
-            layout=widgets.Layout(width='350px')
+        self.w_years = widgets.SelectMultiple(
+            options=range(2017, 2027),
+            value=[2024], description='Años:',
+            style={'description_width': '80px'},
+            layout=widgets.Layout(height='100px', width='150px')
         )
         self.w_months = widgets.SelectMultiple(
             options=[(f'{m:02d} — {calendar.month_name[m]}', m) for m in range(1, 13)],
@@ -393,7 +376,7 @@ class MosaicGeneratorUI:
             style={'description_width': '80px'},
         )
         self.w_export_asset = widgets.Checkbox(value=True, description='Exportar → GEE Asset')
-        self.w_export_gcs   = widgets.Checkbox(value=True, description='Exportar → Fragmentos GCS')
+        self.w_export_gcs   = widgets.Checkbox(value=True, description='Exportar → GCS (País completo)')
 
         self.btn_status   = widgets.Button(description='🔍 Verificar Estado',
                                             button_style='info',
@@ -409,12 +392,10 @@ class MosaicGeneratorUI:
 
         # ── Diseño
         controls = widgets.VBox([
-            self.w_year,
+            widgets.HBox([self.w_years, self.w_months]),
             widgets.HBox([
-                widgets.VBox([self.w_months]),
-                widgets.VBox([self.w_period,
-                              self.w_export_asset,
-                              self.w_export_gcs]),
+                self.w_period,
+                widgets.VBox([self.w_export_asset, self.w_export_gcs])
             ]),
             widgets.HBox([self.btn_status, self.btn_dispatch, self.btn_assemble]),
         ], layout=widgets.Layout(padding='10px'))
@@ -427,87 +408,89 @@ class MosaicGeneratorUI:
         self.btn_assemble.on_click(self._on_assemble)
 
     def _get_params(self):
-        year   = self.w_year.value
+        years  = list(self.w_years.value)
         months = list(self.w_months.value)
         period = self.w_period.value
-        return year, months, period
+        return years, months, period
 
     def _on_status(self, _):
-        year, months, period = self._get_params()
+        years, months, period = self._get_params()
         with self.out:
             clear_output()
-            print(f"🔍 Comprobando el estado de {year}...\n")
-            if period in ('monthly', 'both'):
-                status = check_mosaic_status(year, months, 'monthly')
-                for name, s in status.items():
-                    icon = '✅' if s['mosaic'] else ('⏳' if s['chunks'] > 0 else '❌')
-                    print(f"  {icon}  {name}  |  fragmentos: {s['chunks']}  |  mosaico: {s['mosaic']}")
-            if period in ('yearly', 'both'):
-                status = check_mosaic_status(year, period='yearly')
-                for name, s in status.items():
-                    icon = '✅' if s['mosaic'] else ('⏳' if s['chunks'] > 0 else '❌')
-                    print(f"  {icon}  {name}  |  fragmentos: {s['chunks']}  |  mosaico: {s['mosaic']}")
+            for year in years:
+                print(f"🔍 Comprobando el estado de {year}...\n")
+                if period in ('monthly', 'both'):
+                    status = check_mosaic_status(year, months, 'monthly')
+                    for name, s in status.items():
+                        icon = '✅' if s['mosaic'] else ('⏳' if s['chunks'] > 0 else '❌')
+                        print(f"  {icon}  {name}  |  fragmentos: {s['chunks']}  |  mosaico: {s['mosaic']}")
+                if period in ('yearly', 'both'):
+                    status = check_mosaic_status(year, period='yearly')
+                    for name, s in status.items():
+                        icon = '✅' if s['mosaic'] else ('⏳' if s['chunks'] > 0 else '❌')
+                        print(f"  {icon}  {name}  |  fragmentos: {s['chunks']}  |  mosaico: {s['mosaic']}")
+                print("-" * 40)
 
     def _on_dispatch(self, _):
-        year, months, period = self._get_params()
+        years, months, period = self._get_params()
         geometry = get_country_geometry()
-        tiles    = generate_grid(geometry)
 
         with self.out:
             clear_output()
-            print(f"🚀 Enviando tareas de mosaico — {year} | período: {period}\n")
-            print(f"   Cuadrícula: {len(tiles)} mosaicos × {CONFIG['tile_size_deg']}° cada uno\n")
+            print(f"🚀 Enviando tareas de mosaico — Años: {years} | período: {period}\n")
 
-            if period in ('monthly', 'both'):
-                for month in months:
-                    name = mosaic_name(year, month, 'monthly')
-                    start = ee.Date(f'{year}-{month:02d}-01')
-                    end   = start.advance(1, 'month')
+            for year in years:
+                print(f"📅 Año {year}")
+                if period in ('monthly', 'both'):
+                    for month in months:
+                        name = mosaic_name(year, month, 'monthly')
+                        start = ee.Date(f'{year}-{month:02d}-01')
+                        end   = start.advance(1, 'month')
+
+                        mosaic = build_mosaic(start, end, geometry,
+                                              apply_focus_mask=True,
+                                              year=year, month=month)
+
+                        if self.w_export_asset.value:
+                            t = export_to_asset(mosaic, name, year, month, 'monthly')
+                            print(f"  📦  Tarea de Asset enviada: {name} [{t.status()['state']}]")
+
+                        if self.w_export_gcs.value:
+                            t = export_to_gcs(mosaic, name, year, month, 'monthly')
+                            print(f"  ☁️   Tarea de GCS enviada: {name} [{t.status()['state']}]")
+
+                if period in ('yearly', 'both'):
+                    name = mosaic_name(year, period='yearly')
+                    start = ee.Date(f'{year}-01-01')
+                    end   = ee.Date(f'{year+1}-01-01')
 
                     mosaic = build_mosaic(start, end, geometry,
-                                          apply_focus_mask=True,
-                                          year=year, month=month)
+                                          apply_focus_mask=False)
 
                     if self.w_export_asset.value:
-                        t = export_to_asset(mosaic, name, year, month, 'monthly')
+                        t = export_to_asset(mosaic, name, year, period='yearly')
                         print(f"  📦  Tarea de Asset enviada: {name} [{t.status()['state']}]")
 
                     if self.w_export_gcs.value:
-                        tasks = export_to_gcs_chunks(mosaic, name, year, month,
-                                                     'monthly', tiles)
-                        print(f"  ☁️   Tareas de fragmentos de GCS: {len(tasks)} fragmentos para {name}")
-
-            if period in ('yearly', 'both'):
-                name = mosaic_name(year, period='yearly')
-                start = ee.Date(f'{year}-01-01')
-                end   = ee.Date(f'{year+1}-01-01')
-
-                mosaic = build_mosaic(start, end, geometry,
-                                      apply_focus_mask=False)
-
-                if self.w_export_asset.value:
-                    t = export_to_asset(mosaic, name, year, period='yearly')
-                    print(f"  📦  Tarea de Asset enviada: {name} [{t.status()['state']}]")
-
-                if self.w_export_gcs.value:
-                    tasks = export_to_gcs_chunks(mosaic, name, year,
-                                                 period='yearly', tiles=tiles)
-                    print(f"  ☁️   Tareas de fragmentos de GCS: {len(tasks)} fragmentos para {name}")
+                        t = export_to_gcs(mosaic, name, year, period='yearly')
+                        print(f"  ☁️   Tarea de GCS enviada: {name} [{t.status()['state']}]")
+                print("-" * 40)
 
             print("\n✅ Todas las tareas enviadas. Supervise en el Administrador de tareas de GEE.")
 
     def _on_assemble(self, _):
-        year, months, period = self._get_params()
+        years, months, period = self._get_params()
         with self.out:
             clear_output()
-            print(f"🗺️  Ensamblando mosaicos nacionales — {year} | período: {period}\n")
-            if period in ('monthly', 'both'):
-                for month in months:
-                    print(f"\n  📅  {year}-{month:02d}")
-                    assemble_country_mosaic(year, month, 'monthly')
-            if period in ('yearly', 'both'):
-                print(f"\n  📅  {year} (anual)")
-                assemble_country_mosaic(year, period='yearly')
+            print(f"🗺️  Ensamblando mosaicos nacionales — Años: {years} | período: {period}\n")
+            for year in years:
+                if period in ('monthly', 'both'):
+                    for month in months:
+                        print(f"\n  📅  {year}-{month:02d}")
+                        assemble_country_mosaic(year, month, 'monthly')
+                if period in ('yearly', 'both'):
+                    print(f"\n  📅  {year} (anual)")
+                    assemble_country_mosaic(year, period='yearly')
 
     def show(self):
         display(self.ui)

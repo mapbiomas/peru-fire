@@ -4,8 +4,8 @@ MapBiomas Fuego Sentinel Monitor — Piloto Perú
 
 Maneja:
   1. Cargar modelo de GCS (hyperparameters.json + pesos)
-  2. Fragmentos de cuadrícula dinámica por región (~1/4 de escena Landsat)
-  3. Descargar fragmentos COG de GCS
+  2. Cuadrícula dinámica por región para clasificación local
+  3. Extraer fragmentos desde el mosaico nacional (VRT de fragmentos GEE)
   4. Inferencia DNN por fragmento
   5. Salida: los píxeles quemados obtienen el valor dayOfYear (no 1 binario)
   6. Filtros morfológicos (apertura/cierre)
@@ -82,30 +82,50 @@ def generate_dynamic_grid(geometry, tile_size_deg=None):
 
 # ─── DESCARGA DE MOSAICO ──────────────────────────────────────────────────────
 
-def download_mosaic_tile(year, month, tile_id, period='monthly',
-                          tmp_dir=None, region_name=None):
+def download_mosaic_tile(year, month, tile_info, period='monthly',
+                          tmp_dir=None):
     """
-    Descargar un fragmento COG de GCS para un fragmento/período determinado.
-    Devuelve: ruta local .tif o None si no se encuentra.
+    Extraer un fragmento específico desde los archivos exportados por GEE.
+    GEE exporta el país en fragmentos grandes (shards). Esta función construye
+    un VRT local de esos shards y extrae la ventana correspondiente al tile_id.
     """
+    tile_id = tile_info['tile_id']
+    bounds  = tile_info['bounds']  # [x0, y0, x1, y1]
+    
     if period == 'monthly':
-        country = CONFIG['country']
-        fname = f"s2_fire_{country}_{year}_{month:02d}_{tile_id}.tif"
         prefix = monthly_chunk_path(year, month)
+        m_name = mosaic_name(year, month, 'monthly')
     else:
-        country = CONFIG['country']
-        fname = f"s2_fire_{country}_{year}_{tile_id}.tif"
         prefix = f"{CONFIG['gcs_yearly_chunks']}/{year}"
+        m_name = mosaic_name(year, period='yearly')
 
-    src = gcs_path(f"{prefix}/{fname}")
-    dst = os.path.join(tmp_dir or '/tmp', fname)
+    dst = os.path.join(tmp_dir or '/tmp', f"{m_name}_{tile_id}.tif")
+    vrt_path = os.path.join(tmp_dir or '/tmp', f"{m_name}_input.vrt")
 
-    result = subprocess.run(
-        ['gsutil', 'cp', src, dst],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        return None
+    # 1. Crear VRT si no existe (conecta todos los shards de GCS)
+    if not os.path.exists(vrt_path):
+        print(f"      📦 Creando VRT de fragmentos nativos de GEE...")
+        # Descargamos solo los archivos .tif del prefijo para construir el VRT local
+        # O mejor: usamos /vsigs/ para no descargar todo
+        res = subprocess.run(['gsutil', 'ls', f"gs://{CONFIG['bucket']}/{prefix}/*.tif"],
+                             capture_output=True, text=True)
+        gcs_files = [line.strip().replace('gs://', '/vsigs/') for line in res.stdout.splitlines()]
+        
+        if not gcs_files:
+            return None
+            
+        subprocess.run(['gdalbuildvrt', vrt_path] + gcs_files, check=True)
+
+    # 2. Extraer la ventana del tile del VRT
+    # gdal_translate -projwin <ulx> <uly> <lrx> <lry>
+    ulx, uly, lrx, lry = bounds[0], bounds[3], bounds[2], bounds[1]
+    
+    subprocess.run([
+        'gdal_translate', '-of', 'GTiff',
+        '-projwin', str(ulx), str(uly), str(lrx), str(lry),
+        vrt_path, dst
+    ], check=True)
+
     return dst
 
 
@@ -330,12 +350,12 @@ def run_classification_campaign(year, months, regions, version,
                 tile_id = tile['tile_id']
                 _print(f"      ↳ fragmento {tile_id}", end='  ')
 
-                # Descargar fragmento de mosaico
+                # Extraer fragmento de mosaico (desde el VRT nacional)
                 tif_path = download_mosaic_tile(
-                    year, month, tile_id, period, tmpdir
+                    year, month, tile, period, tmpdir
                 )
                 if tif_path is None:
-                    _print("⚠️  no se ha encontrado el fragmento, omitiendo")
+                    _print("⚠️  no se ha podido extraer el fragmento, omitiendo")
                     continue
 
                 # Clasificar

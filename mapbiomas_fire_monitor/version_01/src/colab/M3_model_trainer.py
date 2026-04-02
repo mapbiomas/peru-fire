@@ -349,8 +349,7 @@ class ModelTrainerUI:
 
             X, y = samples_to_array(
                 self.sample_fc,
-                bands,
-                CONFIG['asset_mosaics']
+                bands
             )
             print(f"   Muestras cargadas: {len(X):,}  (quemado={y.sum():,}, no-quemado={(y==0).sum():,})\n")
 
