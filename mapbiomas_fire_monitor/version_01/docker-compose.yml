@@ -1,0 +1,53 @@
+# docker-compose.yml
+# MapBiomas Fire Monitor — Sentinel-2
+#
+# Usage:
+#   docker-compose up             → inicia JupyterLab em http://localhost:8888
+#   docker-compose up -d          → em background
+#   docker-compose down           → para e remove containers
+#   docker-compose exec app bash  → abre shell no container
+#
+# Autenticação (rodar uma vez após iniciar o container):
+#   docker-compose exec app gcloud auth application-default login
+#   docker-compose exec app earthengine authenticate
+
+version: '3.9'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fire_monitor:latest
+    container_name: fire_monitor
+
+    ports:
+      - "8888:8888"   # JupyterLab
+
+    volumes:
+      # ── Código fonte (hot-reload)
+      - ./src:/workspace/src
+      - ./notebooks:/workspace/notebooks
+      - ./reference:/workspace/reference
+
+      # ── Credenciais Google (monta do host → não precisa autenticar toda vez)
+      - ${HOME}/.config/gcloud:/root/.config/gcloud:ro
+      - ${HOME}/.config/earthengine:/root/.config/earthengine:ro
+
+      # ── Volume persistente para dados baixados (evita re-download)
+      - fire_monitor_data:/workspace/data
+
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+      - CLOUDSDK_CORE_PROJECT=mapbiomas-peru   # ajustar se necessário
+      - PYTHONPATH=/workspace/src/colab
+
+    restart: unless-stopped
+
+    # ── Reservar memória para TF e rasterio com imagens grandes
+    mem_limit: 16g
+    shm_size: 4g
+
+volumes:
+  fire_monitor_data:
+    driver: local

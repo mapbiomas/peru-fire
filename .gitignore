@@ -1,0 +1,50 @@
+# MapBiomas Fire Monitor — .gitignore
+
+# ── Reference scripts (not committed — internal only)
+reference/
+
+# ── Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ── Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── Environment
+.env
+.venv/
+venv/
+env/
+*.env
+conda-env/
+
+# ── Data / temporary files
+data/
+tmp/
+*.tif
+*.vrt
+*.npz
+*.pb
+
+# ── Google credentials
+*.json
+!environment.yml
+
+# ── OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE
+.vscode/
+.idea/
+*.swp
