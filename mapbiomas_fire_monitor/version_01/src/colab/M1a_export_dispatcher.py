@@ -35,6 +35,7 @@ class ExportDispatcherUI:
             style={'description_width': '80px'}, layout=widgets.Layout(width='120px')
         )
         self.btn_status = widgets.Button(description='🔍 Verificar Faltantes', button_style='info')
+        self.btn_miss   = widgets.Button(description='✨ Exportar Faltantes', button_style='warning')
         self.btn_all    = widgets.Button(description='🔥 Exportar TODO el Año', button_style='danger')
         self.w_period = widgets.RadioButtons(
             options=['monthly', 'yearly', 'both'],
