@@ -42,11 +42,17 @@ class ExportDispatcherUI:
             value='monthly', description='Período:',
             style={'description_width': '80px'},
         )
+        self.w_export_asset = widgets.Checkbox(value=True, description='Exportar → GEE Asset')
+        self.w_export_gcs   = widgets.Checkbox(value=True, description='Exportar → GCS (Bucket)')
+
         self.out = widgets.Output()
         
         controls = widgets.VBox([
             widgets.HBox([self.w_years, self.w_months]),
-            self.w_period,
+            widgets.HBox([
+                self.w_period,
+                widgets.VBox([self.w_export_asset, self.w_export_gcs])
+            ]),
             widgets.HBox([self.btn_status, self.btn_miss, self.btn_all])
         ])
         self.ui = widgets.VBox([title, controls, self.out])
@@ -96,13 +102,21 @@ class ExportDispatcherUI:
                 start = ee.Date(f'{year}-{month:02d}-01')
                 end = start.advance(1, 'month')
                 mosaic = build_mosaic(start, end, geom, apply_focus_mask=True, year=year, month=month)
-                export_to_gcs(mosaic, name, year, month, 'monthly')
+                
+                if self.w_export_asset.value:
+                    export_to_asset(mosaic, name, year, month, 'monthly')
+                if self.w_export_gcs.value:
+                    export_to_gcs(mosaic, name, year, month, 'monthly')
             else:
                 start = ee.Date(f'{year}-01-01')
                 end = ee.Date(f'{year+1}-01-01')
                 mosaic = build_mosaic(start, end, geom, apply_focus_mask=False)
-                export_to_gcs(mosaic, name, year, period='yearly')
-            print(f"   🚀 Tarea enviada: {name}")
+                
+                if self.w_export_asset.value:
+                    export_to_asset(mosaic, name, year, period='yearly')
+                if self.w_export_gcs.value:
+                    export_to_gcs(mosaic, name, year, period='yearly')
+            print(f"   🚀 Tareas enviadas: {name}")
 
     def _on_miss(self, _):
         years, months = list(self.w_years.value), list(self.w_months.value)
