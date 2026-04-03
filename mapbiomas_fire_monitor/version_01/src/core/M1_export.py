@@ -1,14 +1,12 @@
 """
-M1 — Generador de Mosaicos
+M1 — Despachador de Exportaciones
 MapBiomas Fuego Sentinel Monitor — Piloto Perú
 
 Maneja:
-  1. Generación de mosaicos Sentinel-2 a través de GEE (mensual + anual)
+  1. Generación de colecciones Sentinel-2 a través de GEE (mensual + anual)
   2. Exportación a GEE Asset (país completo)
-  3. Exportación a GCS (país completo — GEE divide en fragmentos grandes automáticamente)
-  4. Verificación de estado: qué mosaicos ya han sido exportados
-  5. Ensamblaje del mosaico nacional: VRT → COG desde fragmentos de GCS
-  6. Interfaz de ipywidgets para Colab
+  3. Exportación a GCS (país completo en fragmentos)
+  4. Interfaz de usuario para solicitar exportaciones
 """
 
 import ee
