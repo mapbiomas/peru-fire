@@ -266,63 +266,94 @@ def check_mosaic_status(year, months=None, period='monthly'):
 
 # ─── ENSAMBLAJE DE MOSAICO NACIONAL (VRT → COG) ───────────────────────────────
 
-def assemble_country_mosaic(year, month=None, period='monthly'):
+def assemble_country_mosaic(year, month=None, period='monthly', bands=None):
     """
-    Descargar todos los fragmentos de GCS, construir VRT, convertir a COG, subir de nuevo a GCS.
-    Requiere: gdalbuildvrt, gdal_translate, gsutil.
+    Descargar fragmentos por banda, construir VRT y convertir a COG nacional.
+    Identifica automáticamente las bandas presentes en la carpeta de GCS.
     """
-    import tempfile, glob
+    import tempfile, glob, re
 
     if period == 'monthly':
         chunk_prefix  = monthly_chunk_path(year, month)
         mosaic_prefix = monthly_mosaic_path(year, month)
-        name = mosaic_name(year, month, 'monthly')
+        base_name = mosaic_name(year, month, 'monthly')
     else:
         chunk_prefix  = yearly_chunk_path(year)
         mosaic_prefix = yearly_mosaic_path(year)
-        name = mosaic_name(year, period='yearly')
+        base_name = mosaic_name(year, period='yearly')
+
+    print(f"\n🚀 Iniciando ensamblaje nacional para: {base_name}")
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        # 1. Descargar todos los fragmentos
-        print(f"  ⬇️  Descargando fragmentos de gs://{CONFIG['bucket']}/{chunk_prefix}/")
-        subprocess.run([
-            'gsutil', '-m', 'cp',
-            f"gs://{CONFIG['bucket']}/{chunk_prefix}/*.tif",
-            tmpdir
-        ], check=True)
-
-        # 2. Construir VRT
-        chunk_files = glob.glob(os.path.join(tmpdir, '*.tif'))
-        if not chunk_files:
-            print("  ⚠️  No se encontraron fragmentos. Saltando ensamblaje.")
+        # 1. Listar archivos remotos para identificar bandas disponibles
+        print(f"  🔍 Analizando fragmentos en gs://{CONFIG['bucket']}/{chunk_prefix}/")
+        ls_res = subprocess.run([
+            'gsutil', 'ls', f"gs://{CONFIG['bucket']}/{chunk_prefix}/*.tif"
+        ], capture_output=True, text=True)
+        
+        all_remote_files = [line.strip() for line in ls_res.stdout.splitlines() if line.strip()]
+        if not all_remote_files:
+            print("  ⚠️  No se encontraron fragmentos. Saltando.")
             return
 
-        vrt_path = os.path.join(tmpdir, f'{name}.vrt')
-        subprocess.run(['gdalbuildvrt', vrt_path] + chunk_files, check=True)
-        print(f"  🔗  VRT creado: {vrt_path}")
+        # Identificar bandas (formato esperado: name_band_shard.tif)
+        target_bands = bands or CONFIG['bands_all']
+        band_files = {}
+        for f in all_remote_files:
+            fname = os.path.basename(f)
+            for b_name in target_bands:
+                if f"_{b_name}_" in fname or fname.endswith(f"_{b_name}.tif"):
+                    if b_name not in band_files: band_files[b_name] = []
+                    band_files[b_name].append(f)
+                    break
 
-        # 3. Convertir a COG
-        cog_path = os.path.join(tmpdir, f'{name}_cog.tif')
-        subprocess.run([
-            'gdal_translate',
-            '-of', 'COG',
-            '-co', 'COMPRESS=DEFLATE',
-            '-co', 'PREDICTOR=2',
-            '-co', 'TILED=YES',
-            '-co', 'BLOCKXSIZE=512',
-            '-co', 'BLOCKYSIZE=512',
-            '-co', 'OVERVIEWS=IGNORE_EXISTING',
-            vrt_path, cog_path
-        ], check=True)
-        print(f"  🗜️  COG creado: {cog_path}")
+        if not band_files:
+            print(f"  ⚠️  No se detectaron bandas válidas en los archivos encontrados.")
+            return
 
-        # 4. Subir a la carpeta de mosaicos de GCS
-        dest = f"gs://{CONFIG['bucket']}/{mosaic_prefix}/{name}_cog.tif"
-        subprocess.run(['gsutil', 'cp', cog_path, dest], check=True)
-        print(f"  ☁️  Subido a: {dest}")
+        # 2. Procesar cada banda por separado
+        results = []
+        for b_name, remote_shards in band_files.items():
+            print(f"\n  🗂️  Procesando banda: {b_name} ({len(remote_shards)} fragmentos)")
+            band_tmp = os.path.join(tmpdir, b_name)
+            os.makedirs(band_tmp, exist_ok=True)
 
-    print(f"  ✅  Mosaico nacional ensamblado: {name}")
-    return dest
+            # Descargar shards de ESTA banda
+            print(f"    ⬇️  Descargando...")
+            subprocess.run([
+                'gsutil', '-m', 'cp',
+            ] + remote_shards + [band_tmp], check=True, capture_output=True)
+
+            local_shards = glob.glob(os.path.join(band_tmp, '*.tif'))
+            if not local_shards: continue
+
+            # Construir VRT
+            vrt_path = os.path.join(tmpdir, f"{base_name}_{b_name}.vrt")
+            subprocess.run(['gdalbuildvrt', vrt_path] + local_shards, check=True, capture_output=True)
+
+            # Convertir a COG con compresión LZW
+            cog_remote_name = f"{base_name}_{b_name}_cog.tif"
+            cog_local_path = os.path.join(tmpdir, cog_remote_name)
+            
+            print(f"    🗜️  Optimizando COG...")
+            subprocess.run([
+                'gdal_translate',
+                '-of', 'COG',
+                '-co', 'COMPRESS=LZW',
+                '-co', 'PREDICTOR=2',
+                '-co', 'NUM_THREADS=ALL_CPUS',
+                '-co', 'BIGTIFF=YES',
+                vrt_path, cog_local_path
+            ], check=True, capture_output=True)
+
+            # Subir a la carpeta final
+            dest = f"gs://{CONFIG['bucket']}/{mosaic_prefix}/{cog_remote_name}"
+            subprocess.run(['gsutil', 'cp', cog_local_path, dest], check=True, capture_output=True)
+            print(f"    ✅ Subido: {dest}")
+            results.append(dest)
+
+    print(f"\n✅ Ensamblaje completado para: {base_name}")
+    return results
 
 
 # ─── FINAL DEL MÓDULO DE LÓGICA ───────────────────────────────────────────────
