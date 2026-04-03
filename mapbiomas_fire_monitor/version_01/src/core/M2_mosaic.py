@@ -1,3 +1,143 @@
+
+import tempfile, glob, subprocess, re
+def list_gcs_files(prefix):
+    """Enumerar archivos en un prefijo de GCS. Devuelve una lista de nombres de archivos."""
+    try:
+        result = subprocess.run(
+            ['gsutil', 'ls', f"gs://{CONFIG['bucket']}/{prefix}/"],
+            capture_output=True, text=True
+        )
+        files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        return files
+    except Exception as e:
+        print(f"  ⚠️  error de gsutil: {e}")
+        return []
+
+
+def check_mosaic_status(year, months=None, period='monthly'):
+    """
+    Verificar qué mosaicos ya han sido exportados a GCS.
+    Devuelve un diccionario: {mosaic_name: {'chunks': int, 'mosaic': bool}}
+    """
+    status = {}
+    if period == 'monthly':
+        check_months = months or list(range(1, 13))
+        for month in check_months:
+            name = mosaic_name(year, month, 'monthly')
+            chunk_prefix = monthly_chunk_path(year, month)
+            mosaic_prefix = monthly_mosaic_path(year, month)
+            chunks = list_gcs_files(chunk_prefix)
+            mosaics = list_gcs_files(mosaic_prefix)
+            status[name] = {
+                'chunks': len(chunks),
+                'mosaic': len(mosaics) > 0,
+            }
+    else:
+        name = mosaic_name(year, period='yearly')
+        chunk_prefix = yearly_chunk_path(year)
+        mosaic_prefix = yearly_mosaic_path(year)
+        chunks = list_gcs_files(chunk_prefix)
+        mosaics = list_gcs_files(mosaic_prefix)
+        status[name] = {
+            'chunks': len(chunks),
+            'mosaic': len(mosaics) > 0,
+        }
+    return status
+
+
+# ─── ENSAMBLAJE DE MOSAICO NACIONAL (VRT → COG) ───────────────────────────────
+
+def assemble_country_mosaic(year, month=None, period='monthly', bands=None):
+    """
+    Descargar fragmentos por banda, construir VRT y convertir a COG nacional.
+    Identifica automáticamente las bandas presentes en la carpeta de GCS.
+    """
+    import tempfile, glob, re
+
+    if period == 'monthly':
+        chunk_prefix  = monthly_chunk_path(year, month)
+        mosaic_prefix = monthly_mosaic_path(year, month)
+        base_name = mosaic_name(year, month, 'monthly')
+    else:
+        chunk_prefix  = yearly_chunk_path(year)
+        mosaic_prefix = yearly_mosaic_path(year)
+        base_name = mosaic_name(year, period='yearly')
+
+    print(f"\n🚀 Iniciando ensamblaje nacional para: {base_name}")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # 1. Listar archivos remotos para identificar bandas disponibles
+        print(f"  🔍 Analizando fragmentos en gs://{CONFIG['bucket']}/{chunk_prefix}/")
+        ls_res = subprocess.run([
+            'gsutil', 'ls', f"gs://{CONFIG['bucket']}/{chunk_prefix}/*.tif"
+        ], capture_output=True, text=True)
+        
+        all_remote_files = [line.strip() for line in ls_res.stdout.splitlines() if line.strip()]
+        if not all_remote_files:
+            print("  ⚠️  No se encontraron fragmentos. Saltando.")
+            return
+
+        # Identificar bandas (formato esperado: name_band_shard.tif)
+        target_bands = bands or CONFIG['bands_all']
+        band_files = {}
+        for f in all_remote_files:
+            fname = os.path.basename(f)
+            for b_name in target_bands:
+                if f"_{b_name}_" in fname or fname.endswith(f"_{b_name}.tif"):
+                    if b_name not in band_files: band_files[b_name] = []
+                    band_files[b_name].append(f)
+                    break
+
+        if not band_files:
+            print(f"  ⚠️  No se detectaron bandas válidas en los archivos encontrados.")
+            return
+
+        # 2. Procesar cada banda por separado
+        results = []
+        for b_name, remote_shards in band_files.items():
+            print(f"\n  🗂️  Procesando banda: {b_name} ({len(remote_shards)} fragmentos)")
+            band_tmp = os.path.join(tmpdir, b_name)
+            os.makedirs(band_tmp, exist_ok=True)
+
+            # Descargar shards de ESTA banda
+            print(f"    ⬇️  Descargando...")
+            subprocess.run([
+                'gsutil', '-m', 'cp',
+            ] + remote_shards + [band_tmp], check=True, capture_output=True)
+
+            local_shards = glob.glob(os.path.join(band_tmp, '*.tif'))
+            if not local_shards: continue
+
+            # Construir VRT
+            vrt_path = os.path.join(tmpdir, f"{base_name}_{b_name}.vrt")
+            subprocess.run(['gdalbuildvrt', vrt_path] + local_shards, check=True, capture_output=True)
+
+            # Convertir a COG con compresión LZW
+            cog_remote_name = f"{base_name}_{b_name}_cog.tif"
+            cog_local_path = os.path.join(tmpdir, cog_remote_name)
+            
+            print(f"    🗜️  Optimizando COG...")
+            subprocess.run([
+                'gdal_translate',
+                '-of', 'COG',
+                '-co', 'COMPRESS=LZW',
+                '-co', 'PREDICTOR=2',
+                '-co', 'NUM_THREADS=ALL_CPUS',
+                '-co', 'BIGTIFF=YES',
+                vrt_path, cog_local_path
+            ], check=True, capture_output=True)
+
+            # Subir a la carpeta final
+            dest = f"gs://{CONFIG['bucket']}/{mosaic_prefix}/{cog_remote_name}"
+            subprocess.run(['gsutil', 'cp', cog_local_path, dest], check=True, capture_output=True)
+            print(f"    ✅ Subido: {dest}")
+            results.append(dest)
+
+    print(f"\n✅ Ensamblaje completado para: {base_name}")
+    return results
+
+
+
 """
 M1b — Ensamblador de Mosaicos Nacionales
 MapBiomas Fuego Sentinel Monitor — Piloto Perú
@@ -8,16 +148,22 @@ Maneja:
   3. Panel de descargas directas
 """
 
+print("DEBUG: M1b module file is being LOADED")
+
 import os
 import subprocess
 import calendar
 import ipywidgets as widgets
 from IPython.display import display, clear_output
+
+# Importar configuraciones
 from M0_auth_config import CONFIG, mosaic_name, monthly_chunk_path, monthly_mosaic_path
-from M1_mosaic_generator import assemble_country_mosaic, check_mosaic_status
+# Importar lógica de mosaicos
+
 
 class MosaicAssemblerUI:
     def __init__(self):
+        print("DEBUG: MosaicAssemblerUI initializing")
         self._build_ui()
 
     def _build_ui(self):
@@ -47,6 +193,7 @@ class MosaicAssemblerUI:
             style={'description_width': '80px'},
             layout=widgets.Layout(width='200px', height='120px')
         )
+        
         self.btn_status = widgets.Button(description='🔍 Verificar Shards', button_style='info')
         self.btn_miss   = widgets.Button(description='🏗️ Mosaicar Faltantes', button_style='warning')
         self.btn_all    = widgets.Button(description='🌊 Mosaicar TODO', button_style='danger')
@@ -64,11 +211,9 @@ class MosaicAssemblerUI:
         self.btn_all.on_click(self._on_all)
 
     def _get_status_dict(self, years, months, period):
-        """Devuelve periodos que tienen shards (chunks > 0) pero NO mosaico final."""
         to_assemble = []
         ready = []
         for year in years:
-            # Mensual
             if period in ('monthly', 'both'):
                 status = check_mosaic_status(year, months, 'monthly')
                 for name, s in status.items():
@@ -79,7 +224,6 @@ class MosaicAssemblerUI:
                         to_assemble.append((year, m, "monthly", "Pendiente (Shards listos)"))
                     else:
                         ready.append((year, m, "monthly", "Sin datos en GCS"))
-            # Anual
             if period in ('yearly', 'both'):
                 status = check_mosaic_status(year, period='yearly')
                 for name, s in status.items():
@@ -131,7 +275,6 @@ class MosaicAssemblerUI:
         with self.out:
             clear_output()
             print(f"🌊 Mosaiqueando TODO el periodo para los años {years}...")
-            # Solo los que tienen shards
             pend, _ = self._get_status_dict(years, range(1, 13), period)
             for y, m, p, msg in pend:
                 label = f"{y}-{m:02d}" if p == 'monthly' else f"{y} (Anual)"
@@ -154,7 +297,6 @@ class MosaicAssemblerUI:
         target_bands = bands or CONFIG['bands_all']
         links_html = f"<b>📥 Mosaicos Ensamblados ({label}):</b><br>"
         for band in target_bands:
-            # Enlace al archivo COG final generado
             url = f"https://storage.googleapis.com/{CONFIG['bucket']}/{mosaic_pref}/{base}_{band}_cog.tif"
             links_html += f"• <a href='{url}' target='_blank' style='color:#4caf50;'>{band}</a> &nbsp;"
         
@@ -164,4 +306,6 @@ class MosaicAssemblerUI:
         display(self.ui)
 
 def run_ui():
-    MosaicAssemblerUI().show()
+    print("DEBUG: run_ui() CALLED in M1b")
+    ui_obj = MosaicAssemblerUI()
+    return ui_obj.ui
