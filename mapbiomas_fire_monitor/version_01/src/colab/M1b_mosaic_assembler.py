@@ -47,6 +47,9 @@ class MosaicAssemblerUI:
             style={'description_width': '80px'},
             layout=widgets.Layout(width='200px', height='120px')
         )
+        self.btn_status = widgets.Button(description='🔍 Verificar Shards', button_style='info')
+        self.btn_miss   = widgets.Button(description='🏗️ Mosaicar Faltantes', button_style='warning')
+        self.btn_all    = widgets.Button(description='🌊 Mosaicar TODO', button_style='danger')
         self.out = widgets.Output()
         
         controls = widgets.VBox([
