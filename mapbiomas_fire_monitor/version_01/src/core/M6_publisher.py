@@ -1,5 +1,5 @@
 """
-M5 — Publicador
+M6 — Publicador
 MapBiomas Fuego Sentinel Monitor — Piloto Perú
 
 Maneja:

@@ -1,5 +1,5 @@
 """
-M3 — Entrenador del Modelo
+2: M4 — Entrenador del Modelo
 MapBiomas Fuego Sentinel Monitor — Piloto Perú
 
 Maneja:
@@ -336,7 +336,7 @@ class ModelTrainerUI:
     def _on_train(self, _):
         with self.out:
             clear_output()
-            from M2_sample_manager import samples_to_array
+            from M3_sample_manager import samples_to_array
 
             if self.sample_fc is None:
                 print("  ⚠️  No se ha definido ninguna FeatureCollection de muestras. Ejecute M2 primero.")

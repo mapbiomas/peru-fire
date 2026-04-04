@@ -36,8 +36,8 @@ CONFIG = {
     'base_path':  'sudamerica/peru/monitor',
 
     # ── Rutas de GEE Asset
-    'asset_mosaics_monthly': 'projects/mapbiomas-mosaics/assets/SENTINEL/FIRE/quaity_mosaics_nbr_countries_monthly-01',
-    'asset_mosaics_yearly':  'projects/mapbiomas-mosaics/assets/SENTINEL/FIRE/quaity_mosaics_nbr_countries_yearly-01',
+    'asset_mosaics_monthly': 'projects/mapbiomas-mosaics/assets/SENTINEL/FIRE/quality_mosaics_nbr_countries_monthly-01',
+    'asset_mosaics_yearly':  'projects/mapbiomas-mosaics/assets/SENTINEL/FIRE/quality_mosaics_nbr_countries_yearly-01',
     'asset_classification':  'projects/mapbiomas-peru/assets/FIRE/MONITOR/classification',
     'asset_regions':         'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
 
@@ -62,6 +62,11 @@ CONFIG = {
     # dayOfYear → int16, sin conversión (1–366)
     'bands_spectral': ['blue', 'green', 'red', 'nir', 'swir1', 'swir2'],
     'bands_all':      ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'],
+
+    # ── Rutas locales (para el mosaico nacional e IPAM-local)
+    # Similar a /content/ en Colab, usamos una carpeta de trabajo local rápida
+    # Se recomienda fuera de OneDrive para evitar latencia de sincronización
+    'local_temp_dir': 'C:/mapbiomas_fire_temp',
 
     # ── Bandas del modelo: valores predeterminados siempre activos + extras opcionales
     # El usuario selecciona en el momento del entrenamiento/clasificando
@@ -126,6 +131,26 @@ def classification_name(regions, version, year, month=None):
 
 def model_path(version, region):
     return f"{CONFIG['gcs_models']}/{version}/{region}"
+
+
+# ─── AYUDAS DE SISTEMA (Local) ────────────────────────────────────────────────
+
+def get_temp_dir():
+    """Retornar la ruta del directorio temporal local, creándolo si no existe."""
+    path = CONFIG.get('local_temp_dir', os.path.join(os.path.expanduser("~"), "mapbiomas_fire_temp"))
+    if not os.path.exists(path):
+        try:
+            os.makedirs(path, exist_ok=True)
+        except Exception as e:
+            print(f"⚠️ No se pudo crear {path}, usando temporal del sistema: {e}")
+            import tempfile
+            return tempfile.gettempdir()
+    return path
+
+def check_command_exists(cmd):
+    """Verificar si un comando está disponible en el PATH del sistema."""
+    import shutil
+    return shutil.which(cmd) is not None
 
 
 # ─── AYUDAS DE EE ─────────────────────────────────────────────────────────────

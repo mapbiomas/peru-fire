@@ -1,5 +1,5 @@
 """
-M2 — Gestor de Muestras
+M3 — Gestor de Muestras
 MapBiomas Fuego Sentinel Monitor — Piloto Perú
 
 Maneja:

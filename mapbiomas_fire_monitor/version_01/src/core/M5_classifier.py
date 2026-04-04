@@ -1,5 +1,5 @@
 """
-M4 — Clasificador
+M5 — Clasificador
 MapBiomas Fuego Sentinel Monitor — Piloto Perú
 
 Maneja:
@@ -35,7 +35,7 @@ except ImportError:
 
 from M0_auth_config import CONFIG, gcs_path, classification_name, \
     monthly_chunk_path, get_country_geometry, get_region_geometry, list_regions
-from M3_model_trainer import ModelTrainer, normalize
+from M4_model_trainer import ModelTrainer, normalize
 
 
 # ─── AYUDAS DE CUADRÍCULA ─────────────────────────────────────────────────────

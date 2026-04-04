@@ -213,17 +213,15 @@ def export_to_gcs(mosaic, name, year, month=None, period='monthly'):
         task.start()
         tasks.append(task)
     return tasks
-
-
 # ─── VERIFICACIÓN DE ESTADO DE GCS ────────────────────────────────────────────
 
 # ─── FINAL DEL MÓDULO DE LÓGICA ───────────────────────────────────────────────
 # Las interfaces de usuario se han movido a:
-# M1a_export_dispatcher.py (GEE -> GCS)
-# M1b_mosaic_assembler.py  (GCS -> COG)
+# M1_export.py (GEE -> GCS)
+# M2_mosaic.py  (GCS -> COG)
 
 """
-M1a — Despachador de Exportaciones
+M1 — Despachador de Exportaciones
 MapBiomas Fuego Sentinel Monitor — Piloto Perú
 
 Maneja:
@@ -243,135 +241,325 @@ class ExportDispatcherUI:
     def __init__(self):
         self._build_ui()
 
+    def _get_active_tasks(self):
+        # Devuelve nombres bases que están en ejecución o listos
+        import ee
+        active_names = set()
+        try:
+            tasks = ee.batch.Task.list()
+            active = [t for t in tasks if t.state in ['READY', 'RUNNING']]
+            for t in active:
+                desc = t.config.get('description', '')
+                if desc.startswith('ASSET_') or desc.startswith('GCS_'):
+                    base = desc.replace('ASSET_', '').replace('GCS_', '')
+                    # GCS añade sufijos _band, cortamos eso
+                    if '_blue' in base: base = base.split('_blue')[0]
+                    elif '_green' in base: base = base.split('_green')[0]
+                    # Cortar sufijo rápido por longitud o buscar 's2_fire_peru_year_M'
+                    parts = base.split('_')
+                    if len(parts) >= 4 and parts[0] == 's2':
+                        # reconstruir s2_fire_peru_2020_01
+                        # las ultimas labels podrian ser los meses y el año
+                        clean_base = '_'.join(parts[:5]) # s2_fire_peru_2020_01
+                        active_names.add(clean_base)
+                        clean_base_yearly = '_'.join(parts[:4]) # s2_fire_peru_2020
+                        active_names.add(clean_base_yearly)
+        except Exception as e:
+            print(f'Error leyendo tareas: {e}')
+        return active_names
+
     def _build_ui(self):
-        from ipywidgets import HTML
+        from ipywidgets import HTML, Checkbox, VBox, HBox, Button, Layout, Label
+        import ipywidgets as widgets
+        from IPython.display import display, clear_output
         title = HTML("""
             <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);color:#e94560;padding:16px;border-radius:10px;">
-                🚀 <b>Despachador de Exportaciones</b> — GEE → GCS
+                🚀 <b>Despachador Inteligente</b> — GEE → Cloud Storage / Asset
+            </div>
+            <div style="margin-top:10px; font-style:italic;">Seleccione las tareas de exportación granularmente. Los shards de GCS son por banda.</div>
+        """)
+        self.out = widgets.Output()
+        self.ui = VBox([title, self.out])
+        
+        with self.out:
+            clear_output()
+            print("⏳ Analizando disponibilidad de Shards y Assets en tiempo real...")
+            
+        import datetime
+        now = datetime.datetime.now()
+        current_year = now.year
+        current_month = now.month
+        start_year = 2019
+        
+        self.years = list(range(current_year, start_year - 1, -1))
+        self.months = list(range(12, 0, -1))
+        self.bands = CONFIG['bands_all']
+        
+        from M2_mosaic import fetch_all_gcs_files
+        fetch_all_gcs_files(force=False, progress_out=self.out)
+        active_tasks = self._get_active_tasks()
+        
+        # Optimización masiva: Cachear nombres de archivos en un SET para búsqueda O(1)
+        with self.out: print("⏳ [1/3] Analizando GCS para búsqueda rápida...")
+        all_gcs = fetch_all_gcs_files()
+        presence_gcs = set(f.split('/')[-1] for f in all_gcs if f.endswith('.tif'))
+        
+        # Optimización: Listar Assets una sola vez
+        with self.out: print("⏳ [2/3] Listando Assets en GEE...")
+        try:
+            m_assets_raw = ee.data.listAssets({'parent': CONFIG['asset_mosaics_monthly']})['assets']
+            existing_m_assets = [a['name'].split('/')[-1] for a in m_assets_raw]
+        except: existing_m_assets = []
+        
+        try:
+            y_assets_raw = ee.data.listAssets({'parent': CONFIG['asset_mosaics_yearly']})['assets']
+            existing_y_assets = [a['name'].split('/')[-1] for a in y_assets_raw]
+        except: existing_y_assets = []
+
+        with self.out: print("⏳ [3/3] Construyendo matriz de checkboxes...")
+
+        self.chk_dict = {}
+        items_visuals = []
+        from M0_auth_config import mosaic_name, monthly_chunk_path, yearly_chunk_path
+        
+        for y in self.years:
+            # Monthly
+            months_to_show = [m for m in self.months if y < current_year or m <= current_month]
+            for m in months_to_show:
+                name_base = mosaic_name(y, m, 'monthly')
+                # 1. Asset Checkbox
+                has_asset = name_base in existing_m_assets
+                
+                chk_a = self._create_chk_m1(name_base, y, m, 'monthly', 'asset', has_asset, active_tasks)
+                self.chk_dict[f"{name_base}_asset"] = chk_a
+                items_visuals.append(chk_a)
+                
+                # 2. GCS Band Checkboxes
+                for b in self.bands:
+                    # Búsqueda que admite sufijos de shards (ej: -0000-0000)
+                    has_gcs = any(f.startswith(f"{name_base}_{b}") for f in presence_gcs)
+                    chk_g = self._create_chk_m1(name_base, y, m, 'monthly', f'gcs_{b}', has_gcs, active_tasks)
+                    self.chk_dict[f"{name_base}_gcs_{b}"] = chk_g
+                    items_visuals.append(chk_g)
+            
+            # Yearly
+            name_y = mosaic_name(y, period='yearly')
+            # Asset
+            has_ay = name_y in existing_y_assets
+            chk_ay = self._create_chk_m1(name_y, y, None, 'yearly', 'asset', has_ay, active_tasks)
+            self.chk_dict[f"{name_y}_asset"] = chk_ay
+            items_visuals.append(chk_ay)
+            
+            # GCS
+            for b in self.bands:
+                has_gcs_y = any(f.startswith(f"{name_y}_{b}") for f in presence_gcs)
+                chk_gy = self._create_chk_m1(name_y, y, None, 'yearly', f'gcs_{b}', has_gcs_y, active_tasks)
+                self.chk_dict[f"{name_y}_gcs_{b}"] = chk_gy
+                items_visuals.append(chk_gy)
+
+        self.flex_box = HBox(items_visuals, layout=Layout(flex_flow='row wrap', width='100%', grid_gap='5px', padding='10px', max_height='500px', overflow='y-scroll'))
+        
+        self.btn_select_all = Button(description='☑️ Marcar Pendientes', button_style='info', layout=Layout(width='200px'))
+        self.btn_clear_all  = Button(description='☐ Limpiar', button_style='', layout=Layout(width='120px'))
+        self.btn_manage     = Button(description='⚙️ Gestionar (Borrar/Canc)', button_style='warning', layout=Layout(width='220px'))
+        
+        self.btn_select_all.on_click(self._on_select_all)
+        self.btn_clear_all.on_click(self._on_clear_all)
+        self.btn_manage.on_click(self._on_manage)
+        
+        msg = HTML("""
+            <div style="color:#e94560; font-weight:bold; margin-top:10px; border-left:4px solid; padding-left:10px;">
+                👉 Después de seleccionar, ejecute la SIGUIENTE CELDA del notebook para disparar el proceso.
             </div>
         """)
-        self.w_years = widgets.SelectMultiple(
-            options=range(2017, 2027), value=[2024], description='Años:',
-            style={'description_width': '80px'}, layout=widgets.Layout(width='150px')
-        )
-        self.w_months = widgets.SelectMultiple(
-            options=[(f'{m:02d}', m) for m in range(1, 13)], value=[1], description='Meses:',
-            style={'description_width': '80px'}, layout=widgets.Layout(width='120px')
-        )
-        self.btn_status = widgets.Button(description='🔍 Verificar Faltantes', button_style='info')
-        self.btn_miss   = widgets.Button(description='✨ Exportar Faltantes', button_style='warning')
-        self.btn_all    = widgets.Button(description='🔥 Exportar TODO el Año', button_style='danger')
-        self.w_period = widgets.RadioButtons(
-            options=['monthly', 'yearly', 'both'],
-            value='monthly', description='Período:',
-            style={'description_width': '80px'},
-        )
-        self.w_export_asset = widgets.Checkbox(value=True, description='Exportar → GEE Asset')
-        self.w_export_gcs   = widgets.Checkbox(value=True, description='Exportar → GCS (Bucket)')
-
-        self.out = widgets.Output()
         
-        controls = widgets.VBox([
-            widgets.HBox([self.w_years, self.w_months]),
-            widgets.HBox([
-                self.w_period,
-                widgets.VBox([self.w_export_asset, self.w_export_gcs])
-            ]),
-            widgets.HBox([self.btn_status, self.btn_miss, self.btn_all])
+        btns = HBox([self.btn_select_all, self.btn_clear_all, self.btn_manage])
+        
+        self.view_standard = VBox([self.flex_box, btns, msg])
+        
+        # UI de gestión (se oculta por defecto)
+        self.btn_delete = Button(description='🔥 Borrar Seleccionados', button_style='danger', layout=Layout(width='200px'))
+        self.btn_cancel_m = Button(description='↩️ Volver', button_style='', layout=Layout(width='120px'))
+        self.btn_delete.on_click(self._on_delete_real)
+        self.btn_cancel_m.on_click(self._on_cancel_manage)
+        self.view_manage = VBox([
+            HTML("<b style='color:orange;'>🛠️ MODO GESTIÓN: Seleccione archivos YA EXPORTADOS para borrar de GEE/GCS.</b>"),
+            self.flex_box,
+            HBox([self.btn_delete, self.btn_cancel_m])
         ])
-        self.ui = widgets.VBox([title, controls, self.out])
+
+        with self.out:
+            clear_output()
+            display(self.view_standard)
+
+    def _create_chk_m1(self, name, y, m, p, type, exists, active_tasks):
+        from ipywidgets import Checkbox, Layout
+        label_p = f"{y}-{m:02d}" if m else f"{y}-Anual"
+        label_t = "Asset" if type=='asset' else f"GCS {type.split('_')[1]}"
+        desc = f"{label_p} {label_t}"
         
-        self.btn_status.on_click(self._on_status)
-        self.btn_miss.on_click(self._on_miss)
-        self.btn_all.on_click(self._on_all)
+        is_active = any(name in tn for tn in active_tasks)
+        
+        chk = Checkbox(value=False, description=desc, indent=False, layout=Layout(width='180px', overflow='hidden'))
+        chk._meta = {'year': y, 'month': m, 'period': p, 'name': name, 'type': type, 'exists': exists}
+        
+        if exists:
+            chk.description = f"✅ OK {desc}"
+            chk.disabled = True
+            chk.style = {'description_width': 'initial', 'background': '#d4edda'}
+        elif is_active:
+            chk.description = f"⏳ {desc}"
+            chk.disabled = True
+            chk.style = {'description_width': 'initial', 'background': '#fff3cd'}
+        else:
+            chk.description = f"🧩 {desc}"
+            
+        return chk
 
-    def _get_missings(self, years, months, period):
-        missing = []
-        for year in years:
-            # Mensual
-            if period in ('monthly', 'both'):
-                status = check_mosaic_status(year, months, 'monthly')
-                for name, s in status.items():
-                    if s['chunks'] == 0:
-                        m = int(name.split('_')[-1])
-                        missing.append((year, m, 'monthly'))
-            # Anual
-            if period in ('yearly', 'both'):
-                status = check_mosaic_status(year, period='yearly')
-                for name, s in status.items():
-                    if s['chunks'] == 0:
-                        missing.append((year, None, 'yearly'))
-        return missing
-
-    def _on_status(self, _):
-        years, months = list(self.w_years.value), list(self.w_months.value)
-        period = self.w_period.value
+    def _on_manage(self, _):
+        # Entrar en modo gestión: habilitar solo lo que existe
+        for chk in self.chk_dict.values():
+            if chk._meta['exists']:
+                chk.disabled = False
+                chk.value = False
+            else:
+                chk.disabled = True
+                chk.value = False
         with self.out:
             clear_output()
-            miss = self._get_missings(years, months, period)
-            if not miss:
-                print("✅ Todos los periodos seleccionados ya tienen fragmentos en GCS.")
-            else:
-                print(f"⚠️  Faltan {len(miss)} mosaicos por exportar:")
-                for y, m, p in miss: 
-                    label = f"{y}-{m:02d}" if p == 'monthly' else f"{y} (Anual)"
-                    print(f"   - {label}")
+            display(self.view_manage)
 
-    def _dispatch(self, list_to_export):
-        from M0_auth_config import get_country_geometry
+    def _on_cancel_manage(self, _):
+        self._build_ui() # Refrescar todo
+
+    def _on_delete_real(self, _):
+        to_delete = [chk._meta for chk in self.chk_dict.values() if chk.value]
+        if not to_delete: return
+        print(f"🔥 Borrando {len(to_delete)} items...")
+        # Lógica de borrado (Asset/GCS)
+        for item in to_delete:
+            y, m, p, name = item['year'], item['month'], item['period'], item['name']
+            if item['type'] == 'asset':
+                root = CONFIG['asset_mosaics_monthly'] if p == 'monthly' else CONFIG['asset_mosaics_yearly']
+                try: ee.data.deleteAsset(f"{root}/{name}")
+                except: pass
+            else:
+                # GCS
+                band = item['type'].split('_')[1]
+                path = f"gs://{CONFIG['bucket']}/{CONFIG['folder_output']}/{item['name']}_{band}.tif"
+                import subprocess
+                subprocess.run(['gsutil', 'rm', path], capture_output=True)
+        self._build_ui()
+
+    def _on_select_all(self, _):
+        for chk in self.chk_dict.values():
+            if not chk.disabled: chk.value = True
+
+    def _on_clear_all(self, _):
+        for chk in self.chk_dict.values():
+            if not chk.disabled:
+                chk.value = False
+
+    def get_selected(self):
+        """Devolver la lista de metadatos de los mosaicos seleccionados para exportar."""
+        to_export = []
+        for chk in self.chk_dict.values():
+            if chk.value and not chk.disabled:
+                to_export.append(chk._meta)
+        return to_export
+
+    def _on_execute(self, _):
+        to_export = self.get_selected()
+        if not to_export:
+            with self.out:
+                print("⚠️ No hay ningún mosaico marcado para exportar.")
+            return
+            
+        with self.out:
+            from IPython.display import clear_output
+            clear_output()
+            print(f"✅ Se han marcado {len(to_export)} mosaicos.")
+            print("🚀 Para iniciar la exportación de forma robusta, ejecute la SIGUIENTE CELDA del notebook.")
+            print("   (Esto evitará que la interfaz se bloquee durante procesos largos).")
+
+    def dispatch(self, to_export):
+        """Dispara las tareas de exportación en GEE basándose en la selección granular."""
+        if not to_export:
+            print("⚠️ Lista de exportación vacía.")
+            return
+            
+        import ee
+        from M0_auth_config import get_country_geometry, mosaic_name
         geom = get_country_geometry()
-        for year, month, p in list_to_export:
-            name = mosaic_name(year, month, p)
+        
+        # Agrupar por periodo para no reconstruir el mosaico múltiples veces
+        by_period = {}
+        for item in to_export:
+            key = (item['year'], item['month'], item['period'], item['name'])
+            if key not in by_period: by_period[key] = []
+            by_period[key].append(item)
+
+        print(f"🔥 Iniciando despacho de {len(to_export)} tareas granulares...")
+        for (y, m, p, name), items in by_period.items():
             if p == 'monthly':
-                start = ee.Date(f'{year}-{month:02d}-01')
+                start = ee.Date(f'{y}-{m:02d}-01')
                 end = start.advance(1, 'month')
-                mosaic = build_mosaic(start, end, geom, apply_focus_mask=True, year=year, month=month)
-                
-                if self.w_export_asset.value:
-                    export_to_asset(mosaic, name, year, month, 'monthly')
-                if self.w_export_gcs.value:
-                    export_to_gcs(mosaic, name, year, month, 'monthly')
+                mosaic = build_mosaic(start, end, geom, apply_focus_mask=True, year=y, month=m)
             else:
-                start = ee.Date(f'{year}-01-01')
-                end = ee.Date(f'{year+1}-01-01')
+                start = ee.Date(f'{y}-01-01')
+                end = ee.Date(f'{y+1}-01-01')
                 mosaic = build_mosaic(start, end, geom, apply_focus_mask=False)
-                
-                if self.w_export_asset.value:
-                    export_to_asset(mosaic, name, year, period='yearly')
-                if self.w_export_gcs.value:
-                    export_to_gcs(mosaic, name, year, period='yearly')
-            print(f"   🚀 Tareas enviadas: {name}")
+            
+            for item in items:
+                t_type = item['type']
+                if t_type == 'asset':
+                    export_to_asset(mosaic, name, y, m, p)
+                    print(f"   🚀 Asset: {name} ENVIADO.")
+                elif t_type.startswith('gcs_'):
+                    band = t_type.replace('gcs_', '')
+                    # GCS granular (una banda a la vez)
+                    folder = CONFIG['gcs_monthly_chunks'] if p == 'monthly' else CONFIG['gcs_yearly_chunks']
+                    band_name = f"{name}_{band}"
+                    task = ee.batch.Export.image.toCloudStorage(
+                        image           = mosaic.select(band).clip(geom),
+                        description     = f'GCS_{band_name}',
+                        bucket          = CONFIG['bucket'],
+                        fileNamePrefix  = f"{folder}/{band_name}",
+                        region          = geom.bounds(),
+                        scale           = 10,
+                        maxPixels       = 1e13,
+                        fileFormat      = 'GeoTIFF',
+                        formatOptions   = {'cloudOptimized': True},
+                    )
+                    task.start()
+                    print(f"   🚀 GCS {band}: {name} ENVIADO.")
 
-    def _on_miss(self, _):
-        years, months = list(self.w_years.value), list(self.w_months.value)
-        period = self.w_period.value
-        with self.out:
-            clear_output()
-            miss = self._get_missings(years, months, period)
-            if not miss:
-                print("✅ Nada que exportar.")
-                return
-            print(f"🔥 Exportando {len(miss)} periodos faltantes...")
-            self._dispatch(miss)
+    def run_export(self, is_confirm=False):
+        from IPython.display import clear_output
+        selected = self.get_selected()
+        clear_output(wait=True)
+        if not selected:
+            print("⚠️ No has seleccionado ninguna tarea en la interfaz de arriba.")
+            return
 
-    def _on_all(self, _):
-        years = list(self.w_years.value)
-        period = self.w_period.value
-        with self.out:
-            clear_output()
-            print(f"🚨 Iniciando exportación TOTAL para los años {years}...")
-            to_export = []
-            for y in years:
-                if period in ('monthly', 'both'):
-                    for m in range(1, 13): to_export.append((y, m, 'monthly'))
-                if period in ('yearly', 'both'):
-                    to_export.append((y, None, 'yearly'))
-            self._dispatch(to_export)
+        else:
+            self.dispatch(selected)
 
     def show(self):
+        from IPython.display import display
         display(self.ui)
 
+def start_export(ui_obj, confirm=False):
+    """Función de conveniencia para llamar desde el notebook."""
+    if ui_obj is None:
+        print("⚠️ La interfaz no ha sido inicializada.")
+        return
+    ui_obj.run_export(is_confirm=confirm)
+
 def run_ui():
+    from IPython.display import clear_output, display
+    clear_output(wait=True)
     print("✨ Cargando interfaz del Despachador...")
     ui_obj = ExportDispatcherUI()
-    return ui_obj.ui
+    display(ui_obj.ui)
+    return ui_obj
