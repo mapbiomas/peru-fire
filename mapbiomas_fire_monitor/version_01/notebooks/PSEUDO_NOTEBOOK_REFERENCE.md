@@ -18,7 +18,7 @@ Detalla el flujo secuencial de procesamiento (M1 a M7) y los estándares de nomb
 El monitor opera un fluxo circular de sincronización:
 - **🌍 GEE Assets:** Fonte de brutos e destino final (ImageCollections).
 - **☁️ GCS Bucket:** Persistência central (`library_images/`, `raw_samples/`, `models/`).
-- **⚡ Cache Local:** Processamento efêmero (`temp_process/`) para I/O de alta velocidade.
+- **⚡ Cache Local:** Processamento efêmero (**Local: HD** | **Colab: /content**) para I/O de alta velocidade.
 
 | Etapa | Extensão | Path Principal no Cloud Storage (GCS) |
 | :--- | :--- | :--- |
@@ -48,33 +48,45 @@ if not os.path.exists("fire_monitor"):
 !pip install -q earthengine-api gcsfs rasterio scipy tqdm
 ```
 
-```python
-# Autenticación en Google Cloud / GEE
-from google.colab import auth
-auth.authenticate_user()
-```
-
 ### > Opción B: Inicialización Local
 **🛠️ Requisitos Local (GDAL / Conda)**
-Si recibes un error de `Faltam dependências vitais`, asegúrate de tener os binários do GDAL instalados vía Conda.
+Si recibes un error de `Faltam dependências vitais`, el monitor buscará automáticamente el GDAL en tu instalación de Conda.
 
 ```python
-# M0.1b — Configuración local de rutas
+# M0.1b — Configuración local de rutas (Opcional, M0.2 ya lo hace)
 import sys, os
 REPO_ROOT = os.path.abspath("..")
 SRC_PATH  = os.path.join(REPO_ROOT, "src", "core")
 if SRC_PATH not in sys.path: sys.path.insert(0, SRC_PATH)
-# Comandos: conda install -c conda-forge gdal (Recomendado)
 ```
 
 ### > Inicialización Común (M0.2)
+**💡 Célula "Invencível":** Esta célula autodetecta se estás en Local ou Colab e configura as rutas.
+
 ```python
-# M0.2 — Parâmetros Globais
-COUNTRY   = "peru"
+# M0.2 — Inicialização do Monitor
+import sys, os
+
+def auto_path_setup():
+    """Localiza a pasta src/core em diferentes ambientes"""
+    possible_paths = [
+        os.path.abspath("."),             # Já está na pasta?
+        os.path.abspath("../src/core"),   # Estrutura local padrão
+        "/content/fire_monitor/peru-fire/mapbiomas_fire_monitor/version_01/src/core", # Colab
+    ]
+    for p in possible_paths:
+        if os.path.exists(os.path.join(p, "M0_auth_config.py")):
+            if p not in sys.path: sys.path.insert(0, p)
+            return p
+    return None
+
+found_path = auto_path_setup()
+COUNTRY = "peru"
+
 from M0_auth_config import set_country, authenticate, set_global_opts
 set_country(COUNTRY)
 set_global_opts(sensor='sentinel2', periodicity='monthly')
-authenticate()
+authenticate() # Detecção automática de login Colab/Local
 ```
 
 ---

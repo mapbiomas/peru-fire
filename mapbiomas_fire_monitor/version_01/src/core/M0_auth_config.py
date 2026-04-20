@@ -123,16 +123,28 @@ def get_config(country):
 # ─── AUTENTICAÇÃO ─────────────────────────────────────────────────────────────
 
 def authenticate(project='mapbiomas-peru'):
-    """Autenticar com Google Earth Engine e GCS."""
+    """Autenticar com Google Earth Engine e GCS (Suporta Local e Colab)."""
+    import ee
+    
+    # Detecção de ambiente Colab para autenticação GCS
+    try:
+        import google.colab
+        print("[COLAB] Detectado ambiente Google Colab. Autenticando usuário...")
+        from google.colab import auth
+        auth.authenticate_user()
+    except ImportError:
+        pass # Ambiente local, assume Application Default Credentials (ADC)
+    
     try:
         ee.Initialize(project=project)
         print("✅ GEE já autenticado.")
     except Exception:
+        print("Sessão GEE expirada ou nula. Iniciando autenticação...")
         ee.Authenticate()
         ee.Initialize(project=project)
-        print("✅ GEE autenticado.")
+        print("✅ GEE autenticado com sucesso.")
     
-    print("✅ Autenticação GCS via ADC (Application Default Credentials).")
+    print("✅ Autenticação GCS/ADC configurada.")
 
 
 # ─── VARIÁVEIS GLOBAIS (serão configuradas) ─────────────────────────────────
@@ -326,11 +338,21 @@ def print_config():
 # ─── FUNÇÕES UTILITÁRIAS ─────────────────────────────────────────────────────
 
 def get_temp_dir():
-    """Retorna diretório temporário para o projeto."""
+    """Retorna diretório temporário consciente do ambiente (Colab ou HD Local)."""
+    import os
     import tempfile
-    temp_dir = os.path.join(tempfile.gettempdir(), 'mapbiomas_fire')
-    os.makedirs(temp_dir, exist_ok=True)
-    return temp_dir
+    
+    # 1. Detectar ambiente
+    try:
+        import google.colab
+        # No Colab, usamos o /content que é mais espaçoso
+        base_dir = "/content/mapbiomas_fire_temp"
+    except ImportError:
+        # Local: Usamos a pasta temporária padrão do sistema (HD)
+        base_dir = os.path.join(tempfile.gettempdir(), 'mapbiomas_fire_temp')
+    
+    os.makedirs(base_dir, exist_ok=True)
+    return base_dir
 
 
 def check_command_exists(cmd):
