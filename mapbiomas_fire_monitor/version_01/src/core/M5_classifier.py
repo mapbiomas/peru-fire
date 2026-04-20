@@ -33,8 +33,8 @@ try:
 except ImportError:
     HAS_RASTERIO = False
 
-from M0_auth_config import CONFIG, gcs_path, classification_name, \
-    monthly_chunk_path, get_country_geometry, get_region_geometry, list_regions
+from M0_auth_config import CONFIG, gcs_path, classification_name, mosaic_name, \
+    monthly_chunk_path, yearly_chunk_path, get_country_geometry, get_region_geometry, list_regions
 from M4_model_trainer import ModelTrainer, normalize
 
 
@@ -99,7 +99,7 @@ def download_mosaic_tile(year, month, tile_info, period='monthly',
         prefix = monthly_chunk_path(year, month)
         m_name = mosaic_name(year, month, 'monthly')
     else:
-        prefix = f"{CONFIG['gcs_yearly_chunks']}/{year}"
+        prefix = yearly_chunk_path(year)
         m_name = mosaic_name(year, period='yearly')
 
     dst = os.path.join(tmp_dir or '/tmp', f"{m_name}_{tile_id}.tif")
@@ -416,10 +416,13 @@ def run_classification_campaign(year, months, regions, version,
 
 # ─── INTERFAZ DE IPYWIDGETS ───────────────────────────────────────────────────
 
+# ─── INTERFAZ DE IPYWIDGETS ───────────────────────────────────────────────────
+
 class ClassifierUI:
     """Interfaz del clasificador orientada a la campaña."""
 
-    def __init__(self):
+    def __init__(self, preset_models=None):
+        self.preset_models = preset_models
         self._build_ui()
 
     def _build_ui(self):
@@ -427,28 +430,14 @@ class ClassifierUI:
         import calendar as cal
 
         title = HTML("""
-            <div style="
-                background:linear-gradient(135deg,#1a0a00,#2d1500);
-                color:#f38ba8;padding:14px 18px;border-radius:10px;
-                font-family:'Courier New',monospace;font-size:13px;margin-bottom:8px;">
+            <div style="background:linear-gradient(135deg,#1a0a00,#2d1500); color:#f38ba8;padding:14px 18px;border-radius:10px; font-family:'Courier New',monospace;font-size:13px;margin-bottom:8px;">
                 🔥 <b>Clasificador</b> — Área Quemada Mensual (Sentinel-2)<br>
-                <span style="color:#8892b0;font-size:11px;">
-                Salida: píxeles quemados = dayOfYear | no quemados = 0
-                </span>
+                <span style="color:#8892b0;font-size:11px;">Salida: píxeles quemados = dayOfYear | no quemados = 0</span>
             </div>
         """)
 
         available_regions = list_regions()
-        self.w_regions = widgets.SelectMultiple(
-            options     = available_regions,
-            value       = available_regions[:1] if available_regions else [],
-            description = 'Regiones:',
-            style       = {'description_width': '100px'},
-            layout      = widgets.Layout(height='120px', width='420px')
-        )
-        self.w_version = widgets.Text(value='v1', description='Versión del modelo:',
-                                       style={'description_width': '120px'},
-                                       layout=widgets.Layout(width='250px'))
+        
         self.w_years = widgets.SelectMultiple(
             options=range(2017, 2027),
             value=[2024], description='Años:',
@@ -461,83 +450,85 @@ class ClassifierUI:
             style={'description_width': '80px'},
             layout=widgets.Layout(height='100px', width='350px')
         )
-        self.w_morph = widgets.Checkbox(value=True,
-                                         description='Aplicar filtros morfológicos')
-        self.w_upload_gee = widgets.Checkbox(value=False,
-                                              description='Subir a GEE Asset (post M5)')
-
-        self.btn_run  = widgets.Button(description='🚀 Ejecutar Clasificación',
-                                        button_style='danger',
-                                        layout=widgets.Layout(width='220px'))
-        self.btn_status = widgets.Button(description='🔍 Verificar Estado Fragmento',
-                                          button_style='info',
-                                          layout=widgets.Layout(width='220px'))
-        self.out = widgets.Output()
+        
+        if self.preset_models:
+            preset_html = "<ul>"
+            for model, regs in self.preset_models.items():
+                preset_html += f"<li><b>{model}</b>: {', '.join(regs)}</li>"
+            preset_html += "</ul>"
+            
+            self.model_panel = widgets.VBox([
+                HTML("<b>📌 Usando Configuración Preset (PRESET_MODELS):</b>"),
+                HTML(preset_html)
+            ], layout=widgets.Layout(border='1px solid green', padding='10px', margin='10px 0'))
+        else:
+            self.w_regions = widgets.SelectMultiple(
+                options     = available_regions,
+                value       = available_regions[:1] if available_regions else [],
+                description = 'Regiones:',
+                style       = {'description_width': '100px'},
+                layout      = widgets.Layout(height='120px', width='420px')
+            )
+            self.w_version = widgets.Text(value='v1', description='Versión del modelo:',
+                                           style={'description_width': '120px'},
+                                           layout=widgets.Layout(width='250px'))
+            self.model_panel = widgets.VBox([self.w_version, self.w_regions])
 
         self.ui = widgets.VBox([
             title,
             widgets.HBox([
-                widgets.VBox([self.w_regions, self.w_version]),
-                widgets.VBox([
-                    widgets.HBox([self.w_years, self.w_months]),
-                    self.w_morph, self.w_upload_gee
-                ]),
-            ]),
-            widgets.HBox([self.btn_run, self.btn_status]),
-            self.out,
+                self.model_panel,
+                widgets.HBox([self.w_years, self.w_months]),
+            ])
         ])
 
-        self.btn_run.on_click(self._on_run)
-        self.btn_status.on_click(self._on_status)
-
-    def _on_run(self, _):
-        with self.out:
-            clear_output()
-            regions = list(self.w_regions.value)
-            months  = list(self.w_months.value)
-            years   = list(self.w_years.value)
-            version = self.w_version.value
-
-            if not regions:
-                print("  ⚠️  Seleccione al menos una región.")
-                return
-
-            for year in years:
-                run_classification_campaign(
-                    year=year, months=months, regions=regions,
-                    version=version, out_widget=self.out
-                )
-                print("-" * 50)
-
-    def _on_status(self, _):
-        with self.out:
-            clear_output()
-            years   = list(self.w_years.value)
-            months  = list(self.w_months.value)
-            regions = list(self.w_regions.value)
-            version = self.w_version.value
-
-            for year in years:
-                print(f"🔍 Comprobando el estado de la clasificación — {year}")
-                for month in months:
-                    name   = classification_name(regions, version, year, month)
-                    folder = (f"{CONFIG['base_path']}/classifications/monthly/"
-                              f"{year}/{month:02d}")
-                    result = subprocess.run(
-                        ['gsutil', 'ls', f"gs://{CONFIG['bucket']}/{folder}/"],
-                        capture_output=True, text=True
-                    )
-                    files = [l.strip() for l in result.stdout.splitlines() if l.strip()]
-                    icon  = '✅' if files else '❌'
-                    print(f"  {icon}  {year}-{month:02d}  |  {len(files)} fragmentos")
-                print("-" * 40)
+    def get_selection(self):
+        if self.preset_models:
+            model_dict = self.preset_models
+        else:
+            model_dict = {self.w_version.value: list(self.w_regions.value)}
+            
+        return model_dict, list(self.w_months.value), list(self.w_years.value)
 
     def show(self):
         display(self.ui)
 
 
-def run_ui():
-    """Iniciar la interfaz del clasificador en Colab."""
-    ui = ClassifierUI()
+def run_ui(preset_models=None):
+    """Iniciar la interfaz del clasificador."""
+    ui = ClassifierUI(preset_models=preset_models)
     ui.show()
     return ui
+
+def start_classification(ui):
+    """Ejecutar campañas de clasificación en base a la configuración."""
+    if not isinstance(ui, ClassifierUI):
+        print("⚠️ Esta función requiere el objeto devuelto por run_ui() de M5.")
+        return
+        
+    model_dict, months, years = ui.get_selection()
+    
+    if not model_dict:
+        print("  ⚠️ Configure el modelo y la región.")
+        return
+        
+    print(f"🚀 Iniciando Clasificación")
+    print(f"   Períodos : {years} | meses: {months}\n")
+    
+    import ipywidgets as widgets
+    out = widgets.Output()
+    display(out)
+    
+    for model_version, regions in model_dict.items():
+        if not regions: continue
+        for year in years:
+            run_classification_campaign(
+                year=year, months=months, regions=regions,
+                version=model_version, out_widget=out
+            )
+            
+    print("\n✅ Resumen de Configuración Usada (PRESET):")
+    print("PRESET_MODELS = {")
+    for m, r in model_dict.items():
+        print(f"    '{m}': {r},")
+    print("}")

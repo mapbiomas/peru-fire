@@ -19,3 +19,8 @@ For detailed information about the classification and methodology, please refer 
 For clarifications or to report issues/bugs, please contact:  
 <vera.arruda@ipam.org.br>  
 <wallace.silva@ipam.org.br>
+
+## Issues / TODO
+- [ ] Corrigir o texto da seção "About", que atualmente menciona "Brazil" e "Collection 3", para refletir os dados do Peru.
+- [ ] Verificar e atualizar o link da metodologia (ATBD) para a versão do Peru (se aplicável) ou ajustar o idioma.
+- [ ] Detalhar a estrutura de diretórios e scripts específicos para o landsat_30m no Peru.

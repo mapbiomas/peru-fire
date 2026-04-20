@@ -265,136 +265,131 @@ class ModelTrainer:
 
 class ModelTrainerUI:
     """
-    Interfaz para configurar y ejecutar el entrenamiento del modelo.
-    Recibe (fc, selected_bands) del SampleManagerUI de M2.
+    Interfaz para configurar el entrenamiento del modelo.
     """
 
-    def __init__(self, sample_fc=None, selected_bands=None):
-        self.sample_fc      = sample_fc
-        self.selected_bands = selected_bands or CONFIG['bands_model_default']
-        self.trainer        = None
+    def __init__(self):
         self._build_ui()
 
     def _build_ui(self):
         from ipywidgets import HTML
+        from M3_sample_manager import list_sample_collections, ALL_BANDS
 
         title = HTML("""
-            <div style="
-                background:linear-gradient(135deg,#0a0a0a,#1e1e2e);
-                color:#cba6f7;padding:14px 18px;border-radius:10px;
-                font-family:'Courier New',monospace;font-size:13px;margin-bottom:8px;">
+            <div style="background:linear-gradient(135deg,#0a0a0a,#1e1e2e); color:#cba6f7;padding:14px 18px;border-radius:10px; font-family:'Courier New',monospace;font-size:13px;margin-bottom:8px;">
                 🧠 <b>Entrenador del Modelo</b> — DNN Detección Áreas Quemadas<br>
-                <span style="color:#8892b0;font-size:11px;">
-                NUM_INPUT dinámico | Guarda metadatos en GCS
-                </span>
+                <span style="color:#8892b0;font-size:11px;">Configura hiperparámetros y extrae píxeles reales para entrenamiento</span>
             </div>
         """)
 
-        self.w_version = widgets.Text(value='v1', description='Versión:',
-                                       style={'description_width': '100px'},
-                                       layout=widgets.Layout(width='200px'))
-        self.w_region  = widgets.Text(value='peru_r1',
-                                       description='Región:',
-                                       style={'description_width': '100px'},
-                                       layout=widgets.Layout(width='250px'))
-        self.w_iters   = widgets.IntSlider(value=CONFIG['model_iters'],
-                                            min=1000, max=20000, step=500,
-                                            description='Iteraciones:',
-                                            style={'description_width': '100px'},
-                                            layout=widgets.Layout(width='380px'))
-        self.w_batch   = widgets.IntSlider(value=CONFIG['model_batch'],
-                                            min=100, max=5000, step=100,
-                                            description='Lote:',
-                                            style={'description_width': '100px'},
-                                            layout=widgets.Layout(width='380px'))
-        self.w_layers  = widgets.Text(
-            value=str(CONFIG['model_layers']),
-            description='Capas:',
-            style={'description_width': '100px'},
-            layout=widgets.Layout(width='300px')
+        # Fetch sample collections from GEE (or GCS logic adapted)
+        sample_groups = list_sample_collections()
+        
+        self.w_sample_group = widgets.Dropdown(
+            options=sample_groups or ['(ninguno encontrado)'],
+            description='Grupo Muestras:',
+            style={'description_width': '120px'},
+            layout=widgets.Layout(width='380px')
         )
+        
+        self.w_version = widgets.Text(value='v1', description='Versión Salida:', style={'description_width': '120px'}, layout=widgets.Layout(width='250px'))
+        self.w_region  = widgets.Text(value='peru_r1', description='Región Salida:', style={'description_width': '120px'}, layout=widgets.Layout(width='250px'))
+        self.w_iters   = widgets.IntSlider(value=CONFIG['model_iters'], min=1000, max=20000, step=500, description='Iteraciones:', style={'description_width': '120px'}, layout=widgets.Layout(width='380px'))
+        self.w_batch   = widgets.IntSlider(value=CONFIG['model_batch'], min=100, max=5000, step=100, description='Lote:', style={'description_width': '120px'}, layout=widgets.Layout(width='380px'))
+        self.w_lr      = widgets.FloatText(value=CONFIG['model_lr'], description='Learn Rate:', style={'description_width': '120px'}, layout=widgets.Layout(width='200px'))
+        self.w_layers  = widgets.Text(value=str(CONFIG['model_layers']), description='Capas (Layers):', style={'description_width': '120px'}, layout=widgets.Layout(width='300px'))
 
-        self.btn_train = widgets.Button(description='🚀 Entrenar Modelo',
-                                         button_style='warning',
-                                         layout=widgets.Layout(width='180px'))
-        self.btn_save  = widgets.Button(description='💾 Guardar en GCS',
-                                         button_style='success',
-                                         layout=widgets.Layout(width='180px'))
-        self.out = widgets.Output()
+        band_items = []
+        for band, info in ALL_BANDS.items():
+            chk = widgets.Checkbox(value=info['default'], description=f"{band} ({info['desc']})")
+            band_items.append((band, chk))
+        self.band_checkboxes = dict(band_items)
+        
+        band_box = widgets.VBox(
+            [widgets.Label('📡 Seleccione bandas para cruzar:')] + [chk for _, chk in band_items],
+            layout=widgets.Layout(border='1px solid #333', padding='8px', border_radius='6px')
+        )
 
         self.ui = widgets.VBox([
             title,
-            widgets.HBox([self.w_version, self.w_region]),
-            self.w_iters, self.w_batch, self.w_layers,
-            widgets.HBox([self.btn_train, self.btn_save]),
-            self.out,
+            widgets.HBox([self.w_sample_group, self.w_version, self.w_region]),
+            widgets.HBox([
+                widgets.VBox([self.w_iters, self.w_batch, self.w_lr, self.w_layers]),
+                band_box
+            ])
         ])
 
-        self.btn_train.on_click(self._on_train)
-        self.btn_save.on_click(self._on_save)
-
-    def _on_train(self, _):
-        with self.out:
-            clear_output()
-            from M3_sample_manager import samples_to_array
-
-            if self.sample_fc is None:
-                print("  ⚠️  No se ha definido ninguna FeatureCollection de muestras. Ejecute M2 primero.")
-                return
-
-            bands = self.selected_bands
-            print(f"🧠 Entrenando DNN")
-            print(f"   Bandas     : {bands}  (NUM_INPUT={len(bands)})")
-            print(f"   Obteniendo muestras de GEE...\n")
-
-            X, y = samples_to_array(
-                self.sample_fc,
-                bands
-            )
-            print(f"   Muestras cargadas: {len(X):,}  (quemado={y.sum():,}, no-quemado={(y==0).sum():,})\n")
-
-            layers_raw = self.w_layers.value.strip('[]').split(',')
-            layers = [int(x.strip()) for x in layers_raw]
-
-            self.trainer = ModelTrainer(
-                num_input = len(bands),
-                layers    = layers,
-                lr        = CONFIG['model_lr']
-            )
-            self.trainer._bands_input      = bands
-            self.trainer._sample_count     = {'burned': int(y.sum()),
-                                               'not_burned': int((y==0).sum())}
-            self.trainer._sample_collection = self.w_version.value
-
-            self.trainer.train(
-                X, y,
-                batch_size = self.w_batch.value,
-                n_iters    = self.w_iters.value,
-                out_widget = self.out
-            )
-            print("\n  ✅ Entrenamiento completo.")
-
-    def _on_save(self, _):
-        with self.out:
-            clear_output()
-            if self.trainer is None:
-                print("  ⚠️  Entrene el modelo primero.")
-                return
-            print(f"💾 Guardando el modelo en GCS...")
-            hp = self.trainer.save(
-                version = self.w_version.value,
-                region  = self.w_region.value
-            )
-            print(f"  ✅  Guardado. Metadatos:")
-            print(json.dumps({k: v for k, v in hp.items()
-                               if k not in ('norm_stats', 'history')}, indent=4))
+    def get_selection(self):
+        layers_raw = self.w_layers.value.strip('[]').split(',')
+        layers = [int(x.strip()) for x in layers_raw]
+        
+        bands = [b for b, chk in self.band_checkboxes.items() if chk.value]
+        
+        return {
+            'sample_group': self.w_sample_group.value,
+            'version_out': self.w_version.value,
+            'region_out': self.w_region.value,
+            'bands': bands,
+            'hp': {
+                'layers': layers,
+                'lr': self.w_lr.value,
+                'batch_size': self.w_batch.value,
+                'n_iters': self.w_iters.value
+            }
+        }
 
     def show(self):
         display(self.ui)
 
 
-def run_ui(sample_fc=None, selected_bands=None):
-    """Iniciar la interfaz del entrenador del modelo en Colab."""
-    ui = ModelTrainerUI(sample_fc, selected_bands)
+def run_ui():
+    """Iniciar la interfaz del entrenador del modelo."""
+    ui = ModelTrainerUI()
     ui.show()
     return ui
+
+def start_training(ui):
+    if not isinstance(ui, ModelTrainerUI):
+        print("⚠️ Se requiere el objeto devuelto por run_ui() de M4.")
+        return
+        
+    config = ui.get_selection()
+    sample_group = config['sample_group']
+    bands = config['bands']
+    hp = config['hp']
+    
+    print(f"🚀 Iniciando entrenamiento")
+    print(f"   Grupo      : {sample_group}")
+    print(f"   Bandas     : {bands} (NUM_INPUT={len(bands)})")
+    
+    from M3_sample_manager import load_sample_fc, samples_to_array
+    
+    fc = load_sample_fc(sample_group)
+    print("   Extrayendo píxeles de mosaicos GEE (esto puede tardar)...")
+    
+    X, y = samples_to_array(fc, bands)
+    if len(X) == 0:
+        print("   ❌ Error: No se extrajeron muestras. Revise los mosaicos.")
+        return
+        
+    print(f"   Muestras   : {len(X):,} reales. (quemado={y.sum():,}, no-quemado={(y==0).sum():,})")
+    
+    trainer = ModelTrainer(
+        num_input=len(bands),
+        layers=hp['layers'],
+        lr=hp['lr']
+    )
+    trainer._bands_input = bands
+    trainer._sample_count = {'burned': int(y.sum()), 'not_burned': int((y==0).sum())}
+    trainer._sample_collection = sample_group
+    
+    import ipywidgets as widgets
+    out = widgets.Output()
+    display(out)
+    
+    trainer.train(X, y, batch_size=hp['batch_size'], n_iters=hp['n_iters'], out_widget=out)
+    
+    print("\n   💾 Entrenamiento completado. Guardando pesos en GCS...")
+    hp_saved = trainer.save(version=config['version_out'], region=config['region_out'])
+    
+    print(f"✅ DNN guardada con éxito en versión {config['version_out']} - {config['region_out']}")

@@ -87,9 +87,32 @@ def get_sample_stats(fc):
 
 # ─── CONVERSIÓN DE MUESTRA → TIF ──────────────────────────────────────────────
 
+def get_multiband_mosaic(year, month=None, period='monthly', selected_bands=None):
+    """
+    Reconstrói uma imagem multibanda a partir das coleções de bandas individuais no GEE.
+    """
+    from M0_auth_config import get_asset_mosaic_collection
+    
+    if not selected_bands:
+        from M0_auth_config import CONFIG
+        selected_bands = CONFIG['bands_all']
+    
+    m_name = mosaic_name(year, month, period)
+    
+    # Criar imagem base vazia
+    img = ee.Image()
+    
+    for band in selected_bands:
+        col_id = get_asset_mosaic_collection(period, band)
+        # Tenta carregar a imagem da coleção da banda
+        band_img = ee.Image(f"{col_id}/{m_name}").rename(band)
+        img = img.addBands(band_img)
+        
+    return img.select(selected_bands)
+
 def samples_to_array(fc, selected_bands, max_samples=None):
     """
-    Para cada punto de muestra, extraer los valores de las bandas del mosaico correspondiente.
+    Para cada ponto de muestra, extraer los valores de las bandas del mosaico correspondiente.
     Devuelve matrices numpy (X, y).
 
     selected_bands: lista de nombres de bandas a extraer
@@ -100,27 +123,29 @@ def samples_to_array(fc, selected_bands, max_samples=None):
         fc = fc.limit(max_samples)
 
     label_band = 'label'
+    
+    # Lista de bandas que queremos no mosaico final
     bands_to_sample = selected_bands + [label_band]
 
     def sample_point(feature):
         year  = ee.Number(feature.get('year')).int()
-        month = ee.Number(feature.getNumber('month')).int()
+        month = ee.Number(feature.get('month')).int() # fix: use get instead of getNumber for simplicity
         period = feature.getString('period')
 
-        # Construir el nombre del mosaico para esta muestra
-        month_str = month.format('%02d')
+        # No GEE client-side (dentro do map), não podemos usar loops python complexos 
+        # se as coleções mudam dinamicamente. No entanto, o sensor é global.
+        # Vamos assumir que o sensor está definido no GLOBAL_OPTS.
         
-        # Seleccionar la colección correcta según el período
-        m_name = ee.String('s2_fire_peru_').cat(year.format('%d'))
-        mosaic_path = ee.Algorithms.If(
-            period.equals('monthly'),
-            ee.String(CONFIG['asset_mosaics_monthly']).cat('/').cat(m_name).cat('_').cat(month_str),
-            ee.String(CONFIG['asset_mosaics_yearly']).cat('/').cat(m_name)
-        )
+        # Como o get_asset_mosaic_collection usa GLOBAL_OPTS, e estamos no lado do servidor,
+        # vamos reconstruir o mosaico para este ponto.
+        
+        # Nota: no M3 piloto, o sensor é fixo por sessão (S2). 
+        # Se precisarmos de multi-sensor dinâmico no mesmo FC, precisaríamos de mais lógica.
+        
+        # Para simplificar e manter performance, vamos reconstruir a imagem:
+        mosaic = get_multiband_mosaic(year, month, period, selected_bands)
 
-        mosaic = ee.Image(mosaic_path)
-
-        sampled = mosaic.select(selected_bands).reduceRegion(
+        sampled = mosaic.reduceRegion(
             reducer  = ee.Reducer.first(),
             geometry = feature.geometry(),
             scale    = 10
@@ -153,14 +178,7 @@ def export_samples_to_gcs(fc, selected_bands, version, region, output_prefix):
     Utiliza sampleRegions en el mosaico para exportar una tabla plana.
     """
     def build_mosaic_for_sample(year, month, period):
-        m_name = f"s2_fire_peru_{year}"
-        if period == 'monthly':
-            asset_root = CONFIG['asset_mosaics_monthly']
-            name = f"{m_name}_{month:02d}"
-        else:
-            asset_root = CONFIG['asset_mosaics_yearly']
-            name = m_name
-        return ee.Image(f"{asset_root}/{name}")
+        return get_multiband_mosaic(year, month, period, selected_bands)
 
     # Agrupar muestras por año+mes+período
     years   = fc.aggregate_array('year').distinct().getInfo()
@@ -208,172 +226,132 @@ def export_samples_to_gcs(fc, selected_bands, version, region, output_prefix):
     return tasks
 
 
-# ─── INTERFAZ DE IPYWIDGETS ───────────────────────────────────────────────────
+# ─── INTERFACES DE IPYWIDGETS ───────────────────────────────────────────────────
 
-class SampleManagerUI:
-    """
-    Interfaz interactiva para:
-      - Seleccionar la colección de muestras + filtros
-      - Elegir las bandas de entrada del modelo
-      - Ver el equilibrio de clases
-      - Devolver (fc, selected_bands) para el entrenamiento
-    """
-
+class CollectionToolkitUI:
     def __init__(self):
-        self.selected_fc     = None
-        self.selected_bands  = []
         self._build_ui()
 
     def _build_ui(self):
         from ipywidgets import HTML
-
         title = HTML("""
-            <div style="
-                background:linear-gradient(135deg,#0d1b2a,#1b263b);
-                color:#e0fbfc;padding:14px 18px;border-radius:10px;
-                font-family:'Courier New',monospace;font-size:13px;margin-bottom:8px;">
-                🧬 <b>Gestor de Muestras</b> — Sentinel-2 Fire Monitor<br>
-                <span style="color:#8892b0;font-size:11px;">
-                Muestras vectoriales → Selección de bandas → Matrices de entrenamiento
-                </span>
+            <div style="background:linear-gradient(135deg,#0d1b2a,#1b263b); color:#e0fbfc;padding:14px 18px;border-radius:10px; font-family:'Courier New',monospace;font-size:13px;margin-bottom:8px;">
+                🎨 <b>Toolkit de Recolección de Muestras</b><br>
+                <span style="color:#8892b0;font-size:11px;">Visualiza mosaicos y envía polígonos al Bucket/Asset</span>
             </div>
         """)
-
-        # ── Selector de colecciones
+        
         collections = list_sample_collections()
-        self.w_collection = widgets.Dropdown(
-            options     = collections or ['(no se han encontrado colecciones)'],
-            description = 'Colección:',
-            style       = {'description_width': '100px'},
-            layout      = widgets.Layout(width='380px')
+        self.w_collections = widgets.SelectMultiple(
+            options=collections or ['(no se han encontrado activos)'],
+            description='Assets de Base:',
+            style={'description_width': '120px'},
+            layout=widgets.Layout(width='480px')
         )
-
-        # ── Filtros
-        self.w_version = widgets.Text(
-            value='v1', description='Versión:',
-            style={'description_width': '100px'},
-            layout=widgets.Layout(width='200px')
+        self.w_output_name = widgets.Text(
+            value='nueva_coleccion',
+            description='Nombre Salida:',
+            style={'description_width': '120px'},
+            layout=widgets.Layout(width='480px')
         )
-        self.w_period = widgets.RadioButtons(
-            options=['monthly', 'annual', 'both'], value='monthly',
-            description='Período:', style={'description_width': '100px'}
+        self.w_sensor = widgets.SelectMultiple(
+            options=['sentinel2', 'landsat'],
+            value=['sentinel2'],
+            description='Sensor Ref:',
+            style={'description_width': '120px'},
+            layout=widgets.Layout(width='480px')
         )
-        self.w_regions = widgets.Textarea(
-            placeholder='una región por línea\np. ej. peru_r1_amazonia',
-            description='Regiones:', rows=3,
-            style={'description_width': '100px'},
-            layout=widgets.Layout(width='380px')
-        )
-        self.w_years = widgets.SelectMultiple(
-            options=range(2017, 2027),
-            value=[2024], description='Años:',
-            style={'description_width': '100px'},
-            layout=widgets.Layout(height='100px', width='120px')
-        )
+        self.ui = widgets.VBox([title, self.w_collections, self.w_sensor, self.w_output_name])
 
-        # ── Selector de bandas
-        band_items = []
-        for band, info in ALL_BANDS.items():
-            chk = widgets.Checkbox(
-                value       = info['default'],
-                description = f"{band}  —  {info['desc']}",
-                layout      = widgets.Layout(width='320px')
-            )
-            band_items.append((band, chk))
-        self.band_checkboxes = dict(band_items)
-
-        band_box = widgets.VBox(
-            [widgets.Label('📡 Bandas de entrada del modelo:')] +
-            [chk for _, chk in band_items],
-            layout=widgets.Layout(
-                border='1px solid #333', padding='8px', border_radius='6px'
-            )
-        )
-
-        # ── Botones
-        self.btn_load    = widgets.Button(description='🔍 Cargar y Filtrar Muestras',
-                                          button_style='info', layout=widgets.Layout(width='200px'))
-        self.btn_confirm = widgets.Button(description='✅ Confirmar Selección',
-                                          button_style='success', layout=widgets.Layout(width='200px'))
-
-        self.out = widgets.Output()
-
-        self.ui = widgets.VBox([
-            title,
-            widgets.HBox([
-                widgets.VBox([self.w_collection, self.w_version,
-                               self.w_period, self.w_years, self.w_regions]),
-                band_box,
-            ]),
-            widgets.HBox([self.btn_load, self.btn_confirm]),
-            self.out,
-        ])
-
-        self.btn_load.on_click(self._on_load)
-        self.btn_confirm.on_click(self._on_confirm)
-
-    def _get_selected_bands(self):
-        return [b for b, chk in self.band_checkboxes.items() if chk.value]
-
-    def _on_load(self, _):
-        with self.out:
-            clear_output()
-            coll_name = self.w_collection.value
-            version   = self.w_version.value.strip() or None
-            period    = None if self.w_period.value == 'both' else self.w_period.value
-            regions   = [r.strip() for r in self.w_regions.value.splitlines() if r.strip()] or None
-            years     = list(self.w_years.value)
-
-            print(f"🔍 Cargando colección: {coll_name}")
-            fc = load_sample_fc(coll_name)
-            fc = filter_samples(fc, version=version, regions=regions,
-                                period=period, years=years)
-
-            stats = get_sample_stats(fc)
-            self.selected_fc = fc
-
-            print(f"\n  📊 Distribución de las muestras:")
-            print(f"     🔥 Quemado     : {stats['burned']:,}")
-            print(f"     🌿 No quemado  : {stats['not_burned']:,}")
-            print(f"     📦 Total       : {stats['total']:,}")
-
-            if stats['total'] == 0:
-                print("\n  ⚠️  No se han encontrado muestras con los filtros seleccionados.")
-                return
-
-            balance = stats['burned'] / stats['total'] * 100
-            print(f"     ⚖️  Equilibrio     : {balance:.1f}% quemado")
-
-            bands = self._get_selected_bands()
-            print(f"\n  📡 Bandas seleccionadas ({len(bands)}): {bands}")
-            print(f"     NUM_INPUT = {len(bands)}")
-
-    def _on_confirm(self, _):
-        with self.out:
-            clear_output()
-            if self.selected_fc is None:
-                print("  ⚠️  Cargar muestras primero.")
-                return
-            bands = self._get_selected_bands()
-            self.selected_bands = bands
-            total = self.selected_fc.size().getInfo()
-            print(f"✅ Confirmado:")
-            print(f"   Muestras : {total:,}")
-            print(f"   Bandas   : {bands}  (NUM_INPUT={len(bands)})")
-            print(f"\n  Preparado para M3 — Entrenamiento del modelo.")
+    def get_collection_name(self):
+        return self.w_output_name.value
+        
+    def get_sensor_ref(self):
+        return list(self.w_sensor.value)
 
     def show(self):
         display(self.ui)
 
+
+class SampleGroupUI:
+    def __init__(self):
+        self._build_ui()
+
+    def _build_ui(self):
+        from ipywidgets import HTML
+        title = HTML("""
+            <div style="background:linear-gradient(135deg,#0d1b2a,#1b263b); color:#e0fbfc;padding:14px 18px;border-radius:10px; font-family:'Courier New',monospace;font-size:13px;margin-bottom:8px;">
+                📦 <b>Gestor y Agrupador de Muestras</b><br>
+                <span style="color:#8892b0;font-size:11px;">Fusiona colecciones pasadas y prepáralas para el modelo</span>
+            </div>
+        """)
+        
+        collections = list_sample_collections()
+        self.w_collections = widgets.SelectMultiple(
+            options=collections or ['(nada encontrado)'],
+            description='Colecciones:',
+            style={'description_width': '120px'},
+            layout=widgets.Layout(width='480px', height='150px')
+        )
+        
+        band_items = []
+        for band, info in ALL_BANDS.items():
+            chk = widgets.Checkbox(value=info['default'], description=f"{band} ({info['desc']})")
+            band_items.append((band, chk))
+        self.band_checkboxes = dict(band_items)
+        
+        band_box = widgets.VBox(
+            [widgets.Label('📡 Bandas a extraer para entrenamiento:')] + [chk for _, chk in band_items],
+            layout=widgets.Layout(border='1px solid #333', padding='8px', border_radius='6px')
+        )
+        
+        self.ui = widgets.VBox([title, widgets.HBox([self.w_collections, band_box])])
+
     def get_selection(self):
-        """Devolver (fc, selected_bands) para su uso directo por el Entrenador del modelo."""
-        if self.selected_fc is None or not self.selected_bands:
-            raise ValueError("Ejecute primero confirmar selección.")
-        return self.selected_fc, self.selected_bands
+        selected_cols = list(self.w_collections.value)
+        selected_bands = [b for b, chk in self.band_checkboxes.items() if chk.value]
+        return selected_cols, selected_bands
+
+    def show(self):
+        display(self.ui)
 
 
-def run_ui():
-    """Iniciar la interfaz del gestor de muestras en Colab."""
-    ui = SampleManagerUI()
+def run_collection_toolkit():
+    """Iniciar la interfaz del Toolkit interactivo."""
+    ui = CollectionToolkitUI()
     ui.show()
     return ui
+
+def run_grouping_ui():
+    """Iniciar la interfaz del Gestor de Agrupamiento."""
+    ui = SampleGroupUI()
+    ui.show()
+    return ui
+
+def start_sample_extraction(ui):
+    """Ejecutar la extracción basada en la configuración de la UI de agrupamiento."""
+    if not isinstance(ui, SampleGroupUI):
+        print("⚠️ Esta función requiere el objeto devuelto por run_grouping_ui()")
+        return
+        
+    collections, bands = ui.get_selection()
+    
+    if not collections:
+        print("⚠️ No hay colecciones seleccionadas.")
+        return
+        
+    if not bands:
+        print("⚠️ Seleccione al menos una banda.")
+        return
+        
+    print(f"🚀 Iniciando acopio temporal para {len(collections)} colecciones. Extrayendo las bandas: {bands}")
+    
+    for col_name in collections:
+        print(f"  > Evaluando y extrayendo '{col_name}'...")
+        fc = load_sample_fc(col_name)
+        
+        # En una versión madura, extraeríamos también version y region mediante UI.
+        # Por ahora extraemos as-is para el nombre de la colección
+        export_samples_to_gcs(fc, bands, 'v1', 'agrupado', col_name)
+        
+    print("✅ Disparo completado. Revisa tus Tasks en GEE.")

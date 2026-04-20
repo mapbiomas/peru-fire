@@ -45,3 +45,8 @@ This notebook allows users to run the classification process without needing a l
 For clarifications or to report issues/bugs, please contact:  
 [Vera Arruda](mailto:vera.arruda@ipam.org.br)  
 [Wallace Silva](mailto:wallace.silva@ipam.org.br)
+
+## Issues / TODO
+- [ ] Ajustar os links na seção "Quick Start: Using Google Colab", que apontam para o `brazil-fire`, para os repositórios/notebooks corretos do Peru.
+- [ ] Validar se os passos de treinamento do modelo Deep Neural Network (DNN) estão adequados para as amostras e ecorregiões do Peru.
+- [ ] Atualizar a seção "Repository Structure" para mapear os scripts reais usados na `collection_01` do MapBiomas Fire Peru.
