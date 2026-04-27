@@ -119,9 +119,8 @@ class MosaicAssemblerUI(PipelineStepUI):
                 # Check what COGs we have ready
                 has_any_cog = name in self.cogs or any(f"{name}_{b}" in self.cogs for b in self.bands)
                 
-                # >>> ACTIONABLE FILTER: Show only if at least one band has chunk but no COG <<<
-                waiting_for_cog = any(b in ready_chunks and (f"{name}_{b}" not in self.cogs and name not in self.cogs) for b in self.bands)
-                if not waiting_for_cog:
+                # >>> FILTER: Show if has input chunks (ready to start) OR has existing COGs (completed/in-progress) <<<
+                if not ready_chunks and not has_any_cog:
                     continue  
 
                 cells = [
@@ -189,23 +188,37 @@ def run_ui(years=None):
 
 def start_assemble(ui_obj):
     """Lida com a estrutura retornada pela matrix."""
+    import time
     if ui_obj is None: return
     selected = ui_obj.get_selected()
     if not selected: return
     
     # Agrupar as bandas selecionadas por Mês/Ano
     by_key = {}
+    total_tasks = 0
     for item in selected:
         k = (item['year'], item['month'], item['period'])
         if k not in by_key: by_key[k] = []
         by_key[k].append(item['band'])
+        total_tasks += 1
     
-    print(f"Montando COGs para {len(by_key)} periodos...")
+    ui_obj.log(f"Iniciando montagem de {total_tasks} COGs em {len(by_key)} períodos...", "info")
     
-    from collections import defaultdict
+    start_time = time.time()
+    completed_tasks = 0
+    
     for (y, m, p), str_bands in by_key.items():
-        print(f"[{y}-{m}] Processando bandas: {str_bands}")
-        assemble_country_mosaic(year=y, month=m, period=p, bands=str_bands, logger=print)
+        # A lógica interna do assemble_country_mosaic agora lida com o contador por banda
+        results = assemble_country_mosaic(
+            year=y, month=m, period=p, bands=str_bands, 
+            logger=ui_obj.log, 
+            progress_idx=completed_tasks, 
+            progress_total=total_tasks,
+            start_time=start_time
+        )
+        completed_tasks += len(str_bands)
+    
+    ui_obj.log(f"Processamento de lote finalizado. Total: {total_tasks} COGs.", "success")
 
 def start_delete(ui_obj):
     """Executa a deleção para os itens selecionados."""

@@ -174,15 +174,34 @@ def run_ui(years=None):
     return ui
 
 def start_export(ui_obj):
+    import time
+    from datetime import timedelta
     if ui_obj is None: return
     selected = ui_obj.get_selected()
     if not selected: return
+    
+    total_tasks = len(selected)
     geom = config_module.get_country_geometry()
-    print(f"Despachando {len(selected)} tarefas...")
-    for item in selected:
+    ui_obj.log(f"Despachando {total_tasks} tarefas para o Google Earth Engine...", "info")
+    
+    start_time = time.time()
+    
+    for i, item in enumerate(selected):
+        current_idx = i + 1
         y, m, p, name = item['year'], item['month'], item['period'], item['name']
         t_start = ee.Date(f'{y}-{m:02d}-01') if p == 'monthly' else ee.Date(f'{y}-01-01')
         t_end = t_start.advance(1, 'month') if p == 'monthly' else ee.Date(f'{y+1}-01-01')
+        
+        # Log de progresso e ETA
+        eta_str = ""
+        if i > 0:
+            elapsed = time.time() - start_time
+            avg_time = elapsed / i
+            remaining = (total_tasks - i) * avg_time
+            eta_str = f" | ⏳ ETA: ~{str(timedelta(seconds=int(remaining)))}"
+        
+        ui_obj.log(f"[{current_idx}/{total_tasks}] Despachando {name} ({item['type']}){eta_str}", "info")
+        
         mosaic = get_quality_mosaic(ui_obj.sensor, y, t_start, t_end, geom)
         if item['type'].startswith('asset_'):
             band = item['type'].split('_', 1)[1]
@@ -190,4 +209,5 @@ def start_export(ui_obj):
         elif item['type'].startswith('gcs_'):
             band = item['type'].split('_', 1)[1]
             export_to_gcs(mosaic, name, y, m, p, bands=[band], config_module=config_module)
-        print(f"  - [{name}] {item['type']} disparado.")
+            
+    ui_obj.log(f"Sucesso: {total_tasks} tarefas enviadas à fila do GEE.", "success")

@@ -74,12 +74,13 @@ def run_cmd(args, label="Comando"):
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Erro em {label}: {e.stderr.strip() if e.stderr else e.stdout.strip()}")
 
-def assemble_country_mosaic(year, month=None, period='monthly', bands=None, logger=None):
+def assemble_country_mosaic(year, month=None, period='monthly', bands=None, logger=None, progress_idx=0, progress_total=0, start_time=None):
     import shutil
+    import time
+    from datetime import timedelta
 
     if period == 'monthly':
         chunk_prefix  = monthly_chunk_path(year, month)
-        # Fix: M2 saves to cogs exactly like the repository dictates
         mosaic_prefix = monthly_chunk_path(year, month).replace('chunks', 'cog')
         base_name = mosaic_name(year, month, 'monthly')
         label = f"{year}-{month:02d}"
@@ -127,8 +128,22 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, logg
             if logger: logger("Bandas alvo não detectadas no GCS.", "warning")
             return []
 
+        # Contador local para o lote atual
+        current_step = progress_idx
+
         for b_name, remote_shards in band_files.items():
-            if logger: logger(f"Processando [{b_name}] ({len(remote_shards)} shards)", "info")
+            current_step += 1
+            progress_str = f"[{current_step}/{progress_total}]" if progress_total > 0 else ""
+            
+            eta_str = ""
+            if start_time and current_step > 1:
+                elapsed = time.time() - start_time
+                avg_time = elapsed / (current_step - 1)
+                remaining = (progress_total - (current_step - 1)) * avg_time
+                eta_str = f" | ⏳ ETA: ~{str(timedelta(seconds=int(remaining)))}"
+
+            if logger: logger(f"{progress_str} Processando [{b_name}] ({len(remote_shards)} shards){eta_str}", "info")
+            
             band_tmp = os.path.join(tmp_path, b_name)
             os.makedirs(band_tmp, exist_ok=True)
 
@@ -163,9 +178,13 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, logg
                 else:
                     if logger: logger(f"Falha salvando {dest}", "error")
             finally:
-                # Limpeza severa imediata por banda para evitar oclusão de disco em Windows
+                # Limpeza severa imediata por banda para evitar oclusão de disco
                 try:
-                    shutil.rmtree(band_tmp)
+                    # Remove pasta de chunks da banda
+                    if os.path.exists(band_tmp): shutil.rmtree(band_tmp)
+                    # Remove VRT e COG local desta banda específica
+                    if 'vrt_path' in locals() and os.path.exists(vrt_path): os.remove(vrt_path)
+                    if 'cog_local_path' in locals() and os.path.exists(cog_local_path): os.remove(cog_local_path)
                 except: pass
 
     finally:

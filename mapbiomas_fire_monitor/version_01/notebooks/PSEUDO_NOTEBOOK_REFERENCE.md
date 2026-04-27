@@ -17,14 +17,14 @@ Detalla el flujo secuencial de procesamiento (M1 a M7) y los estándares de nomb
 ### 📂 Arquitectura de Datos y Relacionamiento (M1-M7)
 El monitor opera un fluxo circular de sincronización:
 - **🌍 GEE Assets:** Fonte de brutos e destino final (ImageCollections).
-- **☁️ GCS Bucket:** Persistência central (`library_images/`, `raw_samples/`, `models/`).
+- **☁️ GCS Bucket:** Persistência central (`library_images/`, `rawsamples/`, `models/`).
 - **⚡ Cache Local:** Processamento efêmero (**Local: HD** | **Colab: /content**) para I/O de alta velocidade.
 
 | Etapa | Extensão | Path Principal no Cloud Storage (GCS) |
 | :--- | :--- | :--- |
 | **M1: Export** | `.tif` | `library_images/{sensor}/monthly/chunks/{yyyy}/{mm}/` |
 | **M2: Mosaic** | `.tif` | `library_images/{sensor}/monthly/cog/{yyyy}/{mm}/` |
-| **M3: Samples** | `.shp` | `raw_samples/{anual,monthly}/{ano}/` |
+| **M3.X: Samples** | `.shp` | `rawsamples/{anual,monthly}/{ano}/` |
 | **M5: Classify**| `.tif` | `library_images/{sensor}/monthly/classifications/v{v}/` |
 
 ---
@@ -107,9 +107,9 @@ ui_assembler = run_ui(years=[2025,2026])
 start_assemble(ui_assembler)
 ```
 
-### [M3] — Toolkit de Samples
+### [M3.3] — Agrupamento e Extrato de Samples (Python)
 ```python
-from M3_sample_manager import run_collection_toolkit, start_sample_extraction
+from M3_sample_ui import run_collection_toolkit, start_sample_extraction
 ui_toolkit = run_collection_toolkit()
 start_sample_extraction(ui_toolkit)
 ```

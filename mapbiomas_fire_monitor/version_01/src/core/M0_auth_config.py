@@ -70,7 +70,7 @@ def get_config(country):
         # ── Rotas de GEE Asset ──
         'asset_classification': f"projects/mapbiomas-{country}/assets/FIRE/MONITOR/CLASSIFICATIONS/RAW_VERSIONS",
         'asset_regions': p['regioes_asset'],
-        'asset_samples': 'projects/mapbiomas-peru/assets/FIRE/SAMPLES',
+        'asset_samples': f"projects/mapbiomas-{country}/assets/FIRE/MONITOR/RAWSAMPLES",
         
         # ── LULC ──
         'lulc_asset': p['lulc'],
