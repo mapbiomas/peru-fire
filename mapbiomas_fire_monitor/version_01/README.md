@@ -8,26 +8,29 @@ A diferencia del planteamiento teórico, **todos los módulos (del M1 al M7) ya 
 
 El modelo asume un procesamiento híbrido: la nube (Google Earth Engine y Google Cloud Storage) se encarga del cómputo masivo inicial y el almacenamiento, y el procesamiento local se encarga del entrenamiento neuronal, inferencia y consolidación geográfica pesada.
 
-1. **[M1] Exportación de Mosaicos (`M1_export_logic` / `ui`)**  
-   Generación de los mosaicos crudos (Landsat/Sentinel) en Earth Engine y dictado masivo (Export.image.toCloudStorage) hacia los *buckets* (GCS).
+1. **[M1] Exportación de Mosaicos** [✅ FINALIZADO]
+   Generación de los mosaicos crudos (Landsat/Sentinel/MODIS/HLS/Planet) en Earth Engine y exportación masiva hacia GCS.
+   *Rutas:* GEE -> `projects/mapbiomas-peru/assets/FIRE/MONITOR/VERSION_01/MOSAICS_RAW` | GCS -> `mapbiomas-fire/sudamerica/peru/monitor/mosaics/raw`
 
-2. **[M2] Descarga y Mosaico Local (`M2_mosaic`...)**  
-   Sincronización multi-hilo desde GCS. Utiliza `gdalbuildvrt` y `gdal_translate` para unir (*stacking* y *mosaicking*) las bandas disgregadas y reconstruir un Cloud Optimized GeoTIFF (COG) continuo.
+2. **[M2] Descarga y Mosaico Local** [✅ FINALIZADO]
+   Sincronización desde GCS, unión de bandas (`gdalbuildvrt` / `gdal_translate`) para generar Cloud Optimized GeoTIFFs (COGs) y re-carga a Earth Engine.
+   *Rutas:* GEE -> `projects/mapbiomas-peru/assets/FIRE/MONITOR/VERSION_01/MOSAICS_COG`
 
-3. **[M3] Gestor de Muestras (`M3_sample_manager`)**  
-   Extrae firmas espectrales reales intersectando un FeatureCollection de puntos (etiquetados 1=quemado, 0=no-quemado) con los mosaicos. Consolida el Dataset.
+3. **[M3] Gestor de Muestras (`M3_toolkit.js`)** [✅ FINALIZADO]
+   Dashboard integrado en GEE Code Editor para la recolección de firmas espectrales interactivas (Fuego / No Fuego). Incluye controles de dibujo y resumen en tiempo real.
+   *Rutas:* GEE -> `projects/mapbiomas-peru/assets/FIRE/MONITOR/VERSION_01/LIBRARY_SAMPLES` | GCS -> `mapbiomas-fire/sudamerica/peru/monitor/library_samples`
 
-4. **[M4] Entrenador del Modelo (`M4_model_trainer`)**  
-   Despliega una Red Neuronal Profunda (DNN) mediante TensorFlow 1.x con `NUM_INPUT` completamente dinámico basado en las bandas seleccionadas. Gestiona el hold-out (split), entrena localmente y exporta los pesos y el `hyperparameters.json` de vuelta a GCS.
+4. **[M4] Entrenador del Modelo** [🚧 EN DESARROLLO]
+   Despliegue de Red Neuronal Profunda (DNN) mediante TensorFlow. Toma las muestras del M3, gestiona el hold-out, entrena localmente y exporta los pesos (weights) a GCS.
 
-5. **[M5] Clasificador (`M5_classifier`)**  
-   Módulo de Inferencia. Recupera los pesos desde GCS, fragmenta (genera *tiles* y *Dynamic Grids*) la imagen a clasificar para evitar saturación de RAM, corre las matrices sobre la DNN y escribe el resultado *dayOfYear* (día de quema juliano, en lugar de un mero binario). Aplica un primer grado de filtro morfológico.
+5. **[M5] Clasificador** [🚧 EN DESARROLLO]
+   Módulo de Inferencia. Recupera los pesos desde GCS, fragmenta la imagen (tiles/grids) para evitar saturación de RAM, corre las matrices sobre la DNN y escribe el resultado *dayOfYear* (día juliano).
 
-6. **[M6] Publicador y Filtros LULC (`M6_publisher`)**  
-   Asume las clasificaciones (M5) y cruza la capa contra las máscaras MapBiomas LULC (para excluir agua dinámica, vías urbanas, nieve, etc.). Limpia "pixeles aislados", reensambla los *tiles* clasificados en un COG único, e inyecta la Metadata en EE como *ImageCollection*.
+6. **[M6] Publicador y Filtros LULC** [⏳ PENDIENTE]
+   Aplica filtros morfológicos y cruza clasificaciones contra máscaras MapBiomas LULC para excluir agua, áreas urbanas, etc. Inyecta metadatos en GEE como *ImageCollection*.
 
-7. **[M7] Curador de Colecciones (`M7_curator`)**  
-   Tablero de revisión para seleccionar de entre las distintas variantes (modelos / filtros corridos) cuál es la "ganadora", para luego forjar el *commit* de Exportación final hacia el `GEE Asset` de Colección Pre-Oficial.
+7. **[M7] Curador de Colecciones** [⏳ PENDIENTE]
+   Tablero de revisión para comparar versiones de modelos y filtros, determinando la versión "ganadora" que formará la colección oficial.
 
 ## Requisitos de Entorno
 
@@ -45,7 +48,7 @@ Es altamente estricto asegurar:
 
 Al haber verificado el despliegue del software y sus clases (Python Scripts), listamos las optimizaciones o deudas técnicas a subsanar:
 
-- [ ] **Despliegue de Notebooks y UIs**: M1 y M2 ya operan mediante UI (`_ui.py`). Es urgente integrar las clases de control e ipywidgets creadas en M3, M4, M5, M6 y M7 en *Jupyter Notebooks* limpios (directorio `/notebooks`) para el usuario final.
-- [ ] **Validación TensorFlow**: Certificar el comportamiento del Entrenador DNN desarrollado (M4) usando las cuencas y las ecorregiones peruanas. Si existen disonancias en RAM por TF1, proponer eventual upgrade a TF2/Keras de ser mandatorio.
-- [ ] **Verificación de LULC en M6**: El publicador M6 invoca `mapbiomas_peru_collection2_integration_v1`. Validar si las clases (26=Agua, 22=Suelo desnudo, 33=Ríos, 24=Infraestructura) son correctas e identitarias a la taxonomía peruana actual.
-- [ ] **Prueba de Calibración End-to-End**: Realizar una corrida integral (M1 al M7). Documentar tiempos de ejecución y generar un breve tutorial en video o imágenes (*Walkthrough*) demostrando cómo operar las interfaces desde los notebooks.
+- [x] **Consolidación M1 a M3**: Interfaz de exportación (M1), montador de COGs (M2) y toolkit de muestras (M3) operativos y con rutas estandarizadas bajo `VERSION_01`.
+- [ ] **Desarrollo de Notebooks y UIs (M4-M7)**: Integrar las clases lógicas de M4 y M5 en Jupyter Notebooks limpios y estructurados.
+- [ ] **Validación TensorFlow (M4)**: Certificar el Entrenador DNN desarrollado usando las cuencas y ecorregiones peruanas. Si existen disonancias en RAM por TF1, evaluar upgrade a TF2/Keras.
+- [ ] **Prueba End-to-End (M4-M5)**: Entrenar un modelo basado en las muestras (`LIBRARY_SAMPLES`) y aplicar la inferencia para validar el mapeo de *dayOfYear*.

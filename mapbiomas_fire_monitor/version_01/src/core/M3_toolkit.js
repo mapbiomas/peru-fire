@@ -189,9 +189,9 @@ var countryConfigs = {
     // },
     'Peru': {
         asset_regions: 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
-        asset_samples: 'projects/mapbiomas-peru/assets/FIRE/MONITOR/VERSION_01/SAMPLES_RAW',
+        asset_samples: 'projects/mapbiomas-peru/assets/FIRE/MONITOR/VERSION_01/LIBRARY_SAMPLES',
         bucket: 'mapbiomas-fire',
-        gcs_samples: 'sudamerica/peru/monitor/samples',
+        gcs_samples: 'sudamerica/peru/monitor/library_samples',
         property: 'region_nam'
     }
 };

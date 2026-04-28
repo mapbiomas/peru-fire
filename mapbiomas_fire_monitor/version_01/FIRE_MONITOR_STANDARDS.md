@@ -186,11 +186,11 @@ Rotinas de lote devem informar:
 > [!IMPORTANT]
 > Os módulos M6, M7 e M8 estão em **fase de definição estratégica**. O design abaixo é preliminar e sujeito a alterações conforme o avanço dos testes no M5.
 
-### [M3] — Sample Manager
-*   **Interface**: Matriz Ano x Status de Amostras.
-*   **Missão**: Construir o banco de dados de treinamento (CSV/SHP no GCS e Features no GEE).
-*   **Padrão de Nomeclatura**: Sufixos `YYYY` (Anual) ou `YYYY_MM` (Mensal).
-*   **Ação**: Interface bidirecional (GEE e Notebook) para extração harmônica de amostras.
+### [M3] — Sample Manager (Dashboard GEE)
+*   **Interface**: Dashboard integrado no Earth Engine com gavetas simultâneas (Instruções, Importação, Amostras, Exportação). Inclui painel de estatísticas em tempo real e ferramentas de desenho dedicadas (Fogo / Não Fogo).
+*   **Missão**: Construir o banco de dados de treinamento através da coleta interativa e balanceada de polígonos. Exporta tabelas de assinaturas espectrais tanto para GEE Asset quanto para GCS.
+*   **Padrão de Nomenclatura**: Sufixos automáticos `YYYY` (Anual) ou `YYYY_MM` (Mensal) com rastreamento de versão (`v000X`).
+*   **Rutas Base**: GEE -> `VERSION_01/LIBRARY_SAMPLES` | GCS -> `monitor/library_samples`.
 
 ### [M4] — Model Trainer
 *   **Interface**: Painel de Logs + Widget de Gráfico de Perda (Loss).
