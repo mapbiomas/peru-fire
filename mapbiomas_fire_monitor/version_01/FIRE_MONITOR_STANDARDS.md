@@ -57,34 +57,15 @@ Data       Tipo   [S]    blue     green     red      nir      ...
 [11:00] M2: [1/7] Processando [blue] | ⏳ ETA: ~0:15:00
 ```
 
-### Mockup ASCII: M3.2 (GEE Toolkit Gateway)
-Foco em simplicidade e conexão com o script JavaScript no GitHub.
+### Mockup ASCII: M3 (Toolkit Gateway)
+Foco em simplicidade e conexão com o Earth Engine Code Editor.
 
-**Visualização de Mosaicos**: Para auditar a qualidade das amostras, o fundo do mapa exibe a composição:
-`js
-// Composição ótima para identificação de área queimada
-{ bands: ['swir1', 'nir', 'red'], min: 3, max: 40 }
-`
+```text
+[ 🔗 GEE JS TOOLKIT ]
+URL: https://code.earthengine.google.com/?scriptPath=...
 
-`	ext
-[ 🔥 M3.2 - GEE JS TOOLKIT | Coleta de Amostras ]
-GitHub: https://github.com/mapbiomas/mapbiomas-fire/tree/main/peru/src/gee/src/core/M3_toolkit.js
-
-País:    [ Peru ▼ ]  Región: [ Amazonia-L ▼ ]  [ 📍 Centralizar ]
-Período: [ Anual ▼ ]  Data:   [ 2024       ▼ ]
------------------------------------------------------------------
-
---- Aba: 📤 EXPORTAR ---
-Versão: [ v1 ]   Nome Gerado: samples_fire_v1_b24_amazonia_l_2024
-📍 GEE: projects/mapbiomas-peru/assets/FIRE/MONITOR/RAWSAMPLES/{nome}
-   GCS: gs://mapbiomas-fire/sudamerica/peru/monitor/samples/{nome}.csv
-[ 💾 Salvar no Asset (GEE) ] [ ☁️ Salvar no GCS (CSV) ]
-
---- Aba: 📥 IMPORTAR ---
-Amostra: [ samples_fire_v1_b24_amazonia_l_2024 ▼ ] [ Carregar ]
-`
-
-### Mockup ASCII: M4 (Entrenador)
+Assets de Polígonos Disponíveis:
+• projects/mapbiomas/assets/SAMPLES/v1_peru_2### Mockup ASCII: M4 (Entrenador)
 Foco em parametrização técnica, metadados automáticos e anotações do usuário.
 
 ```text
@@ -124,7 +105,7 @@ Foco em governança, comparação visual e análise espectral.
 
 ### Mockup ASCII: M5 (Clasificador - Gestión y Producción)
 Fase 1: Atribuição de modelos às regiões. Fase 2: Matriz de produção por modelo em gavetas.
-**Output Final**: `ee.ImageCollection` contendo todas as permutações de [Data x Região x Modelo].
+**Output Final**: `ee.ImageCollection` contendo todas as permutações de [Modelo X x Região x Data ].
 
 ```text
 [ 🚀 M5 - CLASIFICADOR ]
@@ -145,7 +126,7 @@ Costa-N        [ v2_exp_r_5k        ]
       2024-04    [X] OK         [X] OK      [X] OK
       ---------------------------------------------
 
-[ ▶ DISPARAR CLASIFICACIÓN SELECIONADA ]
+celula isolada [ ▶ DISPARAR CLASIFICACIÓN SELECIONADA ]
 
 3. PAINEL DE CONSOLIDACIÓN (Histórico de Versões no ImageCollection)
 Data       Amazonia-L       Andes-C     Costa-N
@@ -205,18 +186,11 @@ Rotinas de lote devem informar:
 > [!IMPORTANT]
 > Os módulos M6, M7 e M8 estão em **fase de definição estratégica**. O design abaixo é preliminar e sujeito a alterações conforme o avanço dos testes no M5.
 
-### [M3.2 e M3.3] — Sample Manager 
-*   **[M3.2] Script GEE**: src/core/M3_toolkit.js (Coleta vetorial).
-*   **[M3.3] Script Python**: src/core/M3_sample_logic.py / M3_sample_ui.py (Agrupamento / Preparo).
-*   **Script GEE**: src/gee/src/core/M3_toolkit.js (link GitHub no painel).
-*   **Visualização do Mosaico**: {bands: ['swir1', 'nir', 'red'], min: 3, max: 40}.
-*   **Padrão de Nome**: samples_fire_{ver}_b24_{region}_{period}
-    *   Anual: ..._amazonia_l_2024
-    *   Mensal: ..._amazonia_l_2024_06
-*   **Destinos de Exportação**:
-    *   **GEE (Vetores)**: projects/mapbiomas-peru/assets/FIRE/MONITOR/RAWSAMPLES/
-    *   **GCS (CSV)**: gs://mapbiomas-fire/sudamerica/peru/monitor/samples/
-*   **Ação**: Selecionar região/período, desenhar polígonos Fogo/NãoFogo e disparar exportação dupla.
+### [M3] — Sample Manager
+*   **Interface**: Matriz Ano x Status de Amostras.
+*   **Missão**: Construir o banco de dados de treinamento (CSV/SHP no GCS e Features no GEE).
+*   **Padrão de Nomeclatura**: Sufixos `YYYY` (Anual) ou `YYYY_MM` (Mensal).
+*   **Ação**: Interface bidirecional (GEE e Notebook) para extração harmônica de amostras.
 
 ### [M4] — Model Trainer
 *   **Interface**: Painel de Logs + Widget de Gráfico de Perda (Loss).

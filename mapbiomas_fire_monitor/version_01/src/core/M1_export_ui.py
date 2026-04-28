@@ -202,7 +202,7 @@ def start_export(ui_obj):
         
         ui_obj.log(f"[{current_idx}/{total_tasks}] Despachando {name} ({item['type']}){eta_str}", "info")
         
-        mosaic = get_quality_mosaic(ui_obj.sensor, y, t_start, t_end, geom)
+        mosaic = get_quality_mosaic(ui_obj.sensor, y, t_start, t_end, geom, month=m if p == 'monthly' else None)
         if item['type'].startswith('asset_'):
             band = item['type'].split('_', 1)[1]
             export_to_asset(mosaic.select(band), f"{name}_{band}", y, m, p, config=config_module, band=band)

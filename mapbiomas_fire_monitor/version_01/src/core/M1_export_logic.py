@@ -134,13 +134,38 @@ def process_hls_l30(img):
 
 # ─── LÓGICA DE COLEÇÃO E REDUÇÃO ───────────────────────────────────────────────
 
+INPE_BUFFER_COLLECTION = "projects/workspace-ipam/assets/BUFFER-DOUBLE-MONTHLY-FOCUS-OF-INPE-SULAMERICA"
+
+def apply_inpe_buffer_mask(image, year, month):
+    """
+    Aplica a máscara do buffer de focos de calor do INPE ao mosaico mensal.
+    Se não houver dados de buffer para o período, retorna a imagem sem alteração.
+    """
+    if month is None:
+        return image  # Mosaico anual: não aplica máscara
+    try:
+        buffer_col = ee.ImageCollection(INPE_BUFFER_COLLECTION) \
+            .filter(ee.Filter.eq('year', year)) \
+            .filter(ee.Filter.eq('month', month))
+        buffer_mask = buffer_col.mosaic()
+        # Mantém apenas pixels dentro do buffer (onde buffer > 0)
+        has_data = buffer_col.size().gt(0)
+        return ee.Algorithms.If(
+            has_data,
+            image.updateMask(buffer_mask.gt(0)),
+            image
+        )
+    except Exception as e:
+        print(f"[WARN] Buffer INPE não disponível para {year}/{month}: {e}")
+        return image
+
 def get_landsat_constellation(year):
     if year < 1999: return ['L5']
     elif year <= 2012: return ['L5', 'L7']
     elif year <= 2021: return ['L7', 'L8']
     else: return ['L8', 'L9']
 
-def get_quality_mosaic(sensor, year, start_date, end_date, bounds):
+def get_quality_mosaic(sensor, year, start_date, end_date, bounds, month=None):
     """
     Gera o mosaico de qualidade para a constelação escolhida.
     """
@@ -190,7 +215,12 @@ def get_quality_mosaic(sensor, year, start_date, end_date, bounds):
     spectral = mosaic.select(['blue', 'green', 'red', 'nir', 'swir1', 'swir2']).multiply(multiplier).toByte()
     doy = mosaic.select('dayOfYear').toInt16()
     
-    return spectral.addBands(doy).clip(bounds)
+    full = spectral.addBands(doy).clip(bounds)
+    
+    # Aplica máscara de buffer dos focos de calor INPE (apenas mosaicos mensais)
+    full = apply_inpe_buffer_mask(full, year, month)
+    
+    return full
 
 # ─── FUNÇÕES DE EXPORTAÇÃO ─────────────────────────────────────────────────────
 

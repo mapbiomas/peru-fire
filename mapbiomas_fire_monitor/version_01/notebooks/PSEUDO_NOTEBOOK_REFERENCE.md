@@ -107,11 +107,10 @@ ui_assembler = run_ui(years=[2025,2026])
 start_assemble(ui_assembler)
 ```
 
-### [M3.3] — Agrupamento e Extrato de Samples (Python)
+### [M3] — Coleta de Amostras (GEE Toolkit Gateway)
 ```python
-from M3_sample_ui import run_collection_toolkit, start_sample_extraction
-ui_toolkit = run_collection_toolkit()
-start_sample_extraction(ui_toolkit)
+from M3_sample_ui import show_toolkit_links
+show_toolkit_links()
 ```
 
 ### [M4] — Entrenamiento DNN
