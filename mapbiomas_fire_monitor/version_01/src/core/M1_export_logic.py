@@ -150,11 +150,11 @@ def apply_inpe_buffer_mask(image, year, month):
         buffer_mask = buffer_col.mosaic()
         # Mantém apenas pixels dentro do buffer (onde buffer > 0)
         has_data = buffer_col.size().gt(0)
-        return ee.Algorithms.If(
+        return ee.Image(ee.Algorithms.If(
             has_data,
             image.updateMask(buffer_mask.gt(0)),
             image
-        )
+        ))
     except Exception as e:
         print(f"[WARN] Buffer INPE não disponível para {year}/{month}: {e}")
         return image
