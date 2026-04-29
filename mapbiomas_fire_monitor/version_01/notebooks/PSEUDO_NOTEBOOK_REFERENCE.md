@@ -3,33 +3,64 @@
 ## 📘 Documentación y Guía del Usuario
 Expanda esta sección para entender la arquitectura del dato, requisitos de ambiente y flujo de trabajo.
 
-### 📌 Introducción y Contexto de Uso
-Este pipeline constituye el núcleo de procesamiento automatizado para el Monitoramiento de Cicatrices de Fuego.
+#### 📌 Introducción y Contexto de Uso
 
-### 🛠️ Requisitos de Ambiente (GDAL)
-Para las etapas de mosaico (M2) y clasificación (M5), el monitor utiliza la herramienta **GDAL** para operaciones de I/O de alto rendimiento.
-- **Google Colab:** Se instala automáticamente vía `!apt-get`.
-- **Local (Windows):** Requiere **Miniconda** + `conda install -c conda-forge gdal`.
+Este pipeline de código constituye el núcleo de procesamiento automatizado para el **Monitoramiento de Cicatrices de Fuego de MapBiomas**. Su objetivo principal es extraer, procesar, clasificar y publicar datos satelitales a nivel regional o nacional con alta trazabilidad.
 
-### 🚦 Ciclo de Vida del Dato y Reglas de Nomenclatura
-Detalla el flujo secuencial de procesamiento (M1 a M7) y los estándares de nombrado.
+*   📥 **Entradas Globales (Inputs):** Colecciones de imágenes brutas desde Google Earth Engine (Sentinel-2, Landsat), polígonos vectoriales para entrenamiento (muestras / *samples*), y mapas auxiliares de cobertura de suelo (LULC).
+*   📤 **Salidas Globales (Outputs):** Chunks y mosaicos optimizados (COGs) en Google Cloud Storage (GCS), pesos de modelos de redes neuronales (DNN), matrices de clasificación, e ImageCollections versionadas pre-oficiales en GEE.
+*   🔄 **Alternativas de Ejecución:** La arquitectura modular permite **ejecución mixta**.
+    *   **Ejecución Local (Sugerida para M1, M2 e M5):** Máxima estabilidad al descargar y ensamblar mosaicos con GDAL a través de I/O de disco sostenido.
+    *   **Google Colab (Sugerida para M3 y M4):** Acceso inmediato a recursos de RAM/GPU, facilitando recolección de muestras ágil y entrenamiento de redes.
 
-### 📂 Arquitectura de Datos y Relacionamiento (M1-M7)
-El monitor opera un fluxo circular de sincronización:
-- **🌍 GEE Assets:** Fonte de brutos e destino final (ImageCollections).
-- **☁️ GCS Bucket:** Persistência central (`library_images/`, `rawsamples/`, `models/`).
-- **⚡ Cache Local:** Processamento efêmero (**Local: HD** | **Colab: /content**) para I/O de alta velocidade.
+> **Nota:** Tanto el disco del PC local como el almacenamiento temporal de Colab actúan como **espacio efímero**. La persistencia ocurre siempre en el **Google Cloud Storage (GCS) Bucket**.
 
-| Etapa | Extensão | Path Principal no Cloud Storage (GCS) |
+#### 🚦 Ciclo de Vida del Dato y Reglas de Nomenclatura
+
+| Etapa | Peso | Inputs → Outputs | Regla de Nomenclatura | Ejemplo |
+| :--- | :--- | :--- | :--- | :--- |
+| **M1: Export** | **Leve** | **IN:** Colecciones GEE<br>**OUT:** Chunks GCS | `[sensor]_fire_[país]_[año][mes]` | `s2_fire_peru_2408` |
+| **M2: Mosaic** | **Medio** | **IN:** Chunks GCS<br>**OUT:** Mosaicos COG (GCS) | Semilla M1 + sufijo banda | `s2_fire_peru_2408_nir_cog.tif` |
+| **M3: Samples (Gateway)** | **Leve** | **IN:** Mosaicos (M2)<br>**OUT:** Polígonos (GCS/Asset) | `[col]_[sat_ref]_[reg]`| `samples_sentinel2_r01` |
+| **M4: Train** | **Medio** | **IN:** Muestras M3 + Mosaicos M2<br>**OUT:** DNN (GCS) | `[ver]_[sensor]_[reg]` | `v1_1_sentinel2_r01` |
+| **M5: Classify**| **Pesado**| **IN:** Modelo M4 + Mosaicos M2<br>**OUT:** Raster (GCS) | `klass_[país]_[reg]_[mod]_[yymm]`| `klass_peru_r01_v1_2408` |
+| **M6: Filters** | **Leve** | **IN:** DOY M5 + LULC<br>**OUT:** Raster Filtrado (GCS)| `filt_[país]_[reg]_[mod]_[yymm]`| `filt_peru_r01_v1_2408` |
+| **M7: Versioner**| **Leve** | **IN:** Candidatos M6<br>**OUT:** Asset PRE-OFICIAL | `[colección]_v[X]` | `peru_fire_col1_v1` |
+
+### 📂 Arquitectura de Datos e Relacionamento (M1-M7)
+
+O monitor opera um fluxo circular de sincronização entre três ambientes:
+
+| Ambiente | Componentes Principais | Papel no Ciclo |
+| :--- | :--- | :--- |
+| **🌍 Google Earth Engine** | ImageCollections (Mosaicos) / Assets | Fonte de Brutos e Destino Final |
+| **☁️ Google Cloud Storage** | Chunks / COGs / Models / Samples | Persistência e Área de Trabalho Central |
+| **⚡ Cache Local (Temp)** | VRT Stack / Tiles / NumPy Arrays | Processamento I/O de Alta Velocidade |
+
+#### 🧭 Mapa de Persistência (Onde encontrar os dados)
+
+| Etapa | Extensão | Path Principal no Cloud Storage (GCS) | 
 | :--- | :--- | :--- |
 | **M1: Export** | `.tif` | `library_images/{sensor}/monthly/chunks/{yyyy}/{mm}/` |
 | **M2: Mosaic** | `.tif` | `library_images/{sensor}/monthly/cog/{yyyy}/{mm}/` |
-| **M3.X: Samples** | `.shp` | `rawsamples/{anual,monthly}/{ano}/` |
-| **M5: Classify**| `.tif` | `library_images/{sensor}/monthly/classifications/v{v}/` |
+| **M3: Samples** | `.shp` | `library_samples/{anual,monthly}/{ano}/` |
+| **M4: Train** | `.pb / .json` | `models/{version}/{region}/` |
+| **M5: Classify** | `.tif` | `library_images/{sensor}/monthly/classifications/raw_versions/v{v}/` |
+| **M7: Public** | Asset IC | `projects/mapbiomas-public/assets/{country}/fire/monitor/` |
+
+#### 🏷️ Regras de Nomenclatura Padrão
+*   **Fragmentos (M1):** `{sensor}_fire_{pais}_{yy}{mm}_{banda}.tif`
+*   **Mosaico COG (M2):** `{sensor}_fire_{pais}_{yy}{mm}_{banda}_cog.tif`
+*   **Classificação (M5):** `class_{sensor}_{pais}_{modelo}_{yymm}_v{v}.tif`
 
 ---
+#### 🔄 Retroalimentación y Tolerancia a Fallos
 
-## [M0] — Configuración y Autenticación
+*   **Restantes:** El botón "Seleccionar Restantes" marcará solo los ítems **pendientes** en GCS.
+*   **Sobrescritura:** Remarcar manualmente un ítem con bandera de éxito (verde) indica la intención de reemplazar el archivo.
+*   **Modo Edición (`EDIT_MODE`):** Si es activado en `M0`, la UI expone botones de "Eliminar" en GCS.
+
+## ⚙️ [M0] — Configuración de Ambiente (Escolha uma Rota)
 
 ### > Opción A: Inicialización Google Colab
 **💡 Nota para Colab:** Las siguientes celdas preparan el entorno virtual en la nube.
@@ -38,8 +69,8 @@ El monitor opera un fluxo circular de sincronización:
 # M0.1a — Preparación del entorno Colab (Clonar repo)
 import os
 if not os.path.exists("fire_monitor"):
-    !git clone https://github.com/usuario/fire_monitor.git
-%cd fire_monitor/peru-fire/mapbiomas_fire_monitor/version_01/src/core
+    !git clone https://github.com/mapbiomas/peru-fire.git fire_monitor
+%cd fire_monitor/mapbiomas_fire_monitor/version_01/src/core
 ```
 
 ```python
@@ -61,7 +92,7 @@ if SRC_PATH not in sys.path: sys.path.insert(0, SRC_PATH)
 ```
 
 ### > Inicialización Común (M0.2)
-**💡 Célula "Invencível":** Esta célula autodetecta se estás en Local ou Colab e configura as rutas.
+**💡 Célula "Invencível":** Esta célula autodetecta se estás en Local ou Colab y configura as rutas.
 
 ```python
 # M0.2 — Inicialização do Monitor
@@ -70,9 +101,9 @@ import sys, os
 def auto_path_setup():
     """Localiza a pasta src/core em diferentes ambientes"""
     possible_paths = [
-        os.path.abspath("."),             # Já está na pasta?
-        os.path.abspath("../src/core"),   # Estrutura local padrão
-        "/content/fire_monitor/peru-fire/mapbiomas_fire_monitor/version_01/src/core", # Colab
+        os.path.abspath("."),             
+        os.path.abspath("../src/core"),   
+        "/content/fire_monitor/mapbiomas_fire_monitor/version_01/src/core", 
     ]
     for p in possible_paths:
         if os.path.exists(os.path.join(p, "M0_auth_config.py")):
@@ -86,7 +117,7 @@ COUNTRY = "peru"
 from M0_auth_config import set_country, authenticate, set_global_opts
 set_country(COUNTRY)
 set_global_opts(sensor='sentinel2', periodicity='monthly')
-authenticate() # Detecção automática de login Colab/Local
+authenticate() 
 ```
 
 ---

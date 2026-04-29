@@ -251,9 +251,53 @@ def export_to_asset(mosaic, name, year, month=None, period='monthly', config=Non
         image=img, description=f'ASSET_{name}', assetId=asset_id,
         region=country_geom.bounds(), scale=10, maxPixels=1e13,
         pyramidingPolicy={'.default': 'median'},
+        overwrite=True
     )
     task.start()
     return task
+
+
+def clear_gcs_chunks(year, month=None, period='monthly'):
+    """
+    Remove chunks antigos do GCS para evitar que se misturem com novos.
+    """
+    from M0_auth_config import monthly_chunk_path, yearly_chunk_path, CONFIG
+    import os
+    
+    if period == 'monthly':
+        folder = monthly_chunk_path(year, month)
+    else:
+        folder = yearly_chunk_path(year)
+        
+    path = f"gs://{CONFIG['bucket']}/{folder}/"
+    print(f"[GCS] Limpando chunks antigos para evitar mistura: {path}")
+    # Deleta tudo dentro da pasta de chunks do período
+    os.system(f"gsutil -m rm -rf {path}** > /dev/null 2>&1")
+
+
+def delete_gcs_band(year, month, period, band):
+    """Deleta os chunks de uma banda específica no GCS."""
+    from M0_auth_config import monthly_chunk_path, yearly_chunk_path, CONFIG, mosaic_name
+    import os
+    folder = monthly_chunk_path(year, month) if period == 'monthly' else yearly_chunk_path(year)
+    name = mosaic_name(year, month, period)
+    prefix = f"{folder}/{name}_{band}"
+    path = f"gs://{CONFIG['bucket']}/{prefix}"
+    print(f"[GCS] Removendo banda {band}: {path}*")
+    os.system(f"gsutil -m rm -rf {path}* > /dev/null 2>&1")
+
+
+def delete_asset_band(year, month, period, band):
+    """Deleta um asset específico no GEE."""
+    from M0_auth_config import get_asset_mosaic_collection, mosaic_name
+    collection_id = get_asset_mosaic_collection(period=period, band=band)
+    name = mosaic_name(year, month, period)
+    asset_id = f"{collection_id}/{name}_{band}"
+    try:
+        print(f"[GEE] Removendo Asset: {asset_id}")
+        ee.data.deleteAsset(asset_id)
+    except Exception as e:
+        print(f"[ERR] Falha ao deletar asset: {e}")
 
 
 def export_to_gcs(mosaic, name, year, month=None, period='monthly', bands=None, config_module=None):

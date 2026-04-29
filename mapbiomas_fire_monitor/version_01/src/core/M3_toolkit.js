@@ -23,8 +23,8 @@ var L = (function () {
             lbl_periodicity: 'Periodicidad',
             opt_annual: 'Anual',
             opt_monthly: 'Mensual',
-            lbl_asset_mosaics: 'Mosaicos Oficiales (Asset)',
-            lbl_raw_mosaics: 'Mosaicos Originales (Lento)',
+            lbl_asset_mosaics: 'Mosaicos classificados buffer',
+            lbl_raw_mosaics: 'Mosaicos on the fly',
             lbl_ref_cats: 'Categorías de Referencia',
             lbl_burned: 'Área Quemada',
             lbl_hotspots: 'Focos / Buffers',
@@ -54,15 +54,16 @@ var L = (function () {
             task_created: '🚀 Tareas creadas: ',
             task_hint: ' (vaya a la pestaña Tasks para ejecutar)',
             err_layers: '⚠️ Faltan capas "fire" o "notFire" en el mapa.',
-            err_no_sat:        '⚠️ Seleccione al menos un satélite como metadato.',
-            err_no_date:       '⚠️ Seleccione la fecha representada.',
-            lbl_stats:         'Resumen de Muestras:',
-            lbl_fire:          'Fuego',
-            lbl_not_fire:      'No Fuego',
-            lbl_total:         'Total',
-            lbl_area:          'Área (ha)',
-            lbl_count:         'Cant.',
-            loading:           '🔄️'
+            err_no_sat: '⚠️ Seleccione al menos un satélite como metadato.',
+            err_no_date: '⚠️ Seleccione la fecha representada.',
+            lbl_stats: 'Resumen de Muestras:',
+            lbl_fire: 'Fuego',
+            lbl_not_fire: 'No Fuego',
+            lbl_total: 'Total',
+            lbl_area: 'Área (ha)',
+            lbl_count: 'Cant.',
+            lbl_satellites_toggle: 'Satélites',
+            loading: '🔄️'
         },
         pt: {
             title: 'MapBiomas-Fogo | Monitor',
@@ -75,8 +76,8 @@ var L = (function () {
             lbl_periodicity: 'Periodicidade',
             opt_annual: 'Anual',
             opt_monthly: 'Mensal',
-            lbl_asset_mosaics: 'Mosaicos Oficiais (Asset)',
-            lbl_raw_mosaics: 'Mosaicos Originais (Lento)',
+            lbl_asset_mosaics: 'Mosaicos classificados buffer',
+            lbl_raw_mosaics: 'Mosaicos on the fly',
             lbl_ref_cats: 'Categorias de Referência',
             lbl_burned: 'Área Queimada',
             lbl_hotspots: 'Focos / Buffers',
@@ -106,15 +107,16 @@ var L = (function () {
             task_created: '🚀 Tasks criadas: ',
             task_hint: ' (vá à aba Tasks para executar)',
             err_layers: '⚠️ Faltam camadas "fire" ou "notFire" no mapa.',
-            err_no_sat:        '⚠️ Selecione ao menos um satélite como metadato.',
-            err_no_date:       '⚠️ Selecione a data representada.',
-            lbl_stats:         'Resumo das Amostras:',
-            lbl_fire:          'Fogo',
-            lbl_not_fire:      'Não Fogo',
-            lbl_total:         'Total',
-            lbl_area:          'Área (ha)',
-            lbl_count:         'Qtd.',
-            loading:           '🔄️'
+            err_no_sat: '⚠️ Selecione ao menos um satélite como metadato.',
+            err_no_date: '⚠️ Selecione a data representada.',
+            lbl_stats: 'Resumo das Amostras:',
+            lbl_fire: 'Fogo',
+            lbl_not_fire: 'Não Fogo',
+            lbl_total: 'Total',
+            lbl_area: 'Área (ha)',
+            lbl_count: 'Qtd.',
+            lbl_satellites_toggle: 'Satélites',
+            loading: '🔄️'
         },
         en: {
             title: 'MapBiomas-Fire | Monitor',
@@ -127,8 +129,8 @@ var L = (function () {
             lbl_periodicity: 'Periodicity',
             opt_annual: 'Annual',
             opt_monthly: 'Monthly',
-            lbl_asset_mosaics: 'Official Mosaics (Asset)',
-            lbl_raw_mosaics: 'Raw Mosaics (Slow)',
+            lbl_asset_mosaics: 'Mosaicos classificados buffer',
+            lbl_raw_mosaics: 'Mosaicos on the fly',
             lbl_ref_cats: 'Reference Categories',
             lbl_burned: 'Burned Area',
             lbl_hotspots: 'Hotspots / Buffers',
@@ -158,15 +160,16 @@ var L = (function () {
             task_created: '🚀 Tasks created: ',
             task_hint: ' (go to Tasks tab to run)',
             err_layers: '⚠️ Missing "fire" or "notFire" layers on map.',
-            err_no_sat:        '⚠️ Select at least one satellite as metadata.',
-            err_no_date:       '⚠️ Select the represented date.',
-            lbl_stats:         'Sample Summary:',
-            lbl_fire:          'Fire',
-            lbl_not_fire:      'Not Fire',
-            lbl_total:         'Total',
-            lbl_area:          'Area (ha)',
-            lbl_count:         'Qty.',
-            loading:           '🔄️'
+            err_no_sat: '⚠️ Select at least one satellite as metadata.',
+            err_no_date: '⚠️ Select the represented date.',
+            lbl_stats: 'Sample Summary:',
+            lbl_fire: 'Fire',
+            lbl_not_fire: 'Not Fire',
+            lbl_total: 'Total',
+            lbl_area: 'Area (ha)',
+            lbl_count: 'Qty.',
+            lbl_satellites_toggle: 'Satellites',
+            loading: '🔄️'
         }
     };
     return dict[APP_LANG] || dict['es'];
@@ -265,18 +268,18 @@ var extraDatasets = {
             return buffer.mean().selfMask();
         }
     },
-    'buffer_inpe_inv': {
-        name: 'Buffer Focos INPE (Invertido)',
-        vis: { min: 0, max: 1, palette: ['000000'] },
-        build: function (start, end, bounds, year, month) {
-            var buffer = ee.ImageCollection("projects/workspace-ipam/assets/BUFFER-DOUBLE-MONTHLY-FOCUS-OF-INPE-SULAMERICA")
-                .filter(ee.Filter.eq('year', year));
-            if (month) buffer = buffer.filter(ee.Filter.eq('month', month));
-            var bImg = buffer.mean().unmask(0);
-            // Inverted: 1 where there is no buffer, masked where there is
-            return ee.Image(1).updateMask(bImg.not());
-        }
-    },
+    // 'buffer_inpe_inv': {
+    //     name: 'Buffer Focos INPE (Invertido)',
+    //     vis: { min: 0, max: 1, palette: ['000000'] },
+    //     build: function (start, end, bounds, year, month) {
+    //         var buffer = ee.ImageCollection("projects/workspace-ipam/assets/BUFFER-DOUBLE-MONTHLY-FOCUS-OF-INPE-SULAMERICA")
+    //             .filter(ee.Filter.eq('year', year));
+    //         if (month) buffer = buffer.filter(ee.Filter.eq('month', month));
+    //         var bImg = buffer.mean().unmask(0);
+    //         // Inverted: 1 where there is no buffer, masked where there is
+    //         return ee.Image(1).updateMask(bImg.not());
+    //     }
+    // },
     'hotspots_inpe': {
         name: 'Hotspots INPE (Pontos)',
         vis: { color: '0f03fc' },
@@ -482,7 +485,9 @@ function user_interface() {
                         rawCol = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED").filterDate(start, end).filterBounds(bounds).linkCollection(ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'), ['cs']).map(processS2);
                         multiplier = 0.01;
                     } else if (s === 'modis') {
-                        rawCol = ee.ImageCollection("MODIS/061/MOD09A1").merge(ee.ImageCollection("MODIS/061/MYD09A1")).filterDate(start, end).filterBounds(bounds).map(processMODIS);
+                        rawCol = ee.ImageCollection("MODIS/061/MOD09A1") // Terra
+                            // .merge(ee.ImageCollection("MODIS/061/MYD09A1")) // Aqua (comentado)
+                            .filterDate(start, end).filterBounds(bounds).map(processMODIS);
                         multiplier = 0.01;
                     } else if (s === 'hls') {
                         rawCol = ee.ImageCollection("NASA/HLS/HLSS30/v002").filterDate(start, end).filterBounds(bounds).map(processHLS_S30).merge(ee.ImageCollection("NASA/HLS/HLSL30/v002").filterDate(start, end).filterBounds(bounds).map(processHLS_L30));
@@ -675,26 +680,18 @@ function user_interface() {
 
         var header = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: { margin: '0px', padding: '0px', backgroundColor: '#f0f0f0' } });
 
-        // Título como botão para suportar eventos de clique (Labels não possuem onClick no GEE)
-        var lastClick = 0;
-        var titleLabel = ui.Button({
-            label: 'Regiones',
+        var titleLabel = ui.Label('Regiones', { fontSize: '11px', fontWeight: 'bold', margin: '4px', backgroundColor: '#f0f0f0' });
+
+        var btt_all_regions = ui.Button({
+            label: '[ All ]',
+            style: { margin: '0px', padding: '0px', fontSize: '10px' },
             onClick: function () {
-                var now = new Date().getTime();
-                if (now - lastClick < 300) {
-                    var anyUnchecked = Object.keys(regionCheckboxes).some(function (k) { return !regionCheckboxes[k].getValue(); });
-                    Object.keys(regionCheckboxes).forEach(function (k) { regionCheckboxes[k].setValue(anyUnchecked, false); });
-                    updateSelectedRegionsMap(); updateExportLabel(); debouncedUpdateMosaic();
-                }
-                lastClick = now;
-            },
-            style: {
-                fontSize: '11px',
-                fontWeight: 'bold',
-                margin: '0px',
-                padding: '4px',
-                border: '0px solid #f0f0f0',
-                backgroundColor: '#f0f0f0'
+                var anyUnchecked = Object.keys(regionCheckboxes).some(function (k) { return !regionCheckboxes[k].getValue(); });
+                Object.keys(regionCheckboxes).forEach(function (k) { regionCheckboxes[k].setValue(anyUnchecked, false); });
+                updateSelectedRegionsMap();
+                updateExportLabel();
+                debouncedUpdateMosaic();
+                updateShortnameSuggestion();
             }
         });
 
@@ -715,7 +712,7 @@ function user_interface() {
             }
         });
 
-        header.add(titleLabel).add(btt_center_icon).add(lab_loading);
+        header.add(titleLabel).add(btt_all_regions).add(btt_center_icon).add(lab_loading);
         drawerRegions.panel.add(header);
 
         var flowPanel = ui.Panel({
@@ -727,14 +724,15 @@ function user_interface() {
         current_regiones.aggregate_array(conf.property).distinct().sort().evaluate(function (list) {
             lab_loading.style().set('shown', false);
             regionCheckboxes = {};
-            list.forEach(function (name) {
+            list.forEach(function (name, i) {
                 var chk = ui.Checkbox({
                     label: name,
-                    value: true, // Todos ligados por default
+                    value: i === 0, // Apenas a primeira região ligada por default
                     onChange: function () {
                         updateSelectedRegionsMap();
                         updateExportLabel();
                         debouncedUpdateMosaic();
+                        updateShortnameSuggestion();
                     },
                     style: { margin: '1px 3px', padding: '0px', fontSize: '10px', backgroundColor: '#f9f9f9' }
                 });
@@ -744,6 +742,7 @@ function user_interface() {
             updateSelectedRegionsMap();
             updateExportLabel();
             debouncedUpdateMosaic();
+            updateShortnameSuggestion();
         });
 
         // Atualiza a gaveta de períodos
@@ -751,13 +750,19 @@ function user_interface() {
 
         // Atualiza a lista de amostras no Asset para a aba IMPORTAR
         try {
-            var sample_list = ee.data.listAssets(conf.asset_samples).assets;
+            var assetList = ee.data.listAssets(conf.asset_samples);
+            var sample_list = assetList ? assetList.assets : [];
             var items = sample_list ? sample_list.map(function (obj) { return { label: obj.id.split('/').slice(-1)[0], value: obj.id }; }) : [];
             select_address.items().reset(items);
-            select_address.setPlaceholder('Elija muestra antiga...');
+            if (items.length > 0) {
+                select_address.setPlaceholder('Elija muestra antiga...');
+            } else {
+                select_address.setPlaceholder('Sin muestras em Asset');
+            }
         } catch (e) {
             select_address.items().reset([]);
             select_address.setPlaceholder('Sin muestras em Asset');
+            console.log('Error listing assets:', e);
         }
     }
 
@@ -886,29 +891,7 @@ function user_interface() {
     var cabLayers = createCabinet(L.cab_layers, true);
     panel_control.add(cabLayers.panel);
 
-    var drawerAsset = createLayerDrawer(L.lbl_asset_mosaics, [
-        { id: 'sentinel2', label: 'S2', value: true }
-    ]);
-    var assetCheckboxes = drawerAsset.checkboxes;
-    cabLayers.content.add(drawerAsset.panel);
-
-    var drawerRaw = createLayerDrawer(L.lbl_raw_mosaics, [
-        { id: 'sentinel2', label: 'S2', value: false },
-        { id: 'landsat', label: 'L8/9', value: false },
-        { id: 'modis', label: 'MODIS', value: false },
-        { id: 'hls', label: 'HLS', value: false },
-        { id: 'planet', label: 'Planet', value: false }
-    ]);
-    rawCheckboxes = drawerRaw.checkboxes;
-    cabLayers.content.add(drawerRaw.panel);
-
-    // Sub-cabinet: Reference inside cabLayers
-    var drawerRefToggle = createLayerDrawer(L.lbl_ref_cats, [
-        { id: 'aq', label: L.lbl_burned, value: true, onChange: function (v) { drawerAQ.panel.style().set('shown', v); } },
-        { id: 'focos', label: L.lbl_hotspots, value: true, onChange: function (v) { drawerFocos.panel.style().set('shown', v); } }
-    ]);
-    cabLayers.content.add(drawerRefToggle.panel);
-
+    // 1. Define sub-drawers for Reference
     var extraCheckboxes = {};
     var drawerAQ = createLayerDrawer(L.lbl_burned, [
         { id: 'mcd64a1', label: 'MODIS BA', value: false },
@@ -918,10 +901,36 @@ function user_interface() {
     ]);
     var drawerFocos = createLayerDrawer(L.lbl_hotspots, [
         { id: 'buffer_inpe', label: 'Buffer Focos', value: false },
-        { id: 'buffer_inpe_inv', label: 'Buffer Invertido', value: true },
         { id: 'hotspots_inpe', label: 'Hotspots INPE', value: false }
     ]);
     drawerAQ.panel.style().set('shown', true); drawerFocos.panel.style().set('shown', true);
+
+    // 2. Define sub-drawers for Satellites
+    var drawerAsset = createLayerDrawer(L.lbl_asset_mosaics, [
+        { id: 'sentinel2', label: 'Sentinel2', value: true }
+    ]);
+    var assetCheckboxes = drawerAsset.checkboxes;
+
+    var drawerRaw = createLayerDrawer(L.lbl_raw_mosaics, [
+        { id: 'sentinel2', label: 'Sentinel2', value: false },
+        { id: 'landsat', label: 'Landsat', value: false },
+        { id: 'modis', label: 'MODIS', value: false },
+        { id: 'hls', label: 'HLS', value: false },
+        { id: 'planet', label: 'Planet', value: false }
+    ]);
+    rawCheckboxes = drawerRaw.checkboxes;
+
+    // 3. Define the main toggle drawer (now includes Satellites)
+    var drawerRefToggle = createLayerDrawer(L.lbl_ref_cats, [
+        { id: 'aq', label: L.lbl_burned, value: true, onChange: function (v) { drawerAQ.panel.style().set('shown', v); } },
+        { id: 'focos', label: L.lbl_hotspots, value: true, onChange: function (v) { drawerFocos.panel.style().set('shown', v); } },
+        { id: 'sats', label: L.lbl_satellites_toggle, value: true, onChange: function (v) { drawerAsset.panel.style().set('shown', v); drawerRaw.panel.style().set('shown', v); } }
+    ]);
+
+    // 4. Add to cabinet in the desired order
+    cabLayers.content.add(drawerRefToggle.panel);
+    cabLayers.content.add(drawerAsset.panel);
+    cabLayers.content.add(drawerRaw.panel);
     cabLayers.content.add(drawerAQ.panel).add(drawerFocos.panel);
 
     // Mesclar os checkboxes para o gerenciamento global
@@ -931,7 +940,7 @@ function user_interface() {
     // --- CABINET 4: SAMPLES ---
     var cabSamples = createCabinet(L.cab_samples, true);
     panel_control.add(cabSamples.panel);
-    
+
     // Sub-drawers panels
     var drawerInst = { panel: ui.Panel({ style: { shown: false, border: '1px solid #eee', margin: '2px' } }) };
     var drawerImp = { panel: ui.Panel({ style: { shown: false, border: '1px solid #eee', margin: '2px' } }) };
@@ -958,13 +967,13 @@ function user_interface() {
 
     // Drawing control buttons row
     var rowDraw = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: { margin: '2px 0px', stretch: 'horizontal' } });
-    
+
     function setLayerMode(name) {
         var layers = Map.drawingTools().layers();
         for (var i = 0; i < layers.length(); i++) {
             if (layers.get(i).getName() === name) {
                 Map.drawingTools().setShape('polygon');
-                Map.drawingTools().setSelectedLayer(layers.get(i));
+                Map.drawingTools().setSelected(layers.get(i));
                 return;
             }
         }
@@ -1012,10 +1021,17 @@ function user_interface() {
             }
             updateExportPreview();
             clearDrawingTools();
+            var layers = Map.drawingTools().layers();
+            var fireLayer, notFireLayer;
+            for (var i = 0; i < layers.length(); i++) {
+                if (layers.get(i).getName() === 'fire') fireLayer = layers.get(i);
+                if (layers.get(i).getName() === 'notFire') notFireLayer = layers.get(i);
+            }
+
             ee.FeatureCollection(id).filter(ee.Filter.eq('fire', 1)).geometry().coordinates().map(function (list) { return ee.Geometry.Polygon(list); })
-                .evaluate(function (geomList) { Map.drawingTools().addLayer({ geometries: geomList, name: 'fire', color: 'ff0000', shown: true }); });
+                .evaluate(function (geomList) { if (fireLayer && geomList) fireLayer.geometries().reset(geomList); });
             ee.FeatureCollection(id).filter(ee.Filter.eq('fire', 0)).geometry().coordinates().map(function (list) { return ee.Geometry.Polygon(list); })
-                .evaluate(function (geomList) { Map.drawingTools().addLayer({ geometries: geomList, name: 'notFire', color: '0000ff', shown: true }); });
+                .evaluate(function (geomList) { if (notFireLayer && geomList) notFireLayer.geometries().reset(geomList); });
         }
     });
 
@@ -1035,7 +1051,14 @@ function user_interface() {
         lab_version_status.setValue(L.ver_checking).style().set('color', '#888');
         var conf = countryConfigs[getSelectedCountry()];
         try {
-            var assets = ee.data.listAssets(conf.asset_samples).assets || [];
+            var assetList = ee.data.listAssets(conf.asset_samples);
+            var assets = assetList ? assetList.assets : [];
+            if (!assets || assets.length === 0) {
+                txt_version.setValue('v0001');
+                lab_version_status.setValue(L.ver_empty).style().set('color', '#e65100');
+                updateExportPreview();
+                return;
+            }
             var maxV = 0;
             assets.forEach(function (a) {
                 var fname = a.id.split('/').slice(-1)[0];
@@ -1089,7 +1112,7 @@ function user_interface() {
     }
 
     // --- Satélites (apenas metadado) ---
-    var satLabels = ['S2', 'L8/9', 'MODIS', 'HLS', 'Planet'];
+    var satLabels = ['Sentinel2', 'Landsat', 'MODIS', 'HLS', 'Planet'];
     var satValues = ['sentinel2', 'landsat', 'modis', 'hls', 'planet'];
     var satCheckboxes = {};
     var satRow = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal', true), style: { margin: '0px', padding: '0px', maxHeight: '50px' } });
@@ -1113,9 +1136,9 @@ function user_interface() {
         var ver = txt_version.getValue() || 'v0001';
         var sn = txt_shortname.getValue() ? redundanceReplace(txt_shortname.getValue()) : '';
         var dt = select_date_export.getValue();
-        
+
         lab_date_error.style().set('shown', !dt);
-        
+
         var dt_label = dt || 'YYYY';
         var parts = [ver];
         if (sn) parts.push(sn);
@@ -1125,6 +1148,17 @@ function user_interface() {
 
     // Alias para compatibilidade com outros módulos que chamam updateExportLabel
     function updateExportLabel() { updateExportPreview(); }
+ 
+    function updateShortnameSuggestion() {
+        var selected = [];
+        Object.keys(regionCheckboxes).forEach(function (k) {
+            if (regionCheckboxes[k].getValue()) selected.push(k);
+        });
+        if (selected.length === 0) return;
+        var suggestion = selected.length === 1 ? selected[0] : 'multi_' + selected.length + '_regiones';
+        txt_shortname.setValue(redundanceReplace(suggestion));
+        updateExportPreview();
+    }
 
     // --- getLandcoverVector com metadados ricos ---
     function getLandcoverVector(satellite) {
@@ -1185,14 +1219,14 @@ function user_interface() {
 
             // Join all selected satellites into a single string for metadata
             var satelliteStr = sats.join(',');
-            
+
             var vec = getLandcoverVector(satelliteStr);
             if (!vec) return;
-            
+
             var parts = [ver];
             if (sn) parts.push(sn);
             parts.push(dt);
-            
+
             var desc = parts.join('_');
             var conf = countryConfigs[getSelectedCountry()];
 

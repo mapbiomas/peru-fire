@@ -70,7 +70,7 @@ def get_config(country):
         # ── Rotas de GEE Asset ──
         'asset_classification': f"projects/mapbiomas-{country}/assets/FIRE/MONITOR/VERSION_01/CLASSIFICATIONS/RAW_VERSIONS",
         'asset_regions': p['regioes_asset'],
-        'asset_samples': f"projects/mapbiomas-{country}/assets/FIRE/MONITOR/VERSION_01/RAWSAMPLES",
+        'asset_samples': f"projects/mapbiomas-{country}/assets/FIRE/MONITOR/VERSION_01/LIBRARY_SAMPLES",
         
         # ── LULC ──
         'lulc_asset': p['lulc'],
@@ -80,7 +80,7 @@ def get_config(country):
         # Nota: paths de chunks/cog incluem sensor dinamicamente.
         # Use as funções helper: monthly_chunk_path(), gcs_chunks_prefix(), etc.
         'gcs_models': f'sudamerica/{country}/monitor/models',
-        'gcs_samples': f'sudamerica/{country}/monitor/samples',
+        'gcs_samples': f'sudamerica/{country}/monitor/library_samples',
         
         # ── Configuração Sentinel-2 ──
         'sensor': 'COPERNICUS/S2_SR_HARMONIZED',

@@ -1,5 +1,6 @@
 print("\n>>> M2_mosaic_ui inicializando (v6.0 ASCII) <<<")
 import traceback
+import threading
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
@@ -16,6 +17,7 @@ class MosaicAssemblerUI(PipelineStepUI):
         )
         self.chk_dict = {}
         self.requested_years = years
+        self.is_refreshing = False
         
         try:
             print("M2: [1/3] Iniciando dados do GCS...")
@@ -81,6 +83,7 @@ class MosaicAssemblerUI(PipelineStepUI):
             chk.value = target_val
 
     def _build_ui(self):
+        self.chk_dict = {} # Limpar referencias antigas
         css = PipelineStepUI.get_status_css()
 
         self.btn_all = widgets.Button(description="Selecionar Todos", button_style='info', layout=widgets.Layout(width='155px'))
@@ -168,10 +171,24 @@ class MosaicAssemblerUI(PipelineStepUI):
         return btn
 
     def _refresh_cache(self):
-        self.state = CacheManager.build_full_cache(logger=self.log, years=self.years)
-        self.gcs_chunks = self.state.get('gcs_chunks', {})
-        self.cogs = self.state.get('cogs_monthly' if self.period == 'monthly' else 'cogs_annually', [])
-        self._build_ui()
+        if self.is_refreshing: return
+        
+        try:
+            self.is_refreshing = True
+            self.btn_refresh.disabled = True
+            self.btn_refresh.description = "Atualizando..."
+            
+            self.state = CacheManager.build_full_cache(logger=self.log, years=self.years)
+            self.gcs_chunks = self.state.get('gcs_chunks', {})
+            self.cogs = self.state.get('cogs_monthly' if self.period == 'monthly' else 'cogs_annually', [])
+            self._build_ui()
+            
+        except Exception as e:
+            self.log(f"Erro ao atualizar GCS: {e}", "error")
+        finally:
+            self.is_refreshing = False
+            self.btn_refresh.disabled = False
+            self.btn_refresh.description = "Atualizar GCS"
 
     def get_selected(self): 
         return [chk._meta for chk in self.chk_dict.values() if chk.value]
@@ -183,7 +200,11 @@ class MosaicAssemblerUI(PipelineStepUI):
 
 def run_ui(years=None):
     ui = MosaicAssemblerUI(years=years)
-    ui.display() # Chamada explicita de display fora do __init__ costuma ser mais estavel
+    ui.display() 
+    
+    # Auto-refresh em background para simular o clique no botão e atualizar o cache
+    threading.Thread(target=ui._refresh_cache, daemon=True).start()
+    
     return ui
 
 def start_assemble(ui_obj):

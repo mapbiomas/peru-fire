@@ -1,6 +1,7 @@
 print("\n>>> M1_export_ui inicializando (v6.0 ASCII) <<<")
 import ee
 import traceback
+import threading
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
@@ -8,7 +9,7 @@ from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode
 import M0_auth_config as config_module
 from M_cache import CacheManager
 from M_ui_components import PipelineStepUI
-from M1_export_logic import get_quality_mosaic, export_to_asset, export_to_gcs
+from M1_export_logic import get_quality_mosaic, export_to_asset, export_to_gcs, clear_gcs_chunks, delete_gcs_band, delete_asset_band
 
 class ExportDispatcherUI(PipelineStepUI):
     RELEASE_DAY = 2
@@ -21,6 +22,7 @@ class ExportDispatcherUI(PipelineStepUI):
         )
         self.chk_dict = {}
         self.requested_years = years
+        self.is_refreshing = False
         
         try:
             print("M1: [1/3] Iniciando dados...")
@@ -84,6 +86,7 @@ class ExportDispatcherUI(PipelineStepUI):
             chk.value = target_val
 
     def _build_ui(self):
+        self.chk_dict = {} # Limpar referencias antigas
         active_tasks = self._get_active_tasks()
         css = PipelineStepUI.get_status_css()
 
@@ -93,7 +96,15 @@ class ExportDispatcherUI(PipelineStepUI):
         self.btn_all.on_click(self._on_select_all)
         self.btn_none.on_click(self._on_select_none)
         self.btn_refresh.on_click(lambda _: self._refresh_cache())
-        toolbar = widgets.HBox([self.btn_all, self.btn_none, self.btn_refresh], layout=widgets.Layout(margin='0 0 10px 0'))
+        
+        btns = [self.btn_all, self.btn_none, self.btn_refresh]
+        
+        if is_edit_mode():
+            self.btn_delete = widgets.Button(description="Eliminar Seleção", button_style='danger', icon='trash', layout=widgets.Layout(width='160px'))
+            self.btn_delete.on_click(self._on_delete_selection)
+            btns.append(self.btn_delete)
+
+        toolbar = widgets.HBox(btns, layout=widgets.Layout(margin='0 0 10px 0'))
 
         L = widgets.Layout
         hdr = [widgets.HTML('<span class="mfm-hdr">Data</span>', layout=L(width=self._DATE_W)), 
@@ -162,15 +173,38 @@ class ExportDispatcherUI(PipelineStepUI):
         return btn
 
     def _refresh_cache(self):
-        self.state = CacheManager.build_full_cache(logger=self.log, years=self.years)
-        self.gcs_chunks = self.state.get('gcs_chunks', {})
-        self._build_ui()
+        if self.is_refreshing: return
+        
+        try:
+            self.is_refreshing = True
+            self.btn_refresh.disabled = True
+            self.btn_refresh.description = "Atualizando..."
+            
+            self.state = CacheManager.build_full_cache(logger=self.log, years=self.years)
+            self.gcs_chunks = self.state.get('gcs_chunks', {})
+            self._build_ui()
+            
+        except Exception as e:
+            self.log(f"Erro ao atualizar GCS: {e}", "error")
+        finally:
+            self.is_refreshing = False
+            self.btn_refresh.disabled = False
+            self.btn_refresh.description = "Atualizar GCS"
 
-    def get_selected(self): return [chk._meta for chk in self.chk_dict.values() if chk.value and (is_edit_mode() or not chk._meta.get('exists'))]
+    def get_selected(self): return [chk._meta for chk in self.chk_dict.values() if chk.value]
+
+    def _on_delete_selection(self, _):
+        self.log("Iniciando remoção de itens selecionados...", "warning")
+        start_delete(self)
+        self._refresh_cache()
 
 def run_ui(years=None):
     ui = ExportDispatcherUI(years=years)
-    ui.display() # Chamada explicita de display fora do __init__ costuma ser mais estavel
+    ui.display() 
+    
+    # Auto-refresh em background para simular o clique no botão e atualizar o cache
+    threading.Thread(target=ui._refresh_cache, daemon=True).start()
+    
     return ui
 
 def start_export(ui_obj):
@@ -207,7 +241,35 @@ def start_export(ui_obj):
             band = item['type'].split('_', 1)[1]
             export_to_asset(mosaic.select(band), f"{name}_{band}", y, m, p, config=config_module, band=band)
         elif item['type'].startswith('gcs_'):
+            # Se for exportação GCS, limpamos a pasta de chunks apenas uma vez por período selecionado
+            folder_key = (y, m, p)
+            if not hasattr(start_export, '_cleared'): start_export._cleared = set()
+            if folder_key not in start_export._cleared:
+                clear_gcs_chunks(y, m, p)
+                start_export._cleared.add(folder_key)
+                
             band = item['type'].split('_', 1)[1]
             export_to_gcs(mosaic, name, y, m, p, bands=[band], config_module=config_module)
             
     ui_obj.log(f"Sucesso: {total_tasks} tarefas enviadas à fila do GEE.", "success")
+
+
+def start_delete(ui_obj):
+    """Executa a deleção para os itens selecionados (GCS ou ASSET)."""
+    if ui_obj is None: return
+    selected = ui_obj.get_selected()
+    if not selected: return
+    
+    total = len(selected)
+    for i, item in enumerate(selected):
+        y, m, p, band = item['year'], item['month'], item['period'], item.get('type','').split('_')[-1]
+        type_prefix = item.get('type','').split('_')[0]
+        
+        ui_obj.log(f"[{i+1}/{total}] Deletando {type_prefix.upper()}: {item['name']} ({band})", "warning")
+        
+        if type_prefix == 'gcs':
+            delete_gcs_band(y, m, p, band)
+        elif type_prefix == 'asset':
+            delete_asset_band(y, m, p, band)
+            
+    ui_obj.log(f"Remoção concluída para {total} itens.", "success")
