@@ -47,7 +47,8 @@ ALL_BANDS = {
 def list_sample_collections_gcs():
     """Lista arquivos CSV de amostras curadas no GCS."""
     try:
-        fs = gcsfs.GCSFileSystem()
+        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+        fs = gcsfs.GCSFileSystem(project=project)
         path = f"{CONFIG['bucket']}/{CONFIG['gcs_samples']}"
         files = fs.ls(path)
         return sorted([f.split('/')[-1].replace('.csv', '') for f in files if f.endswith('.csv')], reverse=True)
@@ -57,7 +58,8 @@ def list_sample_collections_gcs():
 def list_trained_models():
     """Lista modelos já treinados no GCS."""
     try:
-        fs = gcsfs.GCSFileSystem()
+        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+        fs = gcsfs.GCSFileSystem(project=project)
         path = f"{CONFIG['bucket']}/{CONFIG['gcs_models']}"
         models = []
         if fs.exists(path):
@@ -74,7 +76,8 @@ def list_trained_models():
 
 def extract_pixels_from_gcs(sample_groups, bands, logger=None):
     from M0_auth_config import mosaic_name, monthly_mosaic_path, yearly_mosaic_path
-    fs = gcsfs.GCSFileSystem()
+    project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+    fs = gcsfs.GCSFileSystem(project=project)
     
     dfs = []
     for group in sample_groups:
@@ -265,7 +268,8 @@ class ModelTrainer:
     def save(self, version, region, logger=None):
         import subprocess, tempfile
         base_path = model_path(version, region)
-        fs = gcsfs.GCSFileSystem()
+        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+        fs = gcsfs.GCSFileSystem(project=project)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # 1. Weights
@@ -322,7 +326,8 @@ def generate_analytics(model_info, out_widget=None):
     import gcsfs, tempfile, subprocess
     from sklearn.metrics import confusion_matrix, classification_report
     
-    fs = gcsfs.GCSFileSystem()
+    project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+    fs = gcsfs.GCSFileSystem(project=project)
     base_gs = f"gs://{model_info['path']}"
     
     if out_widget:
@@ -514,7 +519,8 @@ class ModelTrainerUI(PipelineStepUI):
     def _refresh_models_list(self):
         models = list_trained_models()
         import gcsfs
-        fs = gcsfs.GCSFileSystem()
+        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+        fs = gcsfs.GCSFileSystem(project=project)
         
         items = []
         for m in models:

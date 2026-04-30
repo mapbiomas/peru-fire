@@ -83,6 +83,10 @@ class MosaicAssemblerUI(PipelineStepUI):
             chk.value = target_val
 
     def _build_ui(self):
+        # Evitar reconstruir se já houver itens marcados (proteção contra race condition do refresh)
+        if self.chk_dict and any(c.value for c in self.chk_dict.values()):
+            return 
+            
         self.chk_dict = {} # Limpar referencias antigas
         css = PipelineStepUI.get_status_css()
 
@@ -210,9 +214,16 @@ def run_ui(years=None):
 def start_assemble(ui_obj):
     """Lida com a estrutura retornada pela matrix."""
     import time
-    if ui_obj is None: return
+    if ui_obj is None:
+        print("❌ Erro: Objeto UI não inicializado. Execute a célula anterior.")
+        return
+        
     selected = ui_obj.get_selected()
-    if not selected: return
+    if not selected:
+        msg = "⚠️ Nenhum mosaico/banda selecionado. Marque as caixas [miss] amarelas na interface."
+        print(msg)
+        ui_obj.log(msg, "warning")
+        return
     
     # Agrupar as bandas selecionadas por Mês/Ano
     by_key = {}

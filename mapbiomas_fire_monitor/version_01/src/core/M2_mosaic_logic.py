@@ -92,9 +92,12 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, logg
 
     missing = check_m2_dependencies()
     if missing:
-        msg = f"Faltam dependências vitais: {missing}. "
+        msg = f"❌ Faltam dependências vitais: {missing}. "
         if 'gdalbuildvrt' in missing or 'gdal_translate' in missing:
             msg += "\n💡 No Colab, execute: !apt-get install -y gdal-bin\n💡 No Windows, instale GDAL via OSGeo4W ou Conda."
+        
+        # Em Colab, print direto garante que o usuário veja mesmo fora do Output widget
+        print(msg)
         if logger: logger(msg, "error")
         return []
 
@@ -109,8 +112,14 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, logg
     results = []
 
     try:
-        if logger: logger(f"Buscando chunks GCS para {base_name}", "info")
+        if logger: logger(f"Buscando chunks GCS para {base_name} em {chunk_prefix}", "info")
         ls_res = subprocess.run([gsutil_cmd, 'ls', f"gs://{CONFIG['bucket']}/{chunk_prefix}/*.tif"], capture_output=True, text=True)
+        
+        if ls_res.returncode != 0:
+            err_msg = ls_res.stderr.strip() if ls_res.stderr else "Nenhum fragmento .tif encontrado no diretório."
+            if logger: logger(f"Erro ao listar GCS ({base_name}): {err_msg}", "warning")
+            return []
+
         all_remote_files = [line.strip() for line in ls_res.stdout.splitlines() if line.strip()]
         
         target_bands = bands or CONFIG['bands_all']
@@ -125,7 +134,7 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, logg
                     break
 
         if not band_files:
-            if logger: logger("Bandas alvo não detectadas no GCS.", "warning")
+            if logger: logger(f"Bandas alvo {target_bands} não detectadas no GCS para {base_name}.", "warning")
             return []
 
         # Contador local para o lote atual

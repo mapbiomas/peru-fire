@@ -19,23 +19,26 @@ PAISES = {
     'peru': {
         'nome': 'Peru',
         'ee_project': 'mapbiomas-peru',
+        'gcs_project': 'mapbiomas-fire-485203',  # Billing Project para GCS
         'bucket': 'mapbiomas-fire',
         'lulc': 'projects/mapbiomas-public/assets/peru/collection2/mapbiomas_peru_collection2_integration_v1',
         'regioes_asset': 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
     },
     'bolivia': {
         'nome': 'Bolivia',
-        'ee_project': 'mapbiomas-peru',  # Compartilhado
-        'bucket': 'mapbiomas-fire',        # Compartilhado
+        'ee_project': 'mapbiomas-bolivia', # Ajustado para ser específico
+        'gcs_project': 'mapbiomas-fire-485203',
+        'bucket': 'mapbiomas-fire',
         'lulc': 'projects/mapbiomas-public/assets/bolivia/collection2/mapbiomas_bolivia_collection2_integration_v1',
-        'regioes_asset': 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_bolivia_v1',
+        'regioes_asset': 'projects/mapbiomas-bolivia/assets/FIRE/AUXILIARY_DATA/regiones_fuego_bolivia_v1',
     },
     'paraguay': {
         'nome': 'Paraguay',
-        'ee_project': 'mapbiomas-peru',  # Compartilhado
-        'bucket': 'mapbiomas-fire',        # Compartilhado
+        'ee_project': 'mapbiomas-paraguay', # Ajustado para ser específico
+        'gcs_project': 'mapbiomas-fire-485203',
+        'bucket': 'mapbiomas-fire',
         'lulc': 'projects/mapbiomas-public/assets/paraguay/collection2/mapbiomas_paraguay_collection2_integration_v1',
-        'regioes_asset': 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_paraguay_v1',
+        'regioes_asset': 'projects/mapbiomas-paraguay/assets/FIRE/AUXILIARY_DATA/regiones_fuego_paraguay_v1',
     },
 }
 
@@ -56,11 +59,15 @@ def get_config(country):
     
     p = PAISES[country]
     
+    ee_proj = p['ee_project']
+    gcs_proj = p.get('gcs_project', ee_proj) # Fallback para ee_project se não definido
+    
     return {
         # ── País / projeto ──
         'country': country,
         'country_name': p['nome'],
-        'ee_project': p['ee_project'],
+        'ee_project': ee_proj,
+        'gcs_project': gcs_proj,
         'bucket': p['bucket'],
         
         # ── GCS base path ──
@@ -68,9 +75,9 @@ def get_config(country):
         'gcs_base': f'sudamerica/{country}/monitor',
         
         # ── Rotas de GEE Asset ──
-        'asset_classification': f"projects/mapbiomas-{country}/assets/FIRE/MONITOR/VERSION_01/CLASSIFICATIONS/RAW_VERSIONS",
+        'asset_classification': f"projects/{ee_proj}/assets/FIRE/MONITOR/VERSION_01/CLASSIFICATIONS/RAW_VERSIONS",
         'asset_regions': p['regioes_asset'],
-        'asset_samples': f"projects/mapbiomas-{country}/assets/FIRE/MONITOR/VERSION_01/LIBRARY_SAMPLES",
+        'asset_samples': f"projects/{ee_proj}/assets/FIRE/MONITOR/VERSION_01/LIBRARY_SAMPLES",
         
         # ── LULC ──
         'lulc_asset': p['lulc'],
@@ -414,7 +421,12 @@ def ensure_gdal_path():
                 if os.path.exists(path) and os.path.exists(os.path.join(path, 'gdalbuildvrt.exe')):
                     if path not in os.environ['PATH']:
                         os.environ['PATH'] = path + os.pathsep + os.environ['PATH']
-                        print(f"[OK] GDAL localizado em: {path}")
+                        print(f"[OK] GDAL localizado e injetado: {path}")
                         return True
+    
+    print("❌ [ERRO] Binários do GDAL não encontrados.")
+    print("💡 Localmente, o pipeline M2 exige GDAL (gdalbuildvrt, gdal_translate).")
+    print("💡 Sugestão: conda install -c conda-forge gdal")
+    print("💡 Verifique se você está usando o ambiente 'fire_monitor' recomendado.")
     
     return False

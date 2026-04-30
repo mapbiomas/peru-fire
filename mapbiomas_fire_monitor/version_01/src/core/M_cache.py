@@ -88,11 +88,19 @@ class CacheManager:
         try:
             import gcsfs
             gcs_path = CacheManager._get_gcs_path()
-            fs = gcsfs.GCSFileSystem()
-            with fs.open(gcs_path, 'r') as f:
-                CacheManager._state = json.load(f)
-        except:
-            pass
+            # No Colab, usar o gcs_project (billing) separado do ee_project
+            project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+            fs = gcsfs.GCSFileSystem(project=project)
+            
+            if fs.exists(gcs_path):
+                with fs.open(gcs_path, 'r') as f:
+                    CacheManager._state = json.load(f)
+            else:
+                # Se não existir, não é um erro, apenas retorna estado padrão
+                pass
+        except Exception as e:
+            # Em vez de apenas 'pass', vamos pelo menos avisar se houver erro de permissão
+            print(f"⚠️ Aviso: Falha ao ler cache do GCS: {e}")
         
         return CacheManager._state
 
@@ -148,7 +156,8 @@ class CacheManager:
 
         try:
             import gcsfs
-            fs = gcsfs.GCSFileSystem()
+            project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+            fs = gcsfs.GCSFileSystem(project=project)
             bucket = CONFIG['bucket']
 
             for period in ['monthly', 'yearly']:
@@ -282,7 +291,8 @@ class CacheManager:
         try:
             import gcsfs
             gcs_path = CacheManager._get_gcs_path()
-            fs = gcsfs.GCSFileSystem()
+            project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+            fs = gcsfs.GCSFileSystem(project=project)
             
             if state is None:
                 state = CacheManager._state
