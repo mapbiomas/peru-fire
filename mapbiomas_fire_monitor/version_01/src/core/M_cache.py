@@ -18,10 +18,10 @@ def _get_fs():
     is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
     if is_colab:
         # No Colab, não passamos project para evitar erros de billing desabilitado
-        return gcsfs.GCSFileSystem(token='google_default', requests_timeout=15)
+        return gcsfs.GCSFileSystem(token='google_default', requests_timeout=5)
     else:
         project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-        return gcsfs.GCSFileSystem(project=project, requests_timeout=15)
+        return gcsfs.GCSFileSystem(project=project, requests_timeout=5)
 
 class CacheManager:
     CACHE_FILE = "state.json"

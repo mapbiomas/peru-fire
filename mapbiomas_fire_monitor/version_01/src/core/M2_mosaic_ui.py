@@ -90,7 +90,7 @@ class MosaicAssemblerUI(PipelineStepUI):
 
         self.btn_all = widgets.Button(description="Selecionar Todos", button_style='info', layout=widgets.Layout(width='155px'))
         self.btn_none = widgets.Button(description="Limpar Selecao", button_style='info', layout=widgets.Layout(width='145px'))
-        self.btn_refresh = widgets.Button(description="Atualizar GCS", button_style='success', layout=widgets.Layout(width='150px'))
+        self.btn_refresh = widgets.Button(description="Sincronizar Datos", button_style='success', layout=widgets.Layout(width='150px'))
         self.btn_all.on_click(self._on_select_all)
         self.btn_none.on_click(self._on_select_none)
         self.btn_refresh.on_click(lambda _: self._refresh_cache())
@@ -196,7 +196,7 @@ class MosaicAssemblerUI(PipelineStepUI):
                 self.hide_loader()
                 if self.btn_refresh:
                     self.btn_refresh.disabled = False
-                    self.btn_refresh.description = "Sincronizar GCS"
+                    self.btn_refresh.description = "Sincronizar Datos"
                 self.update_status("")
             self.hide_loader()
         threading.Thread(target=run, daemon=True).start()
@@ -218,6 +218,10 @@ def run_ui(years=None):
     ui._init_data()
     ui._build_ui()
     ui.hide_loader()
+    
+    # Auto-refresh em background para simular o clique no botão e atualizar o cache
+    # Agora respeita o timeout curto do GCSFS para não travar a interface
+    threading.Thread(target=ui._refresh_cache, daemon=True).start()
     
     return ui
 

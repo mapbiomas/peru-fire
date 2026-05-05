@@ -225,7 +225,7 @@ class ExportDispatcherUI(PipelineStepUI):
             self.is_refreshing = False
             if self.btn_refresh:
                 self.btn_refresh.disabled = False
-                self.btn_refresh.description = "Atualizar GCS"
+                self.btn_refresh.description = "Sincronizar Datos"
             self.hide_loader()
 
     def get_selected(self): return [chk._meta for chk in self.chk_dict.values() if chk.value]
@@ -244,6 +244,10 @@ def run_ui(years=None):
     ui._init_data()
     ui._build_ui()
     ui.hide_loader()
+    
+    # Auto-refresh em background para simular o clique no botão e atualizar o cache
+    # Agora respeita o timeout curto do GCSFS para não travar a interface
+    threading.Thread(target=ui._refresh_cache, daemon=True).start()
     
     return ui
 
