@@ -60,8 +60,9 @@ class CacheManager:
 
     @staticmethod
     def build_cache_from_gee(logger=None):
-        """Popula cache listando assets do GEE."""
+        """Popula cache listando assets do GEE em paralelo para performance."""
         import ee, time
+        from concurrent.futures import ThreadPoolExecutor
         from M0_auth_config import CONFIG, get_asset_mosaic_collection
         
         start_time = time.time()
@@ -70,41 +71,55 @@ class CacheManager:
         state['assets_annually'] = []
         
         bands = CONFIG.get('bands_all', ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'])
-        total_steps = len(bands) * 2 * 2
-        current = 0
+        tasks = []
         
-        if logger: logger("Iniciando sincronización GEE...", "info")
-        
+        # Preparar lista de coleções para consultar
         for period_type in ['monthly', 'yearly']:
             for suffix in ["", "_BUFFER"]:
                 for band in bands:
-                    current += 1
-                    if logger: 
-                        elapsed = time.time() - start_time
-                        eta = (elapsed / current) * (total_steps - current) if current > 0 else 0
-                        # Formato compacto solicitado pelo usuário
-                        logger(f"ETA: {int(eta):02d}s || [{current}/{total_steps}]")
-                    
-                    try:
-                        # Gambiarra temporária para pegar a coleção correta
-                        # No futuro, o ImageCollection deve ser um único mosaico multibanda (recomendado)
-                        sensor_base = "SENTINEL2" + suffix
-                        folder_period = "MONTHLY" if period_type == 'monthly' else "ANNUAL"
-                        col_id = f"{CONFIG['asset_mosaics_base']}/{sensor_base}/{folder_period}/{band}"
-                        
-                        result = ee.data.listAssets({'parent': col_id})
-                        for a in result.get('assets', []):
-                            asset_name = a['name'].split('/')[-1]
-                            # Se for asset multibanda no futuro, o nome é o ID. 
-                            # Se for por banda (atual), removemos o sufixo da banda para o cache de "existe"
-                            if asset_name.endswith(f"_{band}"):
-                                asset_name = asset_name[:-(len(band)+1)]
-                            
-                            target_key = 'assets_monthly' if period_type == 'monthly' else 'assets_annually'
-                            if asset_name not in state[target_key]:
-                                state[target_key].append(asset_name)
-                    except Exception:
-                        continue
+                    sensor_base = "SENTINEL2" + suffix
+                    folder_period = "MONTHLY" if period_type == 'monthly' else "ANNUAL"
+                    col_id = f"{CONFIG['asset_mosaics_base']}/{sensor_base}/{folder_period}/{band}"
+                    tasks.append((col_id, period_type, band))
+        
+        total_steps = len(tasks)
+        completed = 0
+        
+        if logger: logger("Iniciando sincronización GEE (Paralelo)...", "info")
+        
+        def fetch_assets(task_info):
+            col_id, period_type, band = task_info
+            try:
+                result = ee.data.listAssets({'parent': col_id})
+                assets_found = []
+                for a in result.get('assets', []):
+                    asset_name = a['name'].split('/')[-1]
+                    if asset_name.endswith(f"_{band}"):
+                        asset_name = asset_name[:-(len(band)+1)]
+                    assets_found.append((period_type, asset_name))
+                return assets_found
+            except:
+                return []
+
+        # Executar em paralelo (máximo 8 threads para não sobrecarregar quota GEE)
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(fetch_assets, t) for t in tasks]
+            for future in futures:
+                res = future.result()
+                for period_type, asset_name in res:
+                    target_key = 'assets_monthly' if period_type == 'monthly' else 'assets_annually'
+                    if asset_name not in state[target_key]:
+                        state[target_key].append(asset_name)
+                
+                completed += 1
+                if logger:
+                    elapsed = time.time() - start_time
+                    # Estimativa mais realista para paralelo
+                    eta = (elapsed / completed) * (total_steps - completed) if completed > 0 else 0
+                    logger(f"Tiempo Estimado: {int(eta):02d}s || [{completed}/{total_steps}]")
+        
+        CacheManager._state = state
+        CacheManager.save()
         
         CacheManager._state = state
         CacheManager.save()
