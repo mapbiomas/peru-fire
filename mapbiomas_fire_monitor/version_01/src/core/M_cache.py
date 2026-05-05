@@ -15,12 +15,13 @@ from M0_auth_config import CONFIG
 def _get_fs():
     """Retorna uma instância GCSFileSystem corretamente autenticada para qualquer ambiente."""
     import gcsfs
-    project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
     is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
     if is_colab:
-        return gcsfs.GCSFileSystem(project=project, token='google_default')
+        # No Colab, não passamos project para evitar erros de billing desabilitado
+        return gcsfs.GCSFileSystem(token='google_default', requests_timeout=15)
     else:
-        return gcsfs.GCSFileSystem(project=project)
+        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+        return gcsfs.GCSFileSystem(project=project, requests_timeout=15)
 
 class CacheManager:
     CACHE_FILE = "state.json"
