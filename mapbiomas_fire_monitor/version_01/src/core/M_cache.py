@@ -44,7 +44,13 @@ class CacheManager:
                 import gcsfs
                 gcs_path = CacheManager._get_gcs_path()
                 project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-                fs = gcsfs.GCSFileSystem(project=project, token='browser' if 'COLAB_RELEASE_TAG' in os.environ else None)
+                
+                # No Colab, use 'google_default' que aproveita as credenciais já autenticadas.
+                # token='browser' causa [Errno 98] address in use porque tenta abrir servidor local.
+                is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+                token = 'google_default' if is_colab else None  # None = ADC local
+                
+                fs = gcsfs.GCSFileSystem(project=project, token=token)
                 
                 if fs.exists(gcs_path):
                     with fs.open(gcs_path, 'r') as f:
@@ -74,18 +80,15 @@ class CacheManager:
         tasks = []
         
         # Preparar lista de coleções para consultar usando a lógica central do M0
+        # IMPORTANTE: sempre usamos sentinel2 como sensor, pois é o sensor do pipeline
+        # e não dependemos de GLOBAL_OPTS['SENSOR'] que pode estar em 'landsat' por padrão.
         for period_type in ['monthly', 'yearly']:
-            # Verificamos tanto a versão normal quanto a versão _BUFFER
             for is_buffer in [False, True]:
-                # Temporariamente sobrescrevemos a opção global para gerar o path correto
-                original_filter = GLOBAL_OPTS.get('FIRE_POTENTIAL_FILTER', False)
-                try:
-                    GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] = is_buffer
-                    for band in bands:
-                        col_id = get_asset_mosaic_collection(periodicity=period_type, band=band)
-                        tasks.append((col_id, period_type, band))
-                finally:
-                    GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] = original_filter
+                suffix = '_BUFFER' if is_buffer else ''
+                sensor_name = f'SENTINEL2{suffix}'
+                for band in bands:
+                    col_id = f"{CONFIG['asset_mosaics_base']}/{sensor_name}/{period_type.upper()}/{band}"
+                    tasks.append((col_id, period_type, band))
         
         total_steps = len(tasks)
         completed = 0
