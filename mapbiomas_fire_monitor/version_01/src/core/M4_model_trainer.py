@@ -323,6 +323,25 @@ class ModelTrainer:
 
         return history
 
+    def evaluate(self):
+        from sklearn.metrics import confusion_matrix, classification_report
+        
+        X_norm = normalize(self._X_raw, self.norm_stats)
+        layer = X_norm
+        for i in range(len(self.layers)):
+            W = self._saved_vars[f'fc_{i}/kernel:0']
+            b = self._saved_vars[f'fc_{i}/bias:0']
+            layer = np.maximum(0, np.dot(layer, W) + b)
+            
+        W_out = self._saved_vars['output/kernel:0']
+        b_out = self._saved_vars['output/bias:0']
+        logits = np.dot(layer, W_out) + b_out
+        preds = (1 / (1 + np.exp(-logits))).flatten() > 0.5
+        
+        cm = confusion_matrix(self._y_raw, preds)
+        rep = classification_report(self._y_raw, preds, output_dict=True)
+        return cm, rep
+
     def save(self, version, region, comment="", logger=None):
         import subprocess, tempfile
         base_path = model_path(version, region)
@@ -357,6 +376,18 @@ class ModelTrainer:
                 dest = gcs_path(f"{base_path}/{fname}")
                 subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
+            # 2.5 Metrics
+            if logger: logger("Gerando e salvando métricas de avaliação...", "info")
+            cm, rep = self.evaluate()
+            metrics = {
+                'confusion_matrix': cm.tolist(),
+                'classification_report': rep,
+                'generated_at': datetime.now().isoformat()
+            }
+            with open(os.path.join(tmpdir, 'metrics.json'), 'w') as f:
+                json.dump(metrics, f, indent=2)
+            subprocess.run(['gsutil', 'cp', os.path.join(tmpdir, 'metrics.json'), gcs_path(f"{base_path}/metrics.json")], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
             # 3. Extracted Pixels
             if logger: logger("Salvando matriz de píxeis no GCS...", "info")
             np.save(os.path.join(tmpdir, 'X_data.npy'), self._X_raw)
@@ -380,78 +411,134 @@ class ModelTrainer:
 
 # ─── INTERFAZ PREMIUM ─────────────────────────────────────────────────────────
 
-def generate_analytics(model_info, out_widget=None):
+def view_analytics(model_info, out_widget=None):
     import gcsfs, tempfile, subprocess
-    from sklearn.metrics import confusion_matrix, classification_report
+    import matplotlib.pyplot as plt
+    from IPython.display import display, HTML
     
     fs = _get_fs()
     base_gs = f"gs://{model_info['path']}"
     
     if out_widget:
+        out_widget.clear_output(wait=True)
         with out_widget:
-            clear_output()
-            print(f"Iniciando análisis profundo para: {model_info['version']} / {model_info['region']}")
-            print("Descargando datos (X_data, y_data, weights)...")
+            print(f"Carregando Dashboard para: {model_info['version']} / {model_info['region']}...")
             
     with tempfile.TemporaryDirectory() as tmpdir:
-        for fname in ['extracted_pixels/X_data.npy', 'extracted_pixels/y_data.npy', 'metadata.json', 'weights.npz']:
+        for fname in ['metadata.json', 'metrics.json']:
             src = f"{base_gs}/{fname}"
-            dest = os.path.join(tmpdir, fname.replace('/', '_'))
+            dest = os.path.join(tmpdir, fname)
             try:
                 subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except:
                 if out_widget:
-                    with out_widget: print(f"Error: No fue posible descargar {fname}")
+                    with out_widget: print(f"Error: Arquivo {fname} não encontrado. Treine o modelo novamente.")
                 return
                 
-        X = np.load(os.path.join(tmpdir, 'extracted_pixels_X_data.npy'))
-        y = np.load(os.path.join(tmpdir, 'extracted_pixels_y_data.npy'))
         with open(os.path.join(tmpdir, 'metadata.json')) as f:
             hp = json.load(f)
+        with open(os.path.join(tmpdir, 'metrics.json')) as f:
+            metrics = json.load(f)
             
+        cm = np.array(metrics['confusion_matrix'])
+        rep = metrics['classification_report']
+        
+        # Cores para o header
+        style = """
+        <style>
+        .dash-card { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .dash-title { font-size: 18px; font-weight: bold; color: #343a40; margin-bottom: 10px; border-bottom: 2px solid #007bff; padding-bottom: 5px; }
+        .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .kpi-box { background: #fff; padding: 10px; border-left: 4px solid #007bff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .kpi-title { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
+        .kpi-value { font-size: 20px; font-weight: bold; color: #212529; }
+        .meta-text { font-size: 13px; color: #495057; margin: 2px 0; }
+        </style>
+        """
+        
+        # Preparando métricas
+        acc = rep.get('accuracy', 0)
+        f1_fire = rep.get('1', {}).get('f1-score', 0)
+        prec_fire = rep.get('1', {}).get('precision', 0)
+        rec_fire = rep.get('1', {}).get('recall', 0)
+        
+        # Formatando data
+        date_str = hp.get('training_date', '')
+        if date_str: date_str = date_str[:16].replace('T', ' ')
+        
+        html_content = f"""
+        {style}
+        <div class="dash-card">
+            <div class="dash-title">📄 Model Card: {hp.get('version')} / {hp.get('region')}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 15px;">
+                <div style="flex: 2; min-width: 300px;">
+                    <p class="meta-text"><b>Data de Criação:</b> {date_str}</p>
+                    <p class="meta-text"><b>Amostras Usadas:</b> {', '.join(hp.get('sample_collections', []))}</p>
+                    <p class="meta-text"><b>Bandas Espectrais:</b> {', '.join(hp.get('bands_input', []))}</p>
+                    <p class="meta-text"><b>Arquitetura (Camadas):</b> {hp.get('layers')} | <b>LR:</b> {hp.get('lr')}</p>
+                    <p class="meta-text"><b>Total Píxeis (Fogo):</b> {hp.get('sample_count', {}).get('burned', 0)} | <b>Não-Fogo:</b> {hp.get('sample_count', {}).get('not_burned', 0)}</p>
+                </div>
+                <div style="flex: 1; min-width: 250px; background:#fff3cd; padding:10px; border-radius:4px; border:1px solid #ffeeba;">
+                    <p class="meta-text" style="color:#856404; font-weight:bold; margin-bottom:5px;">📝 Comentário do Treinamento:</p>
+                    <p class="meta-text" style="color:#856404; font-style:italic;">{hp.get('comment', 'Sem comentário.')}</p>
+                </div>
+            </div>
+            
+            <div class="dash-grid">
+                <div class="kpi-box" style="border-left-color: #28a745;">
+                    <div class="kpi-title">Acurácia Global</div>
+                    <div class="kpi-value">{acc:.1%}</div>
+                </div>
+                <div class="kpi-box" style="border-left-color: #dc3545;">
+                    <div class="kpi-title">Precisão (Fogo)</div>
+                    <div class="kpi-value">{prec_fire:.1%}</div>
+                </div>
+                <div class="kpi-box" style="border-left-color: #ffc107;">
+                    <div class="kpi-title">Recall (Fogo)</div>
+                    <div class="kpi-value">{rec_fire:.1%}</div>
+                </div>
+                <div class="kpi-box" style="border-left-color: #17a2b8;">
+                    <div class="kpi-title">F1-Score (Fogo)</div>
+                    <div class="kpi-value">{f1_fire:.1%}</div>
+                </div>
+            </div>
+        </div>
+        """
+        
         if out_widget:
-            with out_widget: print("Calculando matriz de confusión y reporte...")
-            
-        stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
-        X_norm = normalize(X, stats)
-        
-        weights = dict(np.load(os.path.join(tmpdir, 'weights.npz'), allow_pickle=True))
-        layer = X_norm
-        for i in range(len(hp['layers'])):
-            W = weights[f'fc_{i}/kernel:0']
-            b = weights[f'fc_{i}/bias:0']
-            layer = np.maximum(0, np.dot(layer, W) + b)
-            
-        W_out = weights['output/kernel:0']
-        b_out = weights['output/bias:0']
-        logits = np.dot(layer, W_out) + b_out
-        preds = (1 / (1 + np.exp(-logits))).flatten() > 0.5
-        
-        cm = confusion_matrix(y, preds)
-        rep = classification_report(y, preds, output_dict=True)
-        
-        metrics = {
-            'confusion_matrix': cm.tolist(),
-            'classification_report': rep,
-            'generated_at': datetime.now().isoformat()
-        }
-        
-        with open(os.path.join(tmpdir, 'metrics.json'), 'w') as f:
-            json.dump(metrics, f, indent=2)
-            
-        subprocess.run(['gsutil', 'cp', os.path.join(tmpdir, 'metrics.json'), f"{base_gs}/metrics.json"], stdout=subprocess.DEVNULL)
-        
-        if out_widget:
+            out_widget.clear_output(wait=True)
             with out_widget:
-                print("✅ ¡Análisis guardados en metrics.json en GCS!")
-                fig, ax = plt.subplots(figsize=(5, 4))
-                cax = ax.matshow(cm, cmap='Blues', alpha=0.8)
-                fig.colorbar(cax)
+                display(HTML(html_content))
+                
+                # Plot Confusion Matrix and Training History if available
+                fig = plt.figure(figsize=(12, 4))
+                
+                # Confusion Matrix
+                ax1 = plt.subplot(1, 2, 1)
+                cax = ax1.matshow(cm, cmap='Blues', alpha=0.8)
+                fig.colorbar(cax, ax=ax1)
                 for (i, j), z in np.ndenumerate(cm):
-                    ax.text(j, i, f'{z:d}', ha='center', va='center', weight='bold', color='black')
-                ax.set_title('Matriz de Confusión (Todos los Datos)', pad=15)
-                ax.set_xlabel('Predicción (0=No-fuego, 1=Fuego)')
-                ax.set_ylabel('Realidad')
+                    ax1.text(j, i, f"{z:,}", ha='center', va='center', weight='bold', color='black' if z < cm.max()/2 else 'white')
+                ax1.set_title('Matriz de Confusão', pad=15, weight='bold')
+                ax1.set_ylabel('Real')
+                ax1.set_xlabel('Predito')
+                ax1.set_xticks([0, 1])
+                ax1.set_yticks([0, 1])
+                ax1.set_xticklabels(['No-fuego', 'Fuego'])
+                ax1.set_yticklabels(['No-fuego', 'Fuego'])
+                
+                # Training History
+                history = hp.get('history', {})
+                if history and 'steps' in history:
+                    ax2 = plt.subplot(1, 2, 2)
+                    ax2.plot(history['steps'], history['acc'], color='#0275d8', label='Treino', linewidth=2)
+                    ax2.plot(history['steps'], history['val_acc'], color='#5cb85c', label='Validação', linestyle='--', linewidth=2)
+                    ax2.set_title('Evolução da Acurácia', weight='bold')
+                    ax2.set_xlabel('Iteração')
+                    ax2.legend()
+                    ax2.grid(True, linestyle='--', alpha=0.5)
+                
+                plt.tight_layout()
                 plt.show()
 
 class ModelTrainerUI(PipelineStepUI):
@@ -570,16 +657,21 @@ class ModelTrainerUI(PipelineStepUI):
         ], layout=L(padding='15px'))
         
         # --- TAB 2: Analytics & Monitoramento ---
-        self.chart_output = widgets.Output(layout=L(border='1px solid #dee2e6', border_radius='4px', padding='10px', min_height='250px', margin='10px 0'))
+        self.training_chart_output = widgets.Output(layout=L(border='1px solid #dee2e6', border_radius='4px', padding='10px', min_height='250px', margin='10px 0'))
+        self.analytics_dashboard_output = widgets.Output(layout=L(border='1px solid #dee2e6', border_radius='4px', padding='10px', min_height='300px', margin='10px 0', background_color='#fafafa'))
+        
         self.analytics_area = widgets.VBox()
         self._refresh_models_list()
         
         tab_monitor = widgets.VBox([
-            widgets.HTML("<b>Entrenamiento Actual (En vivo)</b>"),
-            self.chart_output,
+            widgets.HTML("<b>📈 Entrenamiento Actual (En vivo)</b>"),
+            self.training_chart_output,
             widgets.HTML("<hr style='margin:15px 0'>"),
-            widgets.HTML("<b>Análisis Complementarios (Postergados)</b>"),
-            widgets.HTML("<p style='font-size:11px;color:#666;'>Modelos listos para análisis profundo de matriz de confusión e importancias.</p>"),
+            widgets.HTML("<b>📊 Model Card & Analytics Dashboard</b>"),
+            self.analytics_dashboard_output,
+            widgets.HTML("<hr style='margin:15px 0'>"),
+            widgets.HTML("<b>📂 Historial de Modelos</b>"),
+            widgets.HTML("<p style='font-size:11px;color:#666;'>Consulte los Model Cards de entrenamientos anteriores.</p>"),
             self.analytics_area
         ], layout=L(padding='15px'))
         
@@ -599,18 +691,17 @@ class ModelTrainerUI(PipelineStepUI):
         items = []
         for m in models:
             has_metrics = fs.exists(f"{m['path']}/metrics.json")
-            status = "✅ Lista" if has_metrics else "⏳ Pendente"
+            status = "✅ Completo" if has_metrics else "⚠️ Sin Métricas"
             btn = widgets.Button(
-                description="Generar Análisis" if not has_metrics else "Ver Análisis", 
-                button_style='info' if not has_metrics else 'success', 
-                icon='cogs' if not has_metrics else 'eye',
+                description="Ver Model Card", 
+                button_style='success' if has_metrics else 'warning', 
+                icon='bar-chart',
                 layout=widgets.Layout(width='150px')
             )
             
             def _make_callback(model_info):
                 def callback(b):
-                    generate_analytics(model_info, out_widget=self.chart_output)
-                    self._refresh_models_list()
+                    view_analytics(model_info, out_widget=self.analytics_dashboard_output)
                 return callback
                 
             btn.on_click(_make_callback(m))
@@ -644,7 +735,8 @@ def start_training(ui):
         return
         
     ui.tabs.selected_index = 1 
-    ui.chart_output.clear_output()
+    ui.training_chart_output.clear_output()
+    ui.analytics_dashboard_output.clear_output()
     
     bands = [b for b, chk in ui.band_checkboxes.items() if chk.value]
     layers = [int(x.strip()) for x in ui.w_layers.value.split(',')]
@@ -673,7 +765,7 @@ def start_training(ui):
     print("Entrenando DNN...")
     
     def update_chart(history):
-        with ui.chart_output:
+        with ui.training_chart_output:
             clear_output(wait=True)
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.5))
             
@@ -694,11 +786,15 @@ def start_training(ui):
             
     ui.trainer_instance.train(X, y, batch_size=batch, n_iters=iters, logger=_logger, update_chart_fn=update_chart)
     
-    print("Guardando estructura (muestras, píxeles, metadatos) en GCS...")
+    print("Guardando estructura (muestras, píxeles, metadatos, métricas) en GCS...")
     try:
         ui.trainer_instance.save(ui.w_version.value, ui.w_region.value, comment=ui.w_comment.value, logger=_logger)
-        print("¡Modelo guardado y listo para usar en M5!")
-        print("Los análisis profundos pueden ser disparados en la pestaña superior cuando lo desee.")
+        print("¡Modelo y Model Card guardados exitosamente!")
+        
+        # Carregar o Model Card automaticamente no dashboard inferior
+        model_info = {'version': ui.w_version.value, 'region': ui.w_region.value, 'path': f"sudamerica/{CONFIG['country']}/monitor/{CONFIG['version']}/models/{ui.w_version.value}/{ui.w_region.value}"}
+        view_analytics(model_info, out_widget=ui.analytics_dashboard_output)
+        
     except Exception as e:
         print(f"Error al guardar: {e}")
         
