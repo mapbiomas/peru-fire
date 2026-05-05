@@ -245,9 +245,6 @@ def run_ui(years=None):
     ui._build_ui()
     ui.hide_loader()
     
-    # Auto-refresh em background para simular o clique no botão e atualizar o cache
-    threading.Thread(target=ui._refresh_cache, daemon=True).start()
-    
     return ui
 
 def start_export(ui_obj):
