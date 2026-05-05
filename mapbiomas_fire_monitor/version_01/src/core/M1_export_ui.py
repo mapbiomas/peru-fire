@@ -43,7 +43,7 @@ class ExportDispatcherUI(PipelineStepUI):
         else:
             self.years = list(range(curr_year, 2018, -1))
         self.bands = CONFIG['bands_all']
-        self.log("Carregando cache...", "info")
+        self.update_status("Cargando cache...")
         self.state = CacheManager.load() or {}
         self.gcs_chunks = self.state.get('gcs_chunks', {})
 
@@ -100,15 +100,23 @@ class ExportDispatcherUI(PipelineStepUI):
         self.btn_refresh = widgets.Button(description="Sincronizar GCS", button_style='success', layout=widgets.Layout(width='150px'))
         self.btn_tasks = widgets.Button(description="Actualizar Tareas", button_style='warning', icon='tasks', layout=widgets.Layout(width='150px'))
         
-        # Seletor de limite de tarefas (editável pelo usuário)
-        self.w_task_limit = widgets.BoundedIntText(value=200, min=10, max=1000, step=50, description='Límite:', layout=widgets.Layout(width='130px'), style={'description_width': '50px'})
+        # Seletor de limite de tarefas integrado visualmente ao botão
+        self.w_task_limit = widgets.BoundedIntText(
+            value=200, min=10, max=1000, step=50, 
+            layout=widgets.Layout(width='60px', margin='0'),
+            style={'description_width': '0px'} 
+        )
+        self.w_task_limit.add_class('mfm-task-limit')
+        self.btn_tasks.add_class('mfm-btn-tasks')
+        
+        tasks_group = widgets.HBox([self.btn_tasks, self.w_task_limit], layout=widgets.Layout(margin='0 0 0 10px'))
         
         self.btn_all.on_click(self._on_select_all)
         self.btn_none.on_click(self._on_select_none)
         self.btn_refresh.on_click(lambda _: self._refresh_cache())
         self.btn_tasks.on_click(lambda _: self._refresh_ui_tasks())
         
-        btns = [self.btn_all, self.btn_none, self.btn_refresh, self.btn_tasks, self.w_task_limit]
+        btns = [self.btn_all, self.btn_none, self.btn_refresh, tasks_group]
         
         if is_edit_mode():
             self.btn_delete = widgets.Button(description="Eliminar Seleção", button_style='danger', icon='trash', layout=widgets.Layout(width='160px'))
@@ -123,7 +131,22 @@ class ExportDispatcherUI(PipelineStepUI):
                widgets.HTML('<span class="mfm-hdr">[S]</span>', layout=L(width=self._SEL_W, text_align='center'))]
         for b in self.bands: hdr.append(widgets.HTML(f'<span class="mfm-hdr">{b}</span>', layout=L(width=self._CELL_W, text_align='center')))
         
-        matrix_rows = [widgets.HBox(hdr, layout=L(border_bottom='2px solid #343a40', padding='8px 0'))]
+        matrix_rows = [widgets.HTML('''<style>
+            .mfm-task-limit input { 
+                background-color: #fff3cd !important; 
+                border: 1px solid #ffc107 !important; 
+                border-left: none !important;
+                border-top-left-radius: 0 !important; 
+                border-bottom-left-radius: 0 !important;
+                font-weight: bold !important; 
+                text-align: center !important; 
+            }
+            .mfm-btn-tasks {
+                border-top-right-radius: 0 !important;
+                border-bottom-right-radius: 0 !important;
+                margin-right: 0 !important;
+            }
+        </style>'''), widgets.HBox(hdr, layout=L(border_bottom='2px solid #343a40', padding='8px 0'))]
         
         asset_key = 'assets_monthly' if self.period == 'monthly' else 'assets_annually'
         asset_status = self.state.get(asset_key, [])

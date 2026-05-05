@@ -87,8 +87,9 @@ class PipelineStepUI:
         """Esconde o spinner de carregamento."""
         self.loader_html.value = self.loader_html.value.replace('display:flex', 'display:none')
 
-    def update_status(self, message):
-        """Atualiza a mensagem de status secundária no cabeçalho."""
+    def update_status(self, message, type=None):
+        """Atualiza a mensagem de status secundária no cabeçalho (substitui a anterior)."""
+        # Aceitamos o argumento 'type' para compatibilidade com loggers, mas o ignoramos no visual compacto
         self.status_msg.value = f'<span style="font-size:11px; color:#0275d8; font-weight:bold;">{message}</span>'
 
     def log(self, message, type="info"):

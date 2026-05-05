@@ -39,7 +39,7 @@ class MosaicAssemblerUI(PipelineStepUI):
             self.years = list(range(curr_year, 2018, -1))
         
         self.bands = CONFIG['bands_all']
-        self.log("Lendo fragmentos do cache GCS...", "info")
+        self.update_status("Cargando cache...")
         self.state = CacheManager.load() or {}
         
         # gcs_chunks is a dict: {mosaic_name: [band1, band2, ...], ...}
@@ -175,24 +175,31 @@ class MosaicAssemblerUI(PipelineStepUI):
     def _refresh_cache(self):
         if self.is_refreshing: return
         
-        try:
+        def run():
             self.is_refreshing = True
-            self.btn_refresh.disabled = True
-            self.btn_refresh.description = "Actualizando..."
-            self.show_loader("Sincronizando datos...")
-            
-            self.state = CacheManager.build_full_cache(logger=self.log, years=self.years)
-            self.gcs_chunks = self.state.get('gcs_chunks', {})
-            self.cogs = self.state.get('cogs_monthly' if self.period == 'monthly' else 'cogs_annually', [])
-            self._build_ui()
-            
-        except Exception as e:
-            self.log(f"Erro ao atualizar GCS: {e}", "error")
-        finally:
-            self.is_refreshing = False
-            self.btn_refresh.disabled = False
-            self.btn_refresh.description = "Atualizar GCS"
+            try:
+                if self.btn_refresh:
+                    self.btn_refresh.disabled = True
+                    self.btn_refresh.description = "Actualizando..."
+                
+                self.show_loader("Sincronizando...")
+                self.state = CacheManager.build_full_cache(logger=self.update_status, years=self.years)
+                self.gcs_chunks = self.state.get('gcs_chunks', {})
+                self.cogs = self.state.get('cogs_monthly' if self.period == 'monthly' else 'cogs_annually', [])
+                
+                self._build_ui()
+                self.update_status("GCS Sincronizado", "success")
+            except Exception as e:
+                self.log(f"Erro ao atualizar GCS: {e}", "error")
+            finally:
+                self.is_refreshing = False
+                self.hide_loader()
+                if self.btn_refresh:
+                    self.btn_refresh.disabled = False
+                    self.btn_refresh.description = "Sincronizar GCS"
+                self.update_status("")
             self.hide_loader()
+        threading.Thread(target=run, daemon=True).start()
 
     def get_selected(self): 
         return [chk._meta for chk in self.chk_dict.values() if chk.value]
