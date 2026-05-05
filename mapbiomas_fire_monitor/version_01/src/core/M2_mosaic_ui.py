@@ -19,15 +19,10 @@ class MosaicAssemblerUI(PipelineStepUI):
         self.requested_years = years
         self.is_refreshing = False
         
-        try:
-            print("M2: [1/3] Iniciando dados do GCS...")
-            self._init_data()
-            print("M2: [2/3] Construindo interface...")
-            self._build_ui()
-            print("M2: [3/3] Renderizacao concluida.")
-        except Exception as e:
-            print(f"ERRO CRITICO NA INTERFACE: {e}")
-            traceback.print_exc()
+        self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
+    except Exception as e:
+        print(f"ERRO CRITICO NA INTERFACE: {e}")
+        traceback.print_exc()
 
     def _init_data(self):
         self.sensor = GLOBAL_OPTS['SENSOR']
@@ -180,8 +175,8 @@ class MosaicAssemblerUI(PipelineStepUI):
         try:
             self.is_refreshing = True
             self.btn_refresh.disabled = True
-            self.btn_refresh.description = "Atualizando..."
-            self.show_loader("Sincronizando fragmentos GCS...")
+            self.btn_refresh.description = "Actualizando..."
+            self.show_loader("Sincronizando datos...")
             
             self.state = CacheManager.build_full_cache(logger=self.log, years=self.years)
             self.gcs_chunks = self.state.get('gcs_chunks', {})
@@ -207,6 +202,12 @@ class MosaicAssemblerUI(PipelineStepUI):
 def run_ui(years=None):
     ui = MosaicAssemblerUI(years=years)
     ui.display() 
+    
+    # Executa inicialização com loader visível
+    ui.show_loader("Cargando interfaz...")
+    ui._init_data()
+    ui._build_ui()
+    ui.hide_loader()
     
     # Auto-refresh em background para simular o clique no botão e atualizar o cache
     threading.Thread(target=ui._refresh_cache, daemon=True).start()

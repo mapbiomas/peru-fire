@@ -406,7 +406,8 @@ class ModelTrainerUI(PipelineStepUI):
         )
         self.trainer_instance = None
         self.chk_dict = {}
-        self._build_ui()
+        self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
+        # O _build_ui foi movido para o run_ui para permitir exibir o loader
 
     def _on_select_all(self, _):
         for chk in self.chk_dict.values():
@@ -533,8 +534,10 @@ class ModelTrainerUI(PipelineStepUI):
         self.clear_main()
         self.main_area.children = [self.tabs]
 
-    def _refresh_models_list(self):
+    def _refresh_models_list(self, show_loader=False):
+        if show_loader: self.show_loader("Actualizando lista de modelos...")
         models = list_trained_models()
+        if show_loader: self.hide_loader()
         import gcsfs
         project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
         fs = gcsfs.GCSFileSystem(project=project)
@@ -572,6 +575,12 @@ class ModelTrainerUI(PipelineStepUI):
 def run_ui():
     ui = ModelTrainerUI()
     ui.display()
+    
+    # Executa inicialização com loader visível
+    ui.show_loader("Cargando interfaz...")
+    ui._build_ui()
+    ui.hide_loader()
+    
     return ui
 
 def start_training(ui):
