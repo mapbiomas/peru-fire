@@ -149,7 +149,12 @@ class ExportDispatcherUI(PipelineStepUI):
                 for b in self.bands:
                     # Lógica de detecção: Nome do mosaico + banda na descrição da tarefa
                     is_active = any((name in tn and b in tn) or (name in tn and "all" in tn) for tn in active_tasks)
-                    exists = b in self.gcs_chunks.get(name, [])
+                    # Verifica chunks OU COGs finalizados
+                    cogs_key = 'cogs_monthly' if self.period == 'monthly' else 'cogs_annually'
+                    exists_chunk = b in self.gcs_chunks.get(name, [])
+                    exists_cog = f"{name}_{b}" in self.state.get(cogs_key, [])
+                    exists = exists_chunk or exists_cog
+                    
                     gcs_cells.append(self._create_matrix_cell(name, y, mo, self.period, f'gcs_{b}', exists, is_active))
                 matrix_rows.append(widgets.HBox(gcs_cells, layout=L(align_items='center', margin='2px 0')))
                 
@@ -177,13 +182,13 @@ class ExportDispatcherUI(PipelineStepUI):
         chk = widgets.Checkbox(value=False, indent=False, layout=widgets.Layout(width='18px', height='18px', margin='0'))
         chk._meta = {'year': y, 'month': m, 'period': period, 'name': name, 'type': type_str, 'exists': exists}
         
-        # PRIORIDADE: Se está rodando, mostra RUN (mesmo que já exista arquivo antigo)
-        if is_active: 
-            status, css_cls = 'RUN', 'mfm-run'
-            chk.disabled = True
-        elif exists:
+        # PRIORIDADE: Se já existe o arquivo/asset, mostra OK (mesmo que haja task RUN)
+        if exists:
             status, css_cls = 'OK', 'mfm-ok'
             if not is_edit_mode(): chk.disabled = True
+        elif is_active: 
+            status, css_cls = 'RUN', 'mfm-run'
+            chk.disabled = True
         else: 
             status, css_cls = '[miss]', 'mfm-null'
         

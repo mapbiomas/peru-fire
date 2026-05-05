@@ -107,10 +107,12 @@ class CacheManager:
                     
                     result = ee.data.listAssets(params)
                     for a in result.get('assets', []):
-                            # Guardamos o nome COMPLETO (com banda) para rastreamento por banda
-                            # ex: sentinel2_fire_peru_2026_03_nir  (NÃO removemos o sufixo)
-                            asset_name = a['name'].split('/')[-1]
-                            assets_found.append((period_type, asset_name))
+                        asset_name = a['name'].split('/')[-1]
+                        # Garantimos que o nome no cache tenha o sufixo da banda
+                        # Isso permite que o M1 diferencie as bandas corretamente
+                        if not asset_name.endswith(f"_{band}"):
+                            asset_name = f"{asset_name}_{band}"
+                        assets_found.append((period_type, asset_name))
                     
                     page_token = result.get('nextPageToken')
                     if not page_token: break
