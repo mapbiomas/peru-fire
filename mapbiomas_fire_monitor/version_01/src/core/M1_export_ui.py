@@ -160,7 +160,8 @@ class ExportDispatcherUI(PipelineStepUI):
                 for b in self.bands:
                     # Lógica de detecção: Nome do mosaico + banda na descrição da tarefa
                     is_active = any((name in tn and b in tn) or (name in tn and "all" in tn) for tn in active_tasks)
-                    exists = f"{name}_{b}" in asset_status or name in asset_status 
+                    # Verificação precisa por banda: o cache agora guarda o nome completo com banda
+                    exists = f"{name}_{b}" in asset_status
                     asset_cells.append(self._create_matrix_cell(name, y, mo, self.period, f'asset_{b}', exists, is_active))
                 matrix_rows.append(widgets.HBox(asset_cells, layout=L(align_items='center', margin='2px 0')))
                 

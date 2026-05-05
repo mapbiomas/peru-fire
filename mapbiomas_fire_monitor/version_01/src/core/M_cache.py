@@ -106,10 +106,10 @@ class CacheManager:
                     
                     result = ee.data.listAssets(params)
                     for a in result.get('assets', []):
-                        asset_name = a['name'].split('/')[-1]
-                        if asset_name.endswith(f"_{band}"):
-                            asset_name = asset_name[:-(len(band)+1)]
-                        assets_found.append((period_type, asset_name))
+                            # Guardamos o nome COMPLETO (com banda) para rastreamento por banda
+                            # ex: sentinel2_fire_peru_2026_03_nir  (NÃO removemos o sufixo)
+                            asset_name = a['name'].split('/')[-1]
+                            assets_found.append((period_type, asset_name))
                     
                     page_token = result.get('nextPageToken')
                     if not page_token: break
