@@ -82,7 +82,8 @@ class CacheManager:
                     if logger: 
                         elapsed = time.time() - start_time
                         eta = (elapsed / current) * (total_steps - current) if current > 0 else 0
-                        logger(f"GEE: [{current}/{total_steps}] {band} (ETA: {int(eta)}s)", "info")
+                        # Formato compacto solicitado pelo usuário
+                        logger(f"ETA: {int(eta):02d}s || [{current}/{total_steps}]")
                     
                     try:
                         # Gambiarra temporária para pegar a coleção correta

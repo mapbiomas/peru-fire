@@ -91,19 +91,22 @@ class ExportDispatcherUI(PipelineStepUI):
     def _build_ui(self):
         self.chk_dict = {} # Limpar referencias antigas
         active_tasks = self._get_active_tasks()
+        if hasattr(self, 'w_task_count'):
+            self.w_task_count.value = f"<b>Tareas: {len(active_tasks)}</b>"
         css = PipelineStepUI.get_status_css()
 
         self.btn_all = widgets.Button(description="Selecionar Todos", button_style='info', layout=widgets.Layout(width='155px'))
         self.btn_none = widgets.Button(description="Limpar Selecao", button_style='info', layout=widgets.Layout(width='145px'))
         self.btn_refresh = widgets.Button(description="Sincronizar GCS", button_style='success', layout=widgets.Layout(width='150px'))
         self.btn_tasks = widgets.Button(description="Actualizar Tareas", button_style='warning', icon='tasks', layout=widgets.Layout(width='150px'))
+        self.w_task_count = widgets.HTML(value="<b>Tareas: 0</b>", layout=widgets.Layout(margin='0 0 0 10px'))
         
         self.btn_all.on_click(self._on_select_all)
         self.btn_none.on_click(self._on_select_none)
         self.btn_refresh.on_click(lambda _: self._refresh_cache())
         self.btn_tasks.on_click(lambda _: self._refresh_ui_tasks())
         
-        btns = [self.btn_all, self.btn_none, self.btn_refresh, self.btn_tasks]
+        btns = [self.btn_all, self.btn_none, self.btn_refresh, self.btn_tasks, self.w_task_count]
         
         if is_edit_mode():
             self.btn_delete = widgets.Button(description="Eliminar Seleção", button_style='danger', icon='trash', layout=widgets.Layout(width='160px'))
@@ -184,8 +187,10 @@ class ExportDispatcherUI(PipelineStepUI):
 
     def _refresh_ui_tasks(self):
         """Atualiza apenas o status das tarefas ativas sem reconstruir tudo pesado."""
-        self.show_loader("Consultando tareas GEE...")
+        self.show_loader("Consultando...")
+        self.update_status("Buscando tareas GEE...")
         self._build_ui()
+        self.update_status("")
         self.hide_loader()
 
     def _refresh_cache(self):
@@ -196,9 +201,10 @@ class ExportDispatcherUI(PipelineStepUI):
             if self.btn_refresh:
                 self.btn_refresh.disabled = True
                 self.btn_refresh.description = "Actualizando..."
-            self.show_loader("Sincronizando datos...")
+            self.show_loader("Sincronizando...")
             
-            self.state = CacheManager.build_full_cache(logger=self.log, years=self.years)
+            # Usamos update_status como logger para evitar poluir o console de logs
+            self.state = CacheManager.build_full_cache(logger=self.update_status, years=self.years)
             self.gcs_chunks = self.state.get('gcs_chunks', {})
             self._build_ui()
             

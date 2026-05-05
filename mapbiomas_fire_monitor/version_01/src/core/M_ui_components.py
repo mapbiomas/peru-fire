@@ -40,12 +40,12 @@ class PipelineStepUI:
             '''
         )
         
-        self.header_title = widgets.HTML(
-            value=f"<h3 style='margin-bottom:0; display:inline-block;'>{self.title}</h3>",
-            layout=widgets.Layout(margin='0')
+        self.status_msg = widgets.HTML(
+            value="",
+            layout=widgets.Layout(margin='0 0 0 15px')
         )
         
-        self.header_box = widgets.HBox([self.header_title, self.loader_html], layout=widgets.Layout(align_items='center'))
+        self.header_box = widgets.HBox([self.header_title, self.loader_html, self.status_msg], layout=widgets.Layout(align_items='center'))
         
         self.header_desc = widgets.HTML(
             value=f"<p style='color:#666; margin-top:5px;'>{self.description}</p>"
@@ -81,6 +81,10 @@ class PipelineStepUI:
     def hide_loader(self):
         """Esconde o spinner de carregamento."""
         self.loader_html.value = self.loader_html.value.replace('display:flex', 'display:none')
+
+    def update_status(self, message):
+        """Atualiza a mensagem de status secundária no cabeçalho."""
+        self.status_msg.value = f'<span style="font-size:11px; color:#0275d8; font-weight:bold;">{message}</span>'
 
     def log(self, message, type="info"):
         """Adiciona uma mensagem textualmente formatada no Output de Logs."""
