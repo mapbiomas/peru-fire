@@ -73,14 +73,19 @@ class CacheManager:
         bands = CONFIG.get('bands_all', ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'])
         tasks = []
         
-        # Preparar lista de coleções para consultar
+        # Preparar lista de coleções para consultar usando a lógica central do M0
         for period_type in ['monthly', 'yearly']:
-            for suffix in ["", "_BUFFER"]:
-                for band in bands:
-                    sensor_base = "SENTINEL2" + suffix
-                    folder_period = "MONTHLY" if period_type == 'monthly' else "ANNUAL"
-                    col_id = f"{CONFIG['asset_mosaics_base']}/{sensor_base}/{folder_period}/{band}"
-                    tasks.append((col_id, period_type, band))
+            # Verificamos tanto a versão normal quanto a versão _BUFFER
+            for is_buffer in [False, True]:
+                # Temporariamente sobrescrevemos a opção global para gerar o path correto
+                original_filter = GLOBAL_OPTS.get('FIRE_POTENTIAL_FILTER', False)
+                try:
+                    GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] = is_buffer
+                    for band in bands:
+                        col_id = get_asset_mosaic_collection(periodicity=period_type, band=band)
+                        tasks.append((col_id, period_type, band))
+                finally:
+                    GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] = original_filter
         
         total_steps = len(tasks)
         completed = 0
@@ -117,9 +122,6 @@ class CacheManager:
                     # Estimativa mais realista para paralelo
                     eta = (elapsed / completed) * (total_steps - completed) if completed > 0 else 0
                     logger(f"Tiempo Estimado: {int(eta):02d}s || [{completed}/{total_steps}]")
-        
-        CacheManager._state = state
-        CacheManager.save()
         
         CacheManager._state = state
         CacheManager.save()
