@@ -123,9 +123,9 @@ def extract_pixels_from_gcs(sample_groups, bands, logger=None):
             ]
             
             cog_path = None
-            for p in possible_paths:
-                if fs.exists(p):
-                    cog_path = p
+            for path_opt in possible_paths:
+                if fs.exists(path_opt):
+                    cog_path = path_opt
                     break
             
             if not cog_path:
@@ -272,9 +272,9 @@ class ModelTrainer:
         self._X_raw = X
         self._y_raw = y
         
-        batch_size = batch_size or CONFIG['model_batch']
-        n_iters    = n_iters    or CONFIG['model_iters']
-        split      = split      or CONFIG['model_split']
+        batch_size = batch_size or CONFIG.get('model_batch', 1000)
+        n_iters    = n_iters    or CONFIG.get('model_iters', 5000)
+        split      = split      or CONFIG.get('model_split', 0.8)
 
         self.norm_stats = compute_normalizer(X)
         X_norm = normalize(X, self.norm_stats)
