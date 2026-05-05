@@ -74,7 +74,7 @@ def list_trained_models():
         return []
 
 def extract_pixels_from_gcs(sample_groups, bands, logger=None):
-    from M0_auth_config import mosaic_name, monthly_mosaic_path, yearly_mosaic_path, monthly_cog_path, yearly_cog_path
+    from M0_auth_config import mosaic_name, monthly_mosaic_path, yearly_mosaic_path, monthly_cog_path, yearly_cog_path, get_temp_dir
     fs = _get_fs()
     
     dfs = []
@@ -133,30 +133,33 @@ def extract_pixels_from_gcs(sample_groups, bands, logger=None):
                 band_data_list = []
                 break
                 
+            local_cog_path = os.path.join(get_temp_dir(), f"{m_name}_{band}_cog.tif")
             try:
-                with fs.open(cog_path, 'rb') as f:
-                    with rasterio.open(f) as src:
-                        band_pixels, valid_labels = [], []
-                        for geom, label in zip(geometries, labels):
-                            try:
-                                out_image, _ = mask(src, [geom], crop=True, filled=False)
-                                if out_image.mask.all():
-                                    continue
-                                valid_pixels = out_image.data[~out_image.mask]
-                                band_pixels.extend(valid_pixels)
-                                if len(period_y) == 0: 
-                                    valid_labels.extend([label] * len(valid_pixels))
-                            except (ValueError, Exception):
-                                pass
-                                
-                        if len(band_pixels) == 0:
-                            if logger: logger(f"Aviso: Nenhum pixel extraído para {band} no período {p}.", "warning")
-                            band_data_list = []
-                            break
+                if logger: logger(f"⬇️ Baixando {band} para cache local...", "info")
+                fs.get(cog_path, local_cog_path)
+                
+                with rasterio.open(local_cog_path) as src:
+                    band_pixels, valid_labels = [], []
+                    for geom, label in zip(geometries, labels):
+                        try:
+                            out_image, _ = mask(src, [geom], crop=True, filled=False)
+                            if out_image.mask.all():
+                                continue
+                            valid_pixels = out_image.data[~out_image.mask]
+                            band_pixels.extend(valid_pixels)
+                            if len(period_y) == 0: 
+                                valid_labels.extend([label] * len(valid_pixels))
+                        except (ValueError, Exception):
+                            pass
+                            
+                    if len(band_pixels) == 0:
+                        if logger: logger(f"Aviso: Nenhum pixel extraído para {band} no período {p}.", "warning")
+                        band_data_list = []
+                        break
 
-                        band_data_list.append(np.array(band_pixels))
-                        if len(period_y) == 0:
-                            period_y = np.array(valid_labels)
+                    band_data_list.append(np.array(band_pixels))
+                    if len(period_y) == 0:
+                        period_y = np.array(valid_labels)
             except Exception as e:
                 import traceback
                 error_msg = f"Erro ao ler COG {band} ({cog_path}): {str(e)}"
@@ -164,6 +167,12 @@ def extract_pixels_from_gcs(sample_groups, bands, logger=None):
                 print(traceback.format_exc())
                 band_data_list = []
                 break
+            finally:
+                if os.path.exists(local_cog_path):
+                    try:
+                        os.remove(local_cog_path)
+                    except Exception:
+                        pass
                 
         if len(band_data_list) == len(bands) and len(period_y) > 0:
             period_X = np.column_stack(band_data_list)
