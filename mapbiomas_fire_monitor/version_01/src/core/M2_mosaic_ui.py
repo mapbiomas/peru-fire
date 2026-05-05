@@ -20,6 +20,8 @@ class MosaicAssemblerUI(PipelineStepUI):
         self.is_refreshing = False
         
         try:
+            from M0_auth_config import ensure_gdal_path
+            ensure_gdal_path()
             self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
         except Exception as e:
             print(f"ERRO CRITICO NA INTERFACE: {e}")

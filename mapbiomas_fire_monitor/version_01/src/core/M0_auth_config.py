@@ -181,6 +181,23 @@ def check_command_exists(cmd):
     import shutil
     return shutil.which(cmd) is not None or shutil.which(cmd + ".py") is not None
 
+def ensure_gdal_path():
+    """Garante que as ferramentas GDAL estão acessíveis, especialmente no Colab."""
+    import os, shutil, platform
+    
+    gdal_cmds = ['gdalbuildvrt', 'gdal_translate']
+    missing = [cmd for cmd in gdal_cmds if not check_command_exists(cmd)]
+    
+    if missing:
+        print(f"⚠️ Aviso: Utilitários GDAL não encontrados: {missing}")
+        if 'COLAB_RELEASE_TAG' in os.environ:
+            print("💡 No Google Colab, tente executar: !apt-get install gdal-bin")
+        elif platform.system() == 'Windows':
+            print("💡 No Windows, certifique-se de que o GDAL está no seu PATH ou use o ambiente Conda (gdal).")
+    else:
+        # Se estiver em ambiente local, opcionalmente buscar onde está o binário
+        pass
+
 def classification_name(periodicity, year, month=None, version=None):
     """Gera nome para o arquivo de classificação: class_sentinel2_peru_r01_2024_01_v1"""
     country = CONFIG['country']

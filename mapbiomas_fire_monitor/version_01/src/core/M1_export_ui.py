@@ -51,8 +51,8 @@ class ExportDispatcherUI(PipelineStepUI):
         """Consulta as tarefas ativas no GEE para marcar como 'RUN' na matriz."""
         try:
             tasks = ee.data.getTaskList() 
-            # Filtramos descrições de tarefas que estão em execução ou na fila
-            active = [t.get('description', '') for t in tasks[:100] if t.get('state') in ['RUNNING', 'PENDING', 'READY']]
+            # Aumentamos para 200 para garantir que pegamos tarefas de todos os anos
+            active = [t.get('description', '') for t in tasks[:200] if t.get('state') in ['RUNNING', 'PENDING', 'READY']]
             return active
         except Exception as e:
             self.log(f"Error consultando tareas: {e}", "warning")

@@ -59,22 +59,31 @@ class CacheManager:
         return CacheManager._state
 
     @staticmethod
-    def build_cache_from_gee():
+    def build_cache_from_gee(logger=None):
         """Popula cache listando assets do GEE."""
-        import ee
+        import ee, time
         from M0_auth_config import CONFIG, get_asset_mosaic_collection
         
+        start_time = time.time()
         state = CacheManager.get_state()
         state['assets_monthly'] = []
         state['assets_annually'] = []
         
-        # Bandas a verificar (precisamos listar de todas as ImageCollections de bandas)
         bands = CONFIG.get('bands_all', ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'])
+        total_steps = len(bands) * 2 * 2
+        current = 0
+        
+        if logger: logger("Iniciando sincronización GEE...", "info")
         
         for period_type in ['monthly', 'yearly']:
-            # Verificamos tanto a versão normal quanto a versão _BUFFER
             for suffix in ["", "_BUFFER"]:
                 for band in bands:
+                    current += 1
+                    if logger: 
+                        elapsed = time.time() - start_time
+                        eta = (elapsed / current) * (total_steps - current) if current > 0 else 0
+                        logger(f"GEE: [{current}/{total_steps}] {band} (ETA: {int(eta)}s)", "info")
+                    
                     try:
                         # Gambiarra temporária para pegar a coleção correta
                         # No futuro, o ImageCollection deve ser um único mosaico multibanda (recomendado)
@@ -177,7 +186,7 @@ class CacheManager:
     @staticmethod
     def build_full_cache(logger=None, years=None):
         """Reconstrói o cache completo."""
-        CacheManager.build_cache_from_gee()
+        CacheManager.build_cache_from_gee(logger=logger)
         CacheManager.build_cache_from_gcs(logger=logger, years=years)
         return CacheManager._state
 
