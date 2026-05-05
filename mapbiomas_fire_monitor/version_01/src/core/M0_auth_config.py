@@ -182,21 +182,61 @@ def check_command_exists(cmd):
     return shutil.which(cmd) is not None or shutil.which(cmd + ".py") is not None
 
 def ensure_gdal_path():
-    """Garante que as ferramentas GDAL estão acessíveis, especialmente no Colab."""
-    import os, shutil, platform
+    """Garante que as ferramentas GDAL estão acessíveis, adicionando ao PATH se necessário."""
+    import os, shutil, platform, sys
     
     gdal_cmds = ['gdalbuildvrt', 'gdal_translate']
-    missing = [cmd for cmd in gdal_cmds if not check_command_exists(cmd)]
+    missing = [cmd for cmd in gdal_cmds if shutil.which(cmd) is None]
     
-    if missing:
-        print(f"⚠️ Aviso: Utilitários GDAL não encontrados: {missing}")
-        if 'COLAB_RELEASE_TAG' in os.environ:
-            print("💡 No Google Colab, tente executar: !apt-get install gdal-bin")
-        elif platform.system() == 'Windows':
-            print("💡 No Windows, certifique-se de que o GDAL está no seu PATH ou use o ambiente Conda (gdal).")
+    if not missing:
+        return  # GDAL já está no PATH
+    
+    # Tenta encontrar o GDAL em locais comuns (Windows / Conda / OSGeo4W)
+    candidate_dirs = []
+    
+    if platform.system() == 'Windows':
+        # Localização do ambiente Conda atual (onde o Python está rodando)
+        py_prefix = sys.prefix
+        candidate_dirs += [
+            os.path.join(py_prefix, 'Library', 'bin'),  # Conda no Windows
+            os.path.join(py_prefix, 'Scripts'),
+        ]
+        # Locais comuns de instalação manual
+        home = os.path.expanduser('~')
+        for conda_root in [
+            os.path.join(home, 'miniconda3'),
+            os.path.join(home, 'anaconda3'),
+            os.path.join(home, 'AppData', 'Local', 'miniconda3'),
+            r'C:\OSGeo4W\bin',
+            r'C:\Program Files\GDAL',
+        ]:
+            candidate_dirs.append(os.path.join(conda_root, 'Library', 'bin'))
+            candidate_dirs.append(os.path.join(conda_root, 'Scripts'))
+            candidate_dirs.append(conda_root)
     else:
-        # Se estiver em ambiente local, opcionalmente buscar onde está o binário
-        pass
+        # Linux/Mac: locais comuns do conda
+        py_prefix = sys.prefix
+        candidate_dirs += [
+            os.path.join(py_prefix, 'bin'),
+            '/usr/bin', '/usr/local/bin',
+        ]
+    
+    # Testa cada diretório candidato
+    for d in candidate_dirs:
+        if os.path.isdir(d):
+            test_bin = 'gdalbuildvrt.exe' if platform.system() == 'Windows' else 'gdalbuildvrt'
+            if os.path.exists(os.path.join(d, test_bin)):
+                os.environ['PATH'] = d + os.pathsep + os.environ.get('PATH', '')
+                print(f"✅ GDAL encontrado e adicionado ao PATH: {d}")
+                return
+    
+    # Se ainda não encontrou, emite aviso com instruções
+    print(f"⚠️ Aviso: Utilitários GDAL não encontrados: {missing}")
+    if 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ:
+        print("💡 No Google Colab, execute: !apt-get install -y gdal-bin")
+    elif platform.system() == 'Windows':
+        print("💡 No Windows, certifique-se de que o GDAL está no seu PATH ou use o ambiente Conda (gdal).")
+        print(f"   Dica: Ative o ambiente correto com 'conda activate <env>' antes de iniciar o Jupyter.")
 
 def classification_name(periodicity, year, month=None, version=None):
     """Gera nome para o arquivo de classificação: class_sentinel2_peru_r01_2024_01_v1"""

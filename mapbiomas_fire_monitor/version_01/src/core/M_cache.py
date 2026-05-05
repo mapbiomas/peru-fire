@@ -233,11 +233,16 @@ class CacheManager:
         """Salva cache no GCS."""
         with CacheManager._lock:
             try:
-                import gcsfs
-                import os
+                import gcsfs, os
                 gcs_path = CacheManager._get_gcs_path()
-                project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-                fs = gcsfs.GCSFileSystem(project=project, token='google_default')
+                
+                # Usa a mesma lógica de autenticacao do load()
+                is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+                if is_colab:
+                    fs = gcsfs.GCSFileSystem(token='google_default')
+                else:
+                    project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+                    fs = gcsfs.GCSFileSystem(project=project)
                 
                 if state is None:
                     state = CacheManager._state
@@ -249,8 +254,8 @@ class CacheManager:
                     json.dump(state, f, indent=2)
                 
                 CacheManager._state = state
-            except Exception:
-                pass # Silencioso: se não salvar o cache, o sistema reconstrói na próxima
+            except Exception as e:
+                print(f"⚠️ Aviso: Falha ao salvar cache no GCS: {e}")
 
     @staticmethod
     def get_state():
