@@ -43,14 +43,13 @@ class CacheManager:
             try:
                 import gcsfs
                 gcs_path = CacheManager._get_gcs_path()
-                project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-                
-                # No Colab, use 'google_default' que aproveita as credenciais já autenticadas.
-                # token='browser' causa [Errno 98] address in use porque tenta abrir servidor local.
+                # No Colab, use 'google_default'. 
+                # IMPORTANTE: Se usar 'google_default', não passamos o 'project' para evitar o erro de mismatch.
                 is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
-                token = 'google_default' if is_colab else None  # None = ADC local
-                
-                fs = gcsfs.GCSFileSystem(project=project, token=token)
+                if is_colab:
+                    fs = gcsfs.GCSFileSystem(token='google_default')
+                else:
+                    fs = gcsfs.GCSFileSystem(project=project) # Local usa ADC
                 
                 if fs.exists(gcs_path):
                     with fs.open(gcs_path, 'r') as f:
@@ -155,8 +154,13 @@ class CacheManager:
 
         try:
             import gcsfs
-            project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-            fs = gcsfs.GCSFileSystem(project=project)
+            is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+            if is_colab:
+                fs = gcsfs.GCSFileSystem(token='google_default')
+            else:
+                project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+                fs = gcsfs.GCSFileSystem(project=project)
+            
             bucket = CONFIG['bucket']
             
             # Base para busca: sudamerica/peru/monitor/library_images/

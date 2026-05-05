@@ -47,8 +47,12 @@ ALL_BANDS = {
 def list_sample_collections_gcs():
     """Lista arquivos CSV de amostras curadas no GCS."""
     try:
-        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-        fs = gcsfs.GCSFileSystem(project=project)
+        is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+        if is_colab:
+            fs = gcsfs.GCSFileSystem(token='google_default')
+        else:
+            project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+            fs = gcsfs.GCSFileSystem(project=project)
         path = f"{CONFIG['bucket']}/{CONFIG['gcs_samples']}"
         files = fs.ls(path)
         return sorted([f.split('/')[-1].replace('.csv', '') for f in files if f.endswith('.csv')], reverse=True)
@@ -268,8 +272,12 @@ class ModelTrainer:
     def save(self, version, region, comment="", logger=None):
         import subprocess, tempfile
         base_path = model_path(version, region)
-        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-        fs = gcsfs.GCSFileSystem(project=project)
+        is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+        if is_colab:
+            fs = gcsfs.GCSFileSystem(token='google_default')
+        else:
+            project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+            fs = gcsfs.GCSFileSystem(project=project)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # 1. Weights
@@ -327,8 +335,12 @@ def generate_analytics(model_info, out_widget=None):
     import gcsfs, tempfile, subprocess
     from sklearn.metrics import confusion_matrix, classification_report
     
-    project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-    fs = gcsfs.GCSFileSystem(project=project)
+    is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+    if is_colab:
+        fs = gcsfs.GCSFileSystem(token='google_default')
+    else:
+        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+        fs = gcsfs.GCSFileSystem(project=project)
     base_gs = f"gs://{model_info['path']}"
     
     if out_widget:
@@ -538,9 +550,12 @@ class ModelTrainerUI(PipelineStepUI):
         if show_loader: self.show_loader("Actualizando lista de modelos...")
         models = list_trained_models()
         if show_loader: self.hide_loader()
-        import gcsfs
-        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-        fs = gcsfs.GCSFileSystem(project=project)
+        is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+        if is_colab:
+            fs = gcsfs.GCSFileSystem(token='google_default')
+        else:
+            project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+            fs = gcsfs.GCSFileSystem(project=project)
         
         items = []
         for m in models:
