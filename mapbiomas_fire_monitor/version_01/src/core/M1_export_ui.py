@@ -176,12 +176,13 @@ class ExportDispatcherUI(PipelineStepUI):
         chk = widgets.Checkbox(value=False, indent=False, layout=widgets.Layout(width='18px', height='18px', margin='0'))
         chk._meta = {'year': y, 'month': m, 'period': period, 'name': name, 'type': type_str, 'exists': exists}
         
-        if exists:
-            status, css_cls = 'OK', 'mfm-ok'
-            if not is_edit_mode(): chk.disabled = True
-        elif is_active: 
+        # PRIORIDADE: Se está rodando, mostra RUN (mesmo que já exista arquivo antigo)
+        if is_active: 
             status, css_cls = 'RUN', 'mfm-run'
             chk.disabled = True
+        elif exists:
+            status, css_cls = 'OK', 'mfm-ok'
+            if not is_edit_mode(): chk.disabled = True
         else: 
             status, css_cls = '[miss]', 'mfm-null'
         

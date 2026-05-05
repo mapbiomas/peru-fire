@@ -63,7 +63,7 @@ class CacheManager:
         """Popula cache listando assets do GEE em paralelo para performance."""
         import ee, time
         from concurrent.futures import ThreadPoolExecutor
-        from M0_auth_config import CONFIG, get_asset_mosaic_collection
+        from M0_auth_config import CONFIG, GLOBAL_OPTS, get_asset_mosaic_collection
         
         start_time = time.time()
         state = CacheManager.get_state()
@@ -94,16 +94,25 @@ class CacheManager:
         
         def fetch_assets(task_info):
             col_id, period_type, band = task_info
+            assets_found = []
+            page_token = None
             try:
-                result = ee.data.listAssets({'parent': col_id})
-                assets_found = []
-                for a in result.get('assets', []):
-                    asset_name = a['name'].split('/')[-1]
-                    if asset_name.endswith(f"_{band}"):
-                        asset_name = asset_name[:-(len(band)+1)]
-                    assets_found.append((period_type, asset_name))
+                while True:
+                    params = {'parent': col_id}
+                    if page_token: params['pageToken'] = page_token
+                    
+                    result = ee.data.listAssets(params)
+                    for a in result.get('assets', []):
+                        asset_name = a['name'].split('/')[-1]
+                        if asset_name.endswith(f"_{band}"):
+                            asset_name = asset_name[:-(len(band)+1)]
+                        assets_found.append((period_type, asset_name))
+                    
+                    page_token = result.get('nextPageToken')
+                    if not page_token: break
                 return assets_found
-            except:
+            except Exception as e:
+                # Log silencioso ou aviso se a coleção não existir
                 return []
 
         # Executar em paralelo (máximo 8 threads para não sobrecarregar quota GEE)
