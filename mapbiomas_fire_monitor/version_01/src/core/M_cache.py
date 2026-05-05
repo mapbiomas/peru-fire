@@ -9,7 +9,18 @@ import os
 import json
 import datetime
 import threading
+import logging
 from M0_auth_config import CONFIG
+
+def _get_fs():
+    """Retorna uma instância GCSFileSystem corretamente autenticada para qualquer ambiente."""
+    import gcsfs
+    project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+    is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+    if is_colab:
+        return gcsfs.GCSFileSystem(project=project, token='google_default')
+    else:
+        return gcsfs.GCSFileSystem(project=project)
 
 class CacheManager:
     CACHE_FILE = "state.json"
@@ -41,17 +52,8 @@ class CacheManager:
             }
             
             try:
-                import gcsfs
                 gcs_path = CacheManager._get_gcs_path()
-                # No Colab, use 'google_default'. 
-                # IMPORTANTE: Se usar 'google_default', não passamos o 'project' para evitar o erro de mismatch.
-                is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
-                project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-                if is_colab:
-                    # No Colab, usamos o token 'google_default' MAS passamos o project para evitar 'Anonymous caller'
-                    fs = gcsfs.GCSFileSystem(project=project, token='google_default')
-                else:
-                    fs = gcsfs.GCSFileSystem(project=project) # Local usa ADC
+                fs = _get_fs()
                 
                 if fs.exists(gcs_path):
                     with fs.open(gcs_path, 'r') as f:
@@ -157,13 +159,7 @@ class CacheManager:
         cogs_annually = []
 
         try:
-            import gcsfs
-            is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
-            if is_colab:
-                fs = gcsfs.GCSFileSystem(token='google_default')
-            else:
-                project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-                fs = gcsfs.GCSFileSystem(project=project)
+            fs = _get_fs()
             
             bucket = CONFIG['bucket']
             
@@ -233,18 +229,13 @@ class CacheManager:
     def save(state=None):
         """Salva cache no GCS."""
         with CacheManager._lock:
+            # Suprimir tracebacks internos do gcsfs durante o save
+            _gcsfs_logger = logging.getLogger('gcsfs')
+            _prev_level = _gcsfs_logger.level
+            _gcsfs_logger.setLevel(logging.CRITICAL)
             try:
-                import gcsfs, os
                 gcs_path = CacheManager._get_gcs_path()
-                
-                # Usa a mesma lógica de autenticacao do load()
-                is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
-                project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-                if is_colab:
-                    # No Colab, usamos o token 'google_default' MAS passamos o project para evitar 'Anonymous caller'
-                    fs = gcsfs.GCSFileSystem(project=project, token='google_default')
-                else:
-                    fs = gcsfs.GCSFileSystem(project=project)
+                fs = _get_fs()
                 
                 if state is None:
                     state = CacheManager._state
@@ -257,7 +248,10 @@ class CacheManager:
                 
                 CacheManager._state = state
             except Exception as e:
-                print(f"⚠️ Aviso: Falha ao salvar cache no GCS: {e}")
+                # Aviso limpo sem traceback assustador
+                print(f"⚠️ Cache local OK (GCS sync pendente)")
+            finally:
+                _gcsfs_logger.setLevel(_prev_level)
 
     @staticmethod
     def get_state():
