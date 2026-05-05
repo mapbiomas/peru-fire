@@ -46,6 +46,7 @@ class CacheManager:
                 # No Colab, use 'google_default'. 
                 # IMPORTANTE: Se usar 'google_default', não passamos o 'project' para evitar o erro de mismatch.
                 is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+                project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
                 if is_colab:
                     fs = gcsfs.GCSFileSystem(token='google_default')
                 else:

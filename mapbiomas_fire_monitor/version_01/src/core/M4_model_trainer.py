@@ -62,8 +62,12 @@ def list_sample_collections_gcs():
 def list_trained_models():
     """Lista modelos já treinados no GCS."""
     try:
-        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-        fs = gcsfs.GCSFileSystem(project=project)
+        is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+        if is_colab:
+            fs = gcsfs.GCSFileSystem(token='google_default')
+        else:
+            project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+            fs = gcsfs.GCSFileSystem(project=project)
         path = f"{CONFIG['bucket']}/{CONFIG['gcs_models']}"
         models = []
         if fs.exists(path):
@@ -80,8 +84,12 @@ def list_trained_models():
 
 def extract_pixels_from_gcs(sample_groups, bands, logger=None):
     from M0_auth_config import mosaic_name, monthly_mosaic_path, yearly_mosaic_path
-    project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
-    fs = gcsfs.GCSFileSystem(project=project)
+    is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+    if is_colab:
+        fs = gcsfs.GCSFileSystem(token='google_default')
+    else:
+        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
+        fs = gcsfs.GCSFileSystem(project=project)
     
     dfs = []
     for group in sample_groups:
