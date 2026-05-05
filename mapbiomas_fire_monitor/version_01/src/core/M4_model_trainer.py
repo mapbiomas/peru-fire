@@ -48,10 +48,10 @@ def list_sample_collections_gcs():
     """Lista arquivos CSV de amostras curadas no GCS."""
     try:
         is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
         if is_colab:
-            fs = gcsfs.GCSFileSystem(token='google_default')
+            fs = gcsfs.GCSFileSystem(project=project, token='google_default')
         else:
-            project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
             fs = gcsfs.GCSFileSystem(project=project)
         path = f"{CONFIG['bucket']}/{CONFIG['gcs_samples']}"
         files = fs.ls(path)
@@ -63,10 +63,10 @@ def list_trained_models():
     """Lista modelos já treinados no GCS."""
     try:
         is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
         if is_colab:
-            fs = gcsfs.GCSFileSystem(token='google_default')
+            fs = gcsfs.GCSFileSystem(project=project, token='google_default')
         else:
-            project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
             fs = gcsfs.GCSFileSystem(project=project)
         path = f"{CONFIG['bucket']}/{CONFIG['gcs_models']}"
         models = []
@@ -85,10 +85,10 @@ def list_trained_models():
 def extract_pixels_from_gcs(sample_groups, bands, logger=None):
     from M0_auth_config import mosaic_name, monthly_mosaic_path, yearly_mosaic_path
     is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+    project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
     if is_colab:
-        fs = gcsfs.GCSFileSystem(token='google_default')
+        fs = gcsfs.GCSFileSystem(project=project, token='google_default')
     else:
-        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
         fs = gcsfs.GCSFileSystem(project=project)
     
     dfs = []
@@ -281,10 +281,10 @@ class ModelTrainer:
         import subprocess, tempfile
         base_path = model_path(version, region)
         is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
         if is_colab:
-            fs = gcsfs.GCSFileSystem(token='google_default')
+            fs = gcsfs.GCSFileSystem(project=project, token='google_default')
         else:
-            project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
             fs = gcsfs.GCSFileSystem(project=project)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -344,10 +344,10 @@ def generate_analytics(model_info, out_widget=None):
     from sklearn.metrics import confusion_matrix, classification_report
     
     is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+    project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
     if is_colab:
-        fs = gcsfs.GCSFileSystem(token='google_default')
+        fs = gcsfs.GCSFileSystem(project=project, token='google_default')
     else:
-        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
         fs = gcsfs.GCSFileSystem(project=project)
     base_gs = f"gs://{model_info['path']}"
     
@@ -559,10 +559,10 @@ class ModelTrainerUI(PipelineStepUI):
         models = list_trained_models()
         if show_loader: self.hide_loader()
         is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+        project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
         if is_colab:
-            fs = gcsfs.GCSFileSystem(token='google_default')
+            fs = gcsfs.GCSFileSystem(project=project, token='google_default')
         else:
-            project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
             fs = gcsfs.GCSFileSystem(project=project)
         
         items = []

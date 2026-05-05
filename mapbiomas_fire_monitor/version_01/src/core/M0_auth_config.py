@@ -61,7 +61,8 @@ def authenticate(project='mapbiomas-peru'):
         import google.colab
         print("[COLAB] Detectado ambiente Google Colab. Autenticando usuário...")
         from google.colab import auth
-        auth.authenticate_user()
+        # Passamos o project_id explicitamente para evitar 'Anonymous caller' no GCS
+        auth.authenticate_user(project_id=CONFIG.get('gcs_project', project))
     except ImportError:
         pass # Ambiente local, assume Application Default Credentials (ADC)
     

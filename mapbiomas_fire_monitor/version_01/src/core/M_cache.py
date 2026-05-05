@@ -48,7 +48,8 @@ class CacheManager:
                 is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
                 project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
                 if is_colab:
-                    fs = gcsfs.GCSFileSystem(token='google_default')
+                    # No Colab, usamos o token 'google_default' MAS passamos o project para evitar 'Anonymous caller'
+                    fs = gcsfs.GCSFileSystem(project=project, token='google_default')
                 else:
                     fs = gcsfs.GCSFileSystem(project=project) # Local usa ADC
                 
@@ -238,10 +239,11 @@ class CacheManager:
                 
                 # Usa a mesma lógica de autenticacao do load()
                 is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+                project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
                 if is_colab:
-                    fs = gcsfs.GCSFileSystem(token='google_default')
+                    # No Colab, usamos o token 'google_default' MAS passamos o project para evitar 'Anonymous caller'
+                    fs = gcsfs.GCSFileSystem(project=project, token='google_default')
                 else:
-                    project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
                     fs = gcsfs.GCSFileSystem(project=project)
                 
                 if state is None:
