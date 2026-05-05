@@ -79,15 +79,16 @@ class CacheManager:
         bands = CONFIG.get('bands_all', ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'])
         tasks = []
         
-        # Preparar lista de coleções para consultar usando a lógica central do M0
-        # IMPORTANTE: sempre usamos sentinel2 como sensor, pois é o sensor do pipeline
-        # e não dependemos de GLOBAL_OPTS['SENSOR'] que pode estar em 'landsat' por padrão.
+        # Lemos o sensor UMA VEZ antes de iniciar as threads para evitar race conditions.
+        # set_global_opts() já foi chamado pelo usuário antes de rodar a interface.
+        sensor_name = (GLOBAL_OPTS.get('SENSOR', 'sentinel2')).upper()
+        
+        # Sempre verificamos tanto a coleção normal quanto a _BUFFER para o cache ser completo
         for period_type in ['monthly', 'yearly']:
-            for is_buffer in [False, True]:
-                suffix = '_BUFFER' if is_buffer else ''
-                sensor_name = f'SENTINEL2{suffix}'
+            for suffix in ['', '_BUFFER']:
+                full_sensor = f'{sensor_name}{suffix}'
                 for band in bands:
-                    col_id = f"{CONFIG['asset_mosaics_base']}/{sensor_name}/{period_type.upper()}/{band}"
+                    col_id = f"{CONFIG['asset_mosaics_base']}/{full_sensor}/{period_type.upper()}/{band}"
                     tasks.append((col_id, period_type, band))
         
         total_steps = len(tasks)
