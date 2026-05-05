@@ -48,10 +48,15 @@ class ExportDispatcherUI(PipelineStepUI):
         self.gcs_chunks = self.state.get('gcs_chunks', {})
 
     def _get_active_tasks(self):
+        """Consulta as tarefas ativas no GEE para marcar como 'RUN' na matriz."""
         try:
             tasks = ee.data.getTaskList() 
-            return [t.get('description', '') for t in tasks[:self.TASK_LIMIT] if t.get('state') in ['RUNNING', 'PENDING', 'READY']]
-        except: return []
+            # Filtramos descrições de tarefas que estão em execução ou na fila
+            active = [t.get('description', '') for t in tasks[:100] if t.get('state') in ['RUNNING', 'PENDING', 'READY']]
+            return active
+        except Exception as e:
+            self.log(f"Error consultando tareas: {e}", "warning")
+            return []
 
     _DATE_W  = '100px'
     _TYPE_W  = '60px'
@@ -90,12 +95,15 @@ class ExportDispatcherUI(PipelineStepUI):
 
         self.btn_all = widgets.Button(description="Selecionar Todos", button_style='info', layout=widgets.Layout(width='155px'))
         self.btn_none = widgets.Button(description="Limpar Selecao", button_style='info', layout=widgets.Layout(width='145px'))
-        self.btn_refresh = widgets.Button(description="Atualizar GCS", button_style='success', layout=widgets.Layout(width='150px'))
+        self.btn_refresh = widgets.Button(description="Sincronizar GCS", button_style='success', layout=widgets.Layout(width='150px'))
+        self.btn_tasks = widgets.Button(description="Actualizar Tareas", button_style='warning', icon='tasks', layout=widgets.Layout(width='150px'))
+        
         self.btn_all.on_click(self._on_select_all)
         self.btn_none.on_click(self._on_select_none)
         self.btn_refresh.on_click(lambda _: self._refresh_cache())
+        self.btn_tasks.on_click(lambda _: self._refresh_ui_tasks())
         
-        btns = [self.btn_all, self.btn_none, self.btn_refresh]
+        btns = [self.btn_all, self.btn_none, self.btn_refresh, self.btn_tasks]
         
         if is_edit_mode():
             self.btn_delete = widgets.Button(description="Eliminar Seleção", button_style='danger', icon='trash', layout=widgets.Layout(width='160px'))
@@ -126,8 +134,10 @@ class ExportDispatcherUI(PipelineStepUI):
                              widgets.HTML('<span style="font-size:11px;color:#6c757d">GCS</span>', layout=L(width=self._TYPE_W)),
                              self._make_row_sel_btn(name, 'gcs')]
                 for b in self.bands:
+                    # Lógica de detecção: Nome do mosaico + banda na descrição da tarefa
+                    is_active = any((name in tn and b in tn) or (name in tn and "all" in tn) for tn in active_tasks)
                     exists = b in self.gcs_chunks.get(name, [])
-                    gcs_cells.append(self._create_matrix_cell(name, y, mo, self.period, f'gcs_{b}', exists, any(name in tn for tn in active_tasks if b in tn or "all" in tn)))
+                    gcs_cells.append(self._create_matrix_cell(name, y, mo, self.period, f'gcs_{b}', exists, is_active))
                 matrix_rows.append(widgets.HBox(gcs_cells, layout=L(align_items='center', margin='2px 0')))
                 
                 # ASSET Row
@@ -135,8 +145,10 @@ class ExportDispatcherUI(PipelineStepUI):
                                widgets.HTML('<span style="font-size:11px;color:#6c757d">ASSET</span>', layout=L(width=self._TYPE_W)),
                                self._make_row_sel_btn(name, 'asset')]
                 for b in self.bands:
-                    exists = f"{name}_{b}" in asset_status or name in asset_status # Checagem dupla
-                    asset_cells.append(self._create_matrix_cell(name, y, mo, self.period, f'asset_{b}', exists, any(name in tn for tn in active_tasks if b in tn or "all" in tn)))
+                    # Lógica de detecção: Nome do mosaico + banda na descrição da tarefa
+                    is_active = any((name in tn and b in tn) or (name in tn and "all" in tn) for tn in active_tasks)
+                    exists = f"{name}_{b}" in asset_status or name in asset_status 
+                    asset_cells.append(self._create_matrix_cell(name, y, mo, self.period, f'asset_{b}', exists, is_active))
                 matrix_rows.append(widgets.HBox(asset_cells, layout=L(align_items='center', margin='2px 0')))
                 
                 matrix_rows.append(widgets.HTML('<div style="border-bottom:1px solid #dee2e6;margin:5px 0"></div>'))
@@ -169,6 +181,12 @@ class ExportDispatcherUI(PipelineStepUI):
         btn._row_name, btn._row_type = name, row_type
         btn.on_click(self._on_select_row)
         return btn
+
+    def _refresh_ui_tasks(self):
+        """Atualiza apenas o status das tarefas ativas sem reconstruir tudo pesado."""
+        self.show_loader("Consultando tareas GEE...")
+        self._build_ui()
+        self.hide_loader()
 
     def _refresh_cache(self):
         if self.is_refreshing: return
@@ -260,6 +278,8 @@ def start_export(ui_obj):
             export_to_gcs(mosaic, name, y, m, p, bands=[band], config_module=config_module)
             
     ui_obj.log(f"Sucesso: {total_tasks} tarefas enviadas à fila do GEE.", "success")
+    # Atualiza a interface para mostrar o status RUN
+    ui_obj._refresh_ui_tasks()
 
 
 def start_delete(ui_obj):
