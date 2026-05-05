@@ -265,7 +265,7 @@ class ModelTrainer:
 
         return history
 
-    def save(self, version, region, logger=None):
+    def save(self, version, region, comment="", logger=None):
         import subprocess, tempfile
         base_path = model_path(version, region)
         project = CONFIG.get('gcs_project', CONFIG.get('ee_project'))
@@ -290,6 +290,7 @@ class ModelTrainer:
                 'history':      self._history,
                 'sample_collections': getattr(self, '_sample_collections', []),
                 'sample_count': getattr(self, '_sample_count', {}),
+                'comment':      comment,
             }
             with open(os.path.join(tmpdir, 'metadata.json'), 'w') as f:
                 json.dump(hp, f, indent=2)
@@ -474,19 +475,19 @@ class ModelTrainerUI(PipelineStepUI):
         self.band_checkboxes = dict(band_items)
         band_box = widgets.HBox([chk for _, chk in band_items], layout=L(flex_flow='row wrap', border='1px solid #dee2e6', padding='10px', border_radius='4px', margin='10px 0'))
         
-        self.w_iters = widgets.Text(value="7000", description='Iteraciones:', style={'description_width': '150px'}, layout=L(width='200px'))
+        self.w_iters = widgets.Text(value="7000", description='Iteraciones:', style={'description_width': '150px'}, layout=L(width='350px'))
         lbl_iters = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Total de iteraciones de entrenamiento (Ej: 5000, 10000). Mayor = más entrenamiento.</span>")
         box_iters = widgets.HBox([self.w_iters, lbl_iters], layout=L(align_items='center', margin='5px 0'))
         
-        self.w_batch = widgets.Text(value="1000", description='Tamaño de Lote:', style={'description_width': '150px'}, layout=L(width='200px'))
+        self.w_batch = widgets.Text(value="1000", description='Tamaño de Lote:', style={'description_width': '150px'}, layout=L(width='350px'))
         lbl_batch = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Píxeles por iteración (Ej: 500, 1000). Controla el uso de memoria.</span>")
         box_batch = widgets.HBox([self.w_batch, lbl_batch], layout=L(align_items='center', margin='5px 0'))
         
-        self.w_lr = widgets.Text(value="0.001", description='Tasa de Aprendizaje:', style={'description_width': '150px'}, layout=L(width='200px'))
+        self.w_lr = widgets.Text(value="0.001", description='Tasa de Aprendizaje:', style={'description_width': '150px'}, layout=L(width='350px'))
         lbl_lr = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Learning rate (Ej: 0.001, 0.01). Controla la velocidad de ajuste.</span>")
         box_lr = widgets.HBox([self.w_lr, lbl_lr], layout=L(align_items='center', margin='5px 0'))
         
-        self.w_layers = widgets.Text(value="7, 14, 7", description='Capas Ocultas:', style={'description_width': '150px'}, layout=L(width='200px'))
+        self.w_layers = widgets.Text(value="7, 14, 7", description='Capas Ocultas:', style={'description_width': '150px'}, layout=L(width='350px'))
         lbl_layers = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Neuronas por capa, separadas por coma (Ej: 14, 28, 14).</span>")
         box_layers = widgets.HBox([self.w_layers, lbl_layers], layout=L(align_items='center', margin='5px 0'))
         
@@ -494,6 +495,12 @@ class ModelTrainerUI(PipelineStepUI):
         
         self.w_version = widgets.Text(value='v1', description='Versión:', style={'description_width': '80px'})
         self.w_region = widgets.Text(value='peru_r1', description='Nombre Corto:', style={'description_width': '100px'})
+        self.w_comment = widgets.Textarea(
+            placeholder='Describa aquí los detalles de este entrenamiento (ej: pruebas con swir2, menos píxeles de agua, etc.)',
+            description='Comentario:',
+            style={'description_width': '100px'},
+            layout=L(width='98%', height='80px')
+        )
         
         tab_config = widgets.VBox([
             widgets.HTML("<b>1. Selección Múltiple de Datos (GCS)</b>"), matrix_ui,
@@ -501,7 +508,8 @@ class ModelTrainerUI(PipelineStepUI):
             widgets.HTML("<b>3. Hiperparámetros (DNN)</b>"), hp_box,
             widgets.HTML("<hr style='margin:10px 0'>"),
             widgets.HTML("<b>4. Destino Final en GCS</b>"),
-            widgets.HBox([self.w_version, self.w_region], layout=L(margin='10px 0'))
+            widgets.HBox([self.w_version, self.w_region], layout=L(margin='10px 0')),
+            self.w_comment
         ], layout=L(padding='15px'))
         
         # --- TAB 2: Analytics & Monitoramento ---
@@ -625,7 +633,7 @@ def start_training(ui):
     
     print("Guardando estructura (muestras, píxeles, metadatos) en GCS...")
     try:
-        ui.trainer_instance.save(ui.w_version.value, ui.w_region.value, logger=_logger)
+        ui.trainer_instance.save(ui.w_version.value, ui.w_region.value, comment=ui.w_comment.value, logger=_logger)
         print("¡Modelo guardado y listo para usar en M5!")
         print("Los análisis profundos pueden ser disparados en la pestaña superior cuando lo desee.")
     except Exception as e:
