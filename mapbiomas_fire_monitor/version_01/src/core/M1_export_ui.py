@@ -48,13 +48,11 @@ class ExportDispatcherUI(PipelineStepUI):
         self.gcs_chunks = self.state.get('gcs_chunks', {})
 
     def _get_active_tasks(self):
-        """Consulta as tarefas ativas no GEE para marcar como 'RUN' na matriz."""
+        """Consulta as últimas 300 tarefas ativas no GEE para marcar como 'RUN'."""
         try:
             tasks = ee.data.getTaskList() 
-            # Usamos o valor definido pelo usuário na interface
-            limit = getattr(self, 'w_task_limit', None)
-            limit_val = limit.value if limit else 200
-            active = [t.get('description', '') for t in tasks[:limit_val] if t.get('state') in ['RUNNING', 'PENDING', 'READY']]
+            # Fixamos em 300 conforme solicitado para cobrir todas as operações recentes
+            active = [t.get('description', '') for t in tasks[:300] if t.get('state') in ['RUNNING', 'PENDING', 'READY']]
             return active
         except Exception as e:
             self.log(f"Error consultando tareas: {e}", "warning")
@@ -97,26 +95,13 @@ class ExportDispatcherUI(PipelineStepUI):
 
         self.btn_all = widgets.Button(description="Selecionar Todos", button_style='info', layout=widgets.Layout(width='155px'))
         self.btn_none = widgets.Button(description="Limpar Selecao", button_style='info', layout=widgets.Layout(width='145px'))
-        self.btn_refresh = widgets.Button(description="Sincronizar GCS", button_style='success', layout=widgets.Layout(width='150px'))
-        self.btn_tasks = widgets.Button(description="Actualizar Tareas", button_style='warning', icon='tasks', layout=widgets.Layout(width='150px'))
-        
-        # Seletor de limite de tarefas integrado visualmente ao botão
-        self.w_task_limit = widgets.BoundedIntText(
-            value=200, min=10, max=1000, step=50, 
-            layout=widgets.Layout(width='60px', margin='0'),
-            style={'description_width': '0px'} 
-        )
-        self.w_task_limit.add_class('mfm-task-limit')
-        self.btn_tasks.add_class('mfm-btn-tasks')
-        
-        tasks_group = widgets.HBox([self.btn_tasks, self.w_task_limit], layout=widgets.Layout(margin='0 0 0 10px'))
+        self.btn_refresh = widgets.Button(description="Sincronizar Datos", button_style='success', icon='sync', layout=widgets.Layout(width='180px'))
         
         self.btn_all.on_click(self._on_select_all)
         self.btn_none.on_click(self._on_select_none)
         self.btn_refresh.on_click(lambda _: self._refresh_cache())
-        self.btn_tasks.on_click(lambda _: self._refresh_ui_tasks())
         
-        btns = [self.btn_all, self.btn_none, self.btn_refresh, tasks_group]
+        btns = [self.btn_all, self.btn_none, self.btn_refresh]
         
         if is_edit_mode():
             self.btn_delete = widgets.Button(description="Eliminar Seleção", button_style='danger', icon='trash', layout=widgets.Layout(width='160px'))
@@ -211,12 +196,8 @@ class ExportDispatcherUI(PipelineStepUI):
         return btn
 
     def _refresh_ui_tasks(self):
-        """Atualiza apenas o status das tarefas ativas sem reconstruir tudo pesado."""
-        self.show_loader("Consultando...")
-        self.update_status("Buscando tareas GEE...")
-        self._build_ui()
-        self.update_status("")
-        self.hide_loader()
+        """Simplificado: agora é parte do Sincronizar Datos."""
+        self._refresh_cache()
 
     def _refresh_cache(self):
         if self.is_refreshing: return
@@ -309,8 +290,8 @@ def start_export(ui_obj):
             export_to_gcs(mosaic, name, y, m, p, bands=[band], config_module=config_module)
             
     ui_obj.log(f"Sucesso: {total_tasks} tarefas enviadas à fila do GEE.", "success")
-    # Atualiza a interface para mostrar o status RUN
-    ui_obj._refresh_ui_tasks()
+    # Atualiza a interface (GCS, Assets e Tareas)
+    ui_obj._refresh_cache()
 
 
 def start_delete(ui_obj):
