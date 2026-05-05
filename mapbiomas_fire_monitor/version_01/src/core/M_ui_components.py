@@ -45,12 +45,7 @@ class PipelineStepUI:
             layout=widgets.Layout(margin='0')
         )
         
-        self.status_msg = widgets.HTML(
-            value="",
-            layout=widgets.Layout(margin='0 0 0 15px')
-        )
-        
-        self.header_box = widgets.HBox([self.header_title, self.loader_html, self.status_msg], layout=widgets.Layout(align_items='center'))
+        self.header_box = widgets.HBox([self.header_title, self.loader_html], layout=widgets.Layout(align_items='center'))
         
         self.header_desc = widgets.HTML(
             value=f"<p style='color:#666; margin-top:5px;'>{self.description}</p>"
@@ -88,9 +83,18 @@ class PipelineStepUI:
         self.loader_html.value = self.loader_html.value.replace('display:flex', 'display:none')
 
     def update_status(self, message, type=None):
-        """Atualiza a mensagem de status secundária no cabeçalho (substitui a anterior)."""
-        # Aceitamos o argumento 'type' para compatibilidade com loggers, mas o ignoramos no visual compacto
-        self.status_msg.value = f'<span style="font-size:11px; color:#0275d8; font-weight:bold;">{message}</span>'
+        """Atualiza a mensagem de status secundária no próprio loader."""
+        if not message:
+            self.hide_loader()
+            return
+            
+        # Garante que o loader está visível
+        if 'display:none' in self.loader_html.value:
+            self.show_loader(message)
+        else:
+            # Apenas troca o texto
+            import re
+            self.loader_html.value = re.sub(r'<span>.*?</span>', f'<span>{message}</span>', self.loader_html.value)
 
     def log(self, message, type="info"):
         """Adiciona uma mensagem textualmente formatada no Output de Logs."""
