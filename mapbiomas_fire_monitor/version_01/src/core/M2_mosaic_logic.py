@@ -7,7 +7,12 @@ import subprocess
 import glob
 import time
 
-from M0_auth_config import CONFIG, mosaic_name, monthly_chunk_path, monthly_mosaic_path, yearly_chunk_path, yearly_mosaic_path, gcs_chunks_prefix, get_temp_dir, check_command_exists
+from M0_auth_config import (
+    CONFIG, mosaic_name, 
+    monthly_chunk_path, monthly_mosaic_path, monthly_cog_path,
+    yearly_chunk_path, yearly_mosaic_path, yearly_cog_path,
+    gcs_chunks_prefix, get_temp_dir, check_command_exists
+)
 
 _GCS_CACHE = None
 
@@ -81,12 +86,12 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, logg
 
     if period == 'monthly':
         chunk_prefix  = monthly_chunk_path(year, month)
-        mosaic_prefix = monthly_chunk_path(year, month).replace('chunks', 'cog')
+        mosaic_prefix = monthly_cog_path(year, month)
         base_name = mosaic_name(year, month, 'monthly')
         label = f"{year}-{month:02d}"
     else:
         chunk_prefix  = yearly_chunk_path(year)
-        mosaic_prefix = yearly_chunk_path(year).replace('chunks', 'cog')
+        mosaic_prefix = yearly_cog_path(year)
         base_name = mosaic_name(year, period='yearly')
         label = f"{year} Anual"
 
@@ -209,10 +214,10 @@ def delete_cogs(year, month=None, period='monthly', bands=None, logger=None):
     gsutil_cmd = 'gsutil.cmd' if platform.system() == 'Windows' else 'gsutil'
     
     if period == 'monthly':
-        mosaic_prefix = monthly_chunk_path(year, month).replace('chunks', 'cog')
+        mosaic_prefix = monthly_cog_path(year, month)
         base_name = mosaic_name(year, month, 'monthly')
     else:
-        mosaic_prefix = yearly_chunk_path(year).replace('chunks', 'cog')
+        mosaic_prefix = yearly_cog_path(year)
         base_name = mosaic_name(year, period='yearly')
 
     target_bands = bands or CONFIG['bands_all']

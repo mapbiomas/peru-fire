@@ -74,7 +74,7 @@ def list_trained_models():
         return []
 
 def extract_pixels_from_gcs(sample_groups, bands, logger=None):
-    from M0_auth_config import mosaic_name, monthly_mosaic_path, yearly_mosaic_path
+    from M0_auth_config import mosaic_name, monthly_mosaic_path, yearly_mosaic_path, monthly_cog_path, yearly_cog_path
     fs = _get_fs()
     
     dfs = []
@@ -116,9 +116,20 @@ def extract_pixels_from_gcs(sample_groups, bands, logger=None):
         band_data_list = []
         
         for band in bands:
-            cog_path = f"{CONFIG['bucket']}/{folder}/{m_name}_{band}_cog.tif"
-            if not fs.exists(cog_path):
-                if logger: logger(f"COG ausente ({band}). Ignorando período {p}.", "warning")
+            # Tenta caminhos possíveis (novo /cog/, raiz, e fallback buffer)
+            possible_paths = [
+                f"{CONFIG['bucket']}/{monthly_cog_path(y, m) if m else yearly_cog_path(y)}/{m_name}_{band}_cog.tif",
+                f"{CONFIG['bucket']}/{folder}/{m_name}_{band}_cog.tif"
+            ]
+            
+            cog_path = None
+            for p in possible_paths:
+                if fs.exists(p):
+                    cog_path = p
+                    break
+            
+            if not cog_path:
+                if logger: logger(f"COG ausente ({band}) em {possible_paths[0]}. Ignorando período {p}.", "warning")
                 band_data_list = []
                 break
                 

@@ -122,6 +122,14 @@ def monthly_chunk_path(year, month):
 def yearly_chunk_path(year):
     return f"{yearly_mosaic_path(year)}/chunks"
 
+def monthly_cog_path(year, month):
+    """Retorna o path da pasta de COGs para o mês."""
+    return f"{monthly_mosaic_path(year, month)}/cog"
+
+def yearly_cog_path(year):
+    """Retorna o path da pasta de COGs para o ano."""
+    return f"{yearly_mosaic_path(year)}/cog"
+
 def model_path(version, region):
     return f"{CONFIG['gcs_models']}/{version}/{region}"
 

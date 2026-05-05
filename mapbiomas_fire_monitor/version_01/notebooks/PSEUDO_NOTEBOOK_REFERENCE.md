@@ -41,11 +41,11 @@ O monitor opera um fluxo circular de sincronização entre três ambientes:
 
 | Etapa | Extensão | Path Principal no Cloud Storage (GCS) | 
 | :--- | :--- | :--- |
-| **M1: Export** | `.tif` | `library_images/{sensor_buffer}/monthly/chunks/{yyyy}/{mm}/` |
-| **M2: Mosaic** | `.tif` | `library_images/{sensor_buffer}/monthly/cog/{yyyy}/{mm}/` |
-| **M3: Samples** | `.shp` | `library_samples/{anual,monthly}/{ano}/` |
+| **M1: Export** | `.tif` | `library_images/{sensor_buffer}/monthly/{yyyy}/{mm}/chunks/` |
+| **M2: Mosaic** | `.tif` | `library_images/{sensor_buffer}/monthly/{yyyy}/{mm}/cog/` |
+| **M3: Samples** | `.csv` | `library_samples/` |
 | **M4: Train** | `.pb / .json` | `models/{version}/{region}/` |
-| **M5: Classify** | `.tif` | `library_images/{sensor_buffer}/monthly/classifications/raw_versions/v{v}/` |
+| **M5: Classify** | `.tif` | `classifications/` |
 | **M7: Public** | Asset IC | `projects/mapbiomas-public/assets/{country}/fire/monitor/` |
 
 #### 🏷️ Regras de Nomenclatura Padrão
