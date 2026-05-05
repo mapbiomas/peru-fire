@@ -135,24 +135,33 @@ def extract_pixels_from_gcs(sample_groups, bands, logger=None):
                 
             try:
                 with fs.open(cog_path, 'rb') as f:
-                    with MemoryFile(f.read()) as memfile:
-                        with memfile.open() as src:
-                            band_pixels, valid_labels = [], []
-                            for geom, label in zip(geometries, labels):
-                                try:
-                                    out_image, _ = mask(src, [geom], crop=True, filled=False)
-                                    valid_pixels = out_image.data[~out_image.mask]
-                                    band_pixels.extend(valid_pixels)
-                                    if len(period_y) == 0: 
-                                        valid_labels.extend([label] * len(valid_pixels))
-                                except ValueError:
-                                    pass
-                                    
-                            band_data_list.append(np.array(band_pixels))
-                            if len(period_y) == 0:
-                                period_y = np.array(valid_labels)
+                    with rasterio.open(f) as src:
+                        band_pixels, valid_labels = [], []
+                        for geom, label in zip(geometries, labels):
+                            try:
+                                out_image, _ = mask(src, [geom], crop=True, filled=False)
+                                if out_image.mask.all():
+                                    continue
+                                valid_pixels = out_image.data[~out_image.mask]
+                                band_pixels.extend(valid_pixels)
+                                if len(period_y) == 0: 
+                                    valid_labels.extend([label] * len(valid_pixels))
+                            except (ValueError, Exception):
+                                pass
+                                
+                        if len(band_pixels) == 0:
+                            if logger: logger(f"Aviso: Nenhum pixel extraído para {band} no período {p}.", "warning")
+                            band_data_list = []
+                            break
+
+                        band_data_list.append(np.array(band_pixels))
+                        if len(period_y) == 0:
+                            period_y = np.array(valid_labels)
             except Exception as e:
-                if logger: logger(f"Erro ao ler COG {band}: {e}", "error")
+                import traceback
+                error_msg = f"Erro ao ler COG {band} ({cog_path}): {str(e)}"
+                if logger: logger(error_msg, "error")
+                print(traceback.format_exc())
                 band_data_list = []
                 break
                 
