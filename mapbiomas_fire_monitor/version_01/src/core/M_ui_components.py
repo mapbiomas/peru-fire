@@ -40,6 +40,11 @@ class PipelineStepUI:
             '''
         )
         
+        self.header_title = widgets.HTML(
+            value=f"<h3 style='margin-bottom:0; display:inline-block;'>{self.title}</h3>",
+            layout=widgets.Layout(margin='0')
+        )
+        
         self.status_msg = widgets.HTML(
             value="",
             layout=widgets.Layout(margin='0 0 0 15px')
