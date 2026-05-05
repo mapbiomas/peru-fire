@@ -1,130 +1,53 @@
 """
-M0 — Autenticação e Configuração
-MapBiomas Fire Sentinel Monitor
-
-Este módulo contém a configuração global do projeto.
-Selecione o país definindo a variável COUNTRY antes de importar.
+M0 - Configuração Global e Autenticação
+MapBiomas Fuego Sentinel Monitor
 """
-
-import warnings
-warnings.filterwarnings('ignore', message='.*Google Cloud SDK.*')
-
 import ee
 import os
-import json
+import warnings
+import logging
 
-# ─── PAÍSES DISPONÍVEIS ─────────────────────────────────────────────────────────
+# Silenciar avisos de autenticação do Google e loggers verbosos do GCSFS
+warnings.filterwarnings("ignore", message="Your application has authenticated using end user credentials")
+logging.getLogger("google.auth").setLevel(logging.ERROR)
+logging.getLogger("gcsfs").setLevel(logging.ERROR)
+logging.getLogger("fsspec").setLevel(logging.ERROR)
 
-PAISES = {
-    'peru': {
-        'nome': 'Peru',
-        'ee_project': 'mapbiomas-peru',
-        'gcs_project': 'mapbiomas-fire-485203',  # Billing Project para GCS
-        'bucket': 'mapbiomas-fire',
-        'lulc': 'projects/mapbiomas-public/assets/peru/collection2/mapbiomas_peru_collection2_integration_v1',
-        'regioes_asset': 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
-    },
-    'bolivia': {
-        'nome': 'Bolivia',
-        'ee_project': 'mapbiomas-bolivia', # Ajustado para ser específico
-        'gcs_project': 'mapbiomas-fire-485203',
-        'bucket': 'mapbiomas-fire',
-        'lulc': 'projects/mapbiomas-public/assets/bolivia/collection2/mapbiomas_bolivia_collection2_integration_v1',
-        'regioes_asset': 'projects/mapbiomas-bolivia/assets/FIRE/AUXILIARY_DATA/regiones_fuego_bolivia_v1',
-    },
-    'paraguay': {
-        'nome': 'Paraguay',
-        'ee_project': 'mapbiomas-paraguay', # Ajustado para ser específico
-        'gcs_project': 'mapbiomas-fire-485203',
-        'bucket': 'mapbiomas-fire',
-        'lulc': 'projects/mapbiomas-public/assets/paraguay/collection2/mapbiomas_paraguay_collection2_integration_v1',
-        'regioes_asset': 'projects/mapbiomas-paraguay/assets/FIRE/AUXILIARY_DATA/regiones_fuego_paraguay_v1',
-    },
-}
+# ─── CONFIGURAÇÃO DO PROJETO ──────────────────────────────────────────────────
 
-# ─── CONFIGURAÇÃO GLOBAL ───────────────────────────────────────────────────────
-
-def get_config(country):
-    """
-    Retorna CONFIG para o país especificado.
-    
-    Args:
-        country: 'peru', 'bolivia', ou 'paraguay'
-    
-    Returns:
-        dict: Configuração completa do país
-    """
-    if country not in PAISES:
-        raise ValueError(f"País '{country}' não encontrado. Opções: {list(PAISES.keys())}")
-    
-    p = PAISES[country]
-    
-    ee_proj = p['ee_project']
-    gcs_proj = p.get('gcs_project', ee_proj) # Fallback para ee_project se não definido
-    
-    return {
-        # ── País / projeto ──
-        'country': country,
-        'country_name': p['nome'],
-        'ee_project': ee_proj,
-        'gcs_project': gcs_proj,
-        'bucket': p['bucket'],
-        
-        # ── GCS base path ──
-        'base_path': f'sudamerica/{country}/monitor',
-        'gcs_base': f'sudamerica/{country}/monitor',
-        
-        # ── Rotas de GEE Asset ──
-        'asset_classification': f"projects/{ee_proj}/assets/FIRE/MONITOR/VERSION_01/CLASSIFICATIONS/RAW_VERSIONS",
-        'asset_regions': p['regioes_asset'],
-        'asset_samples': f"projects/{ee_proj}/assets/FIRE/MONITOR/VERSION_01/LIBRARY_SAMPLES",
-        
-        # ── LULC ──
-        'lulc_asset': p['lulc'],
-        'lulc_mask_classes': [26, 22, 33, 24],  # agua, nuvens, urbano, mining
-        
-        # ── Estrutura de pastas GCS ──
-        # Nota: paths de chunks/cog incluem sensor dinamicamente.
-        # Use as funções helper: monthly_chunk_path(), gcs_chunks_prefix(), etc.
-        'gcs_models': f'sudamerica/{country}/monitor/models',
-        'gcs_samples': f'sudamerica/{country}/monitor/library_samples',
-        
-        # ── Configuração Sentinel-2 ──
-        'sensor': 'COPERNICUS/S2_SR_HARMONIZED',
-        'cs_plus': 'GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED',
-        'cs_threshold': 0.40,
-        
-        # ── Buffer de focos ──
-        'focus_buffer': 'projects/workspace-ipam/assets/BUFFER-DOUBLE-MONTHLY-FOCUS-OF-INPE-SULAMERICA',
-        
-        # ── Bandas do mosaico ──
-        'bands_spectral': ['blue', 'green', 'red', 'nir', 'swir1', 'swir2'],
-        'bands_all': ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'],
-        
-        # ── Bandas do modelo ──
-        'bands_model_default': ['red', 'nir', 'swir1', 'swir2'],
-        'bands_model_optional': ['blue', 'green', 'dayOfYear'],
-        
-        # ── Mapeamento de bandas S2 ──
-        's2_bands_in': ['B2', 'B3', 'B4', 'B8', 'B11', 'B12'],
-        's2_bands_out': ['blue', 'green', 'red', 'nir', 'swir1', 'swir2'],
-        
-        # ── Escala espectral ──
-        'spectral_scale_factor': 100,  # 0-10000 → 0-100 (byte)
-        
-        # ── Tamanho da grade (~1/4 cena Landsat ≈ 92km) ──
-        'tile_size_deg': 0.83,
-        
-        # ── Saída de classificação ──
-        'classification_output': 'day_of_year',
-        
-        # ── Modelo DNN ──
-        'model_layers': [7, 14, 7, 14, 7],
-        'model_lr': 0.001,
-        'model_batch': 1000,
-        'model_iters': 7000,
-        'model_split': 0.70,  # 70% treino / 30% teste
-    }
+def get_config(country='peru'):
+    """Retorna o dicionário de caminhos e buckets para o país escolhido."""
+    if country.lower() == 'peru':
+        return {
+            'country': 'peru',
+            'bucket': 'mapbiomas-fire',
+            'gcs_project': 'mapbiomas-fire-485203',
+            'version': 'version_01',
+            
+            # Estrutura de caminhos no GCS (Base: sudamerica/{country}/monitor/{version})
+            'gcs_samples': 'sudamerica/peru/monitor/version_01/library_samples',
+            'gcs_mosaics': 'sudamerica/peru/monitor/version_01/library_images',
+            'gcs_models': 'sudamerica/peru/monitor/version_01/models',
+            'gcs_cache': 'sudamerica/peru/monitor/version_01/.cache',
+            'gcs_classifications': 'sudamerica/peru/monitor/version_01/classifications',
+            'gcs_filtered': 'sudamerica/peru/monitor/version_01/filtered',
+            'gcs_chunks': 'sudamerica/peru/monitor/version_01/chunks',
+            
+            # Estrutura de Assets no GEE
+            'asset_mosaics_base': 'projects/mapbiomas-mosaics/assets/FIRE',
+            'asset_samples': 'projects/mapbiomas-peru/assets/FIRE/MONITOR/VERSION_01/LIBRARY_SAMPLES',
+            'asset_regions': 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
+            'asset_fire_ref': 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/REFERENCES/cicatrizes_fuego_reference_2016_2024/cicatriz_fuego_',
+            'asset_hotspots': 'projects/mapbiomas-fire-485203/assets/DATABASE/monthly-focus-sul-america',
+            'asset_classification': 'projects/mapbiomas-peru/assets/FIRE/MONITOR/VERSION_01/CLASSIFICATIONS',
+            'asset_filtered': 'projects/mapbiomas-peru/assets/FIRE/MONITOR/VERSION_01/FILTERED',
+            
+            # Parâmetros de Processamento
+            'bands_model_default': ['red', 'nir', 'swir1', 'swir2'],
+            'bands_all': ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'],
+        }
+    else:
+        raise ValueError(f"País {country} não configurado.")
 
 
 # ─── AUTENTICAÇÃO ─────────────────────────────────────────────────────────────
@@ -144,14 +67,14 @@ def authenticate(project='mapbiomas-peru'):
     
     try:
         ee.Initialize(project=project)
-        print("✅ GEE já autenticado.")
+        print("[GEE] Inicializado.")
     except Exception:
         print("Sessão GEE expirada ou nula. Iniciando autenticação...")
         ee.Authenticate()
         ee.Initialize(project=project)
-        print("✅ GEE autenticado com sucesso.")
+        print("[GEE] Autenticado com sucesso.")
     
-    print("✅ Autenticação GCS/ADC configurada.")
+    print("[GCS] Autenticação GCS/ADC configurada.")
 
 
 # ─── VARIÁVEIS GLOBAIS (serão configuradas) ─────────────────────────────────
@@ -160,273 +83,150 @@ CONFIG = get_config('peru')  # Padrão: Peru (compatível com notebooks existent
 
 GLOBAL_OPTS = {
     'SENSOR': 'landsat',       # landsat, sentinel2, hls, modis
-    'PERIODICITY': 'yearly'    # yearly, monthly
+    'PERIODICITY': 'yearly',   # yearly, monthly
+    'FIRE_POTENTIAL_FILTER': False
 }
 
-def set_global_opts(sensor='landsat', periodicity='yearly'):
+def set_global_opts(sensor='landsat', periodicity='yearly', fire_potential_filter=False):
     """
     Configura variáveis globais do fluxo de processamento (mosaicos).
     
     Args:
         sensor: 'landsat', 'sentinel2', 'hls' ou 'modis'
         periodicity: 'yearly' ou 'monthly'
+        fire_potential_filter: True para usar imagens filtradas pelo buffer de focos
     """
     global GLOBAL_OPTS
     GLOBAL_OPTS['SENSOR'] = sensor
     GLOBAL_OPTS['PERIODICITY'] = periodicity
+    GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] = fire_potential_filter
     return GLOBAL_OPTS
 
 
-# ─── MODO DE EDIÇÃO ──────────────────────────────────────────────────────────
-
-_EDIT_MODE = False
-
-def set_edit_mode(enabled):
-    """Ativa/desativa o modo de edição (exibe botão Deletar na UI)."""
-    global _EDIT_MODE
-    _EDIT_MODE = enabled
-
-def is_edit_mode():
-    """Retorna se o modo de edição está ativo."""
-    return _EDIT_MODE
-
-
-# ─── SELEÇÃO DE PAÍS ──────────────────────────────────────────────────────────
-
-def set_country(country):
-    """
-    Define o país e configura CONFIG global.
-    
-    Args:
-        country: 'peru', 'bolivia', ou 'paraguay'
-    """
-    global CONFIG
-    CONFIG = get_config(country)
-    return CONFIG
-
-
-def get_countries():
-    """Retorna lista de países disponíveis."""
-    return list(PAISES.keys())
-
-
-# ─── FUNÇÕES AUXILIARES ────────────────────────────────────────────────────────
-
-def gcs_path(subpath):
-    """Retorna o caminho completo gs:// para uma subrota GCS."""
-    return f"gs://{CONFIG['bucket']}/{subpath}"
-
+# ─── GENERADORES DE CAMINHOS GCS ──────────────────────────────────────────────
 
 def _gcs_library_base():
-    """Retorna o prefixo GCS dinâmico incluindo o sensor ativo."""
-    sensor = GLOBAL_OPTS['SENSOR']
-    return f"{CONFIG['gcs_base']}/library_images/{sensor}"
-
-
-def gcs_chunks_prefix(period='monthly'):
-    """Retorna o prefixo GCS base para chunks (sem ano/mês)."""
-    period_folder = period  # 'monthly' ou 'yearly'
-    return f"{_gcs_library_base()}/{period_folder}/chunks"
-
-
-def gcs_mosaic_prefix(period='monthly'):
-    """Retorna o prefixo GCS base para COGs (sem ano/mês)."""
-    period_folder = period  # 'monthly' ou 'yearly'
-    return f"{_gcs_library_base()}/{period_folder}/cog"
-
-
-def monthly_chunk_path(year, month):
-    return f"{gcs_chunks_prefix('monthly')}/{year}/{month:02d}"
-
+    sensor = GLOBAL_OPTS['SENSOR'].lower()
+    suffix = "_buffer" if GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] else ""
+    return f"{CONFIG['gcs_mosaics']}/{sensor}{suffix}"
 
 def monthly_mosaic_path(year, month):
-    return f"{gcs_mosaic_prefix('monthly')}/{year}/{month:02d}"
-
-
-def yearly_chunk_path(year):
-    return f"{gcs_chunks_prefix('yearly')}/{year}"
-
+    return f"{_gcs_library_base()}/monthly/{year}/{month:02d}"
 
 def yearly_mosaic_path(year):
-    return f"{gcs_mosaic_prefix('yearly')}/{year}"
+    return f"{_gcs_library_base()}/yearly/{year}"
 
+def monthly_chunk_path(year, month):
+    return f"{monthly_mosaic_path(year, month)}/chunks"
 
-def get_asset_mosaic_collection(period='monthly', band=None):
-    """
-    Retorna o path base do GEE Asset de acordo com a nova estrutura padrao.
-    Ex: projects/mapbiomas-mosaics/assets/FIRE/SENTINEL2/MONTHLY/swir2
-    """
-    sensor_key = GLOBAL_OPTS['SENSOR']
-    # Normalizar o nome do sensor para o formato esperado na pasta
-    sensor_map = {
-        'landsat': 'LANDSAT',
-        'sentinel2': 'SENTINEL2',
-        'modis': 'MODIS',
-        'hls': 'HLS'
-    }
-    sensor_folder = sensor_map.get(sensor_key, sensor_key.upper())
-    
-    period_folder = 'MONTHLY' if period == 'monthly' else 'ANNUAL'
-    base_path = f"projects/mapbiomas-mosaics/assets/FIRE/{sensor_folder}/{period_folder}"
-    
-    if band:
-        return f"{base_path}/{band}"
-    return base_path
-
-def mosaic_name(year, month=None, period=None):
-    country = CONFIG['country']
-    sensor = GLOBAL_OPTS['SENSOR']
-    p = period if period else GLOBAL_OPTS['PERIODICITY']
-    
-    year_str = str(year)
-    if p == 'monthly' and month is not None:
-        return f"{sensor}_fire_{country}_{year_str}_{month:02d}"
-    
-    return f"{sensor}_fire_{country}_{year_str}"
-
-
-def classification_name(regions, version, year, month=None):
-    country = CONFIG['country']
-    regions_str = '_'.join(regions)
-    if month is not None:
-        return f"burned_area_s2_{country}_{regions_str}_{version}_{year}_{month:02d}"
-    return f"burned_area_s2_{country}_{regions_str}_{version}_{year}"
-
+def yearly_chunk_path(year):
+    return f"{yearly_mosaic_path(year)}/chunks"
 
 def model_path(version, region):
     return f"{CONFIG['gcs_models']}/{version}/{region}"
 
-
-# ─── FUNÇÕES DE GEOMETRIA ───────────────────────────────────────────────────────
-
-def get_country_geometry():
-    """Retorna a geometria EE de todo o país (união de todas as regiões)."""
-    fc = ee.FeatureCollection(CONFIG['asset_regions'])
-    return fc.geometry()
+def gcs_path(relative):
+    """Retorna URL gs:// completa."""
+    return f"gs://{CONFIG['bucket']}/{relative}"
 
 
-def get_region_geometry(region_name):
-    """Retorna a geometria EE de uma região específica por nome."""
-    fc = ee.FeatureCollection(CONFIG['asset_regions']) \
-           .filter(ee.Filter.eq('region_nam', region_name))
-    return fc.geometry()
+# ─── GENERADORES DE CAMINHOS GEE ──────────────────────────────────────────────
+
+def get_asset_mosaic_collection(sensor=None, periodicity=None, band=None, period=None):
+    """
+    Gera o path da ImageCollection no GEE.
+    projects/mapbiomas-mosaics/assets/FIRE/SENTINEL2/MONTHLY/blue
+    """
+    period = period or periodicity or GLOBAL_OPTS['PERIODICITY']
+    folder_period = period.upper()
+    
+    suffix = "_BUFFER" if GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] else ""
+    sensor_name = (sensor or GLOBAL_OPTS['SENSOR']).upper() + suffix
+    
+    path = f"{CONFIG['asset_mosaics_base']}/{sensor_name}/{folder_period}"
+    if band:
+        path = f"{path}/{band}"
+    return path
 
 
-def list_regions():
-    """Retorna a lista ordenada de nomes de regiões."""
-    fc = ee.FeatureCollection(CONFIG['asset_regions'])
-    names = fc.aggregate_array('region_nam').getInfo()
-    return sorted(names)
+# ─── NOMENCLATURA ─────────────────────────────────────────────────────────────
 
+def mosaic_name(year, month=None, period=None):
+    """
+    Gera nome padrão para o mosaico: sentinel2_fire_peru_2024_01
+    """
+    country = CONFIG['country']
+    sensor = GLOBAL_OPTS['SENSOR'].lower()
+    period = period or GLOBAL_OPTS['PERIODICITY']
+    
+    date_str = f"{year}_{month:02d}" if month else f"{year}"
+    
+    suffix = "_buffer" if GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] else ""
+    
+    return f"{sensor}{suffix}_fire_{country}_{date_str}"
 
-# ─── IMPRIMIR RESUMO ──────────────────────────────────────────────────────────
-
-def print_config():
-    print("=" * 60)
-    print("  🔥 MapBiomas Fire Monitor — Pipeline")
-    print("=" * 60)
-    print(f"  País         : {CONFIG['country_name'].upper()} ({CONFIG['country']})")
-    print(f"  Projeto GEE  : {CONFIG['ee_project']}")
-    print(f"  Bucket GCS   : gs://{CONFIG['bucket']}")
-    print(f"  Base Path    : {CONFIG['base_path']}")
-    print("=" * 60)
-    print(f"  Sensor (Fluxo): {GLOBAL_OPTS['SENSOR'].upper()}")
-    print(f"  Periodicidade : {GLOBAL_OPTS['PERIODICITY'].upper()}")
-    print(f"  Modo Edição   : {'✅ ATIVO' if _EDIT_MODE else '❌ Desativado'}")
-    print(f"  Sensor EE     : {CONFIG['sensor']}")
-    print(f"  Bandas espec. : {CONFIG['bands_spectral']}")
-    print(f"  Bandas modelo : {CONFIG['bands_model_default']}")
-    print(f"  Tile size     : {CONFIG['tile_size_deg']}° (~92km)")
-    print(f"  LULC mask     : classes {CONFIG['lulc_mask_classes']}")
-    print(f"  LULC Asset    : {CONFIG['lulc_asset']}")
-    print("=" * 60)
-
-
-# ─── FUNÇÕES UTILITÁRIAS ─────────────────────────────────────────────────────
+def gcs_chunks_prefix(periodicity):
+    """Retorna o prefixo da pasta de chunks no GCS para listagem."""
+    return f"{CONFIG['gcs_chunks']}/{periodicity}"
 
 def get_temp_dir():
-    """Retorna diretório temporário consciente do ambiente (Colab ou HD Local)."""
-    import os
-    import tempfile
-    
-    # 1. Detectar ambiente
-    try:
-        import google.colab
-        # No Colab, usamos o /content que é mais espaçoso
-        base_dir = "/content/mapbiomas_fire_temp"
-    except ImportError:
-        # Local: Usamos a pasta temporária padrão do sistema (HD)
-        base_dir = os.path.join(tempfile.gettempdir(), 'mapbiomas_fire_temp')
-    
-    os.makedirs(base_dir, exist_ok=True)
-    return base_dir
-
+    """Cria e retorna o caminho para a pasta temporária local."""
+    tmp = "temp_mosaics"
+    if not os.path.exists(tmp):
+        os.makedirs(tmp)
+    return tmp
 
 def check_command_exists(cmd):
-    """Verifica se um comando está disponível no sistema."""
+    """Verifica se um comando (ex: gdal_merge) existe no sistema."""
     import shutil
-    return shutil.which(cmd) is not None
+    return shutil.which(cmd) is not None or shutil.which(cmd + ".py") is not None
+
+def classification_name(periodicity, year, month=None, version=None):
+    """Gera nome para o arquivo de classificação: class_sentinel2_peru_r01_2024_01_v1"""
+    country = CONFIG['country']
+    sensor = GLOBAL_OPTS['SENSOR'].lower()
+    suffix = "_buffer" if GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] else ""
+    ver = version or CONFIG['version']
+    region = "r01" # Exemplo, ajustar conforme logica de regioes
+    return f"class_{sensor}{suffix}_{country}_{region}_{year}_{month:02d}_{ver}" if month else f"class_{sensor}{suffix}_{country}_{region}_{year}_{ver}"
 
 
-def ensure_gdal_path():
-    """
-    Tenta localizar binários do GDAL no Windows vasculhando caminhos comuns do Conda/OSGeo4W.
-    Injeta no PATH se encontrar.
-    """
-    import os
-    import shutil
-    import platform
+# ─── GEOMETRIA E AUXILIARES ───────────────────────────────────────────────────
 
-    if platform.system() != 'Windows':
-        return  # Apenas Windows precisa de busca manual profunda
+def get_country_geometry():
+    """Retorna a geometria do país baseada no asset de regiões."""
+    return ee.FeatureCollection(CONFIG['asset_regions']).geometry()
 
-    if shutil.which('gdalbuildvrt') and shutil.which('gdal_translate'):
-        return # Já está no PATH
+def get_fire_reference(year):
+    """Retorna asset de referência de fogo para o ano."""
+    return ee.Image(f"{CONFIG['asset_fire_ref']}{year}")
 
-    print("[BUSCA] Buscando binários do GDAL no ambiente local...")
-    
-    # Caminhos prováveis onde o Conda instala o GDAL no Windows
-    possible_roots = [
-        os.path.join(os.environ.get('USERPROFILE', ''), 'miniconda3'),
-        os.path.join(os.environ.get('USERPROFILE', ''), 'anaconda3'),
-        os.path.join(os.environ.get('LOCALAPPDATA', ''), 'miniconda3'),
-        os.path.join(os.environ.get('LOCALAPPDATA', ''), 'anaconda3'),
-        r"C:\ProgramData\miniconda3",
-        r"C:\ProgramData\anaconda3",
-        r"C:\OSGeo4W",
-        r"C:\OSGeo4W64",
-    ]
+def get_hotspots_collection(year, month=None):
+    """Retorna coleção de focos INPE filtrada."""
+    col = ee.FeatureCollection(CONFIG['asset_hotspots'])
+    col = col.filter(ee.Filter.eq('year', year))
+    if month:
+        col = col.filter(ee.Filter.eq('month', month))
+    return col
 
-    # Pastas de binários dentro desses roots
-    bin_subfolders = [
-        r"Library\bin", # Padrão Conda (GeoTIFF, GDAL)
-        r"Scripts",     # Alternativa Conda
-        r"bin",         # Padrão OSGeo4W
-    ]
+def set_country(country):
+    """Atualiza a configuração global para um novo país."""
+    global CONFIG
+    CONFIG = get_config(country)
+    return CONFIG
 
-    for root in possible_roots:
-        if not os.path.exists(root): continue
-        
-        # Procurar em subpastas de ambientes se existir 'envs'
-        envs_path = os.path.join(root, 'envs')
-        search_dirs = [root]
-        if os.path.exists(envs_path):
-            try:
-                search_dirs.extend([os.path.join(envs_path, d) for d in os.listdir(envs_path)])
-            except: pass
+def set_edit_mode(mode):
+    """Ativa ou desativa o modo de edição na UI."""
+    global GLOBAL_OPTS
+    GLOBAL_OPTS['EDIT_MODE'] = mode
 
-        for sdir in search_dirs:
-            for sub in bin_subfolders:
-                path = os.path.join(sdir, sub)
-                if os.path.exists(path) and os.path.exists(os.path.join(path, 'gdalbuildvrt.exe')):
-                    if path not in os.environ['PATH']:
-                        os.environ['PATH'] = path + os.pathsep + os.environ['PATH']
-                        print(f"[OK] GDAL localizado e injetado: {path}")
-                        return True
-    
-    print("❌ [ERRO] Binários do GDAL não encontrados.")
-    print("💡 Localmente, o pipeline M2 exige GDAL (gdalbuildvrt, gdal_translate).")
-    print("💡 Sugestão: conda install -c conda-forge gdal")
-    print("💡 Verifique se você está usando o ambiente 'fire_monitor' recomendado.")
-    
-    return False
+def is_edit_mode():
+    """Retorna True se o modo de edição estiver ativo."""
+    return GLOBAL_OPTS.get('EDIT_MODE', False)
+
+def print_config():
+    """Imprime um resumo da configuração atual."""
+    print(f"🌍 País: {CONFIG['country'].upper()}")
+    print(f"📦 Bucket: {CONFIG['bucket']}")
+    print(f"🏷️  Versão: {CONFIG['version']}")
+    print(f"📡 Sensor: {GLOBAL_OPTS['SENSOR']} (Filter: {GLOBAL_OPTS['FIRE_POTENTIAL_FILTER']})")

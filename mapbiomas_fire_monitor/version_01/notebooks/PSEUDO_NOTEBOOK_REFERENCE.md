@@ -19,10 +19,10 @@ Este pipeline de código constituye el núcleo de procesamiento automatizado par
 
 | Etapa | Peso | Inputs → Outputs | Regla de Nomenclatura | Ejemplo |
 | :--- | :--- | :--- | :--- | :--- |
-| **M1: Export** | **Leve** | **IN:** Colecciones GEE<br>**OUT:** Chunks GCS | `[sensor]_fire_[país]_[año][mes]` | `s2_fire_peru_2408` |
-| **M2: Mosaic** | **Medio** | **IN:** Chunks GCS<br>**OUT:** Mosaicos COG (GCS) | Semilla M1 + sufijo banda | `s2_fire_peru_2408_nir_cog.tif` |
+| **M1: Export** | **Leve** | **IN:** Colecciones GEE<br>**OUT:** Chunks GCS | `[prod]_fire_[país]_[año][mes]` | `sentinel2_buffer_fire_peru_2024_01` |
+| **M2: Mosaic** | **Medio** | **IN:** Chunks GCS<br>**OUT:** Mosaicos COG (GCS) | Semilla M1 + sufijo banda | `sentinel2_buffer_fire_peru_2024_01_nir_cog.tif` |
 | **M3: Samples (Gateway)** | **Leve** | **IN:** Mosaicos (M2)<br>**OUT:** Polígonos (GCS/Asset) | `[col]_[sat_ref]_[reg]`| `samples_sentinel2_r01` |
-| **M4: Train** | **Medio** | **IN:** Muestras M3 + Mosaicos M2<br>**OUT:** DNN (GCS) | `[ver]_[sensor]_[reg]` | `v1_1_sentinel2_r01` |
+| **M4: Train** | **Medio** | **IN:** Muestras M3 + Mosaicos M2<br>**OUT:** DNN (GCS) | `[ver]_[sensor]_[reg]` | `v1_sentinel2_peru_r1` |
 | **M5: Classify**| **Pesado**| **IN:** Modelo M4 + Mosaicos M2<br>**OUT:** Raster (GCS) | `klass_[país]_[reg]_[mod]_[yymm]`| `klass_peru_r01_v1_2408` |
 | **M6: Filters** | **Leve** | **IN:** DOY M5 + LULC<br>**OUT:** Raster Filtrado (GCS)| `filt_[país]_[reg]_[mod]_[yymm]`| `filt_peru_r01_v1_2408` |
 | **M7: Versioner**| **Leve** | **IN:** Candidatos M6<br>**OUT:** Asset PRE-OFICIAL | `[colección]_v[X]` | `peru_fire_col1_v1` |
@@ -41,17 +41,17 @@ O monitor opera um fluxo circular de sincronização entre três ambientes:
 
 | Etapa | Extensão | Path Principal no Cloud Storage (GCS) | 
 | :--- | :--- | :--- |
-| **M1: Export** | `.tif` | `library_images/{sensor}/monthly/chunks/{yyyy}/{mm}/` |
-| **M2: Mosaic** | `.tif` | `library_images/{sensor}/monthly/cog/{yyyy}/{mm}/` |
+| **M1: Export** | `.tif` | `library_images/{sensor_buffer}/monthly/chunks/{yyyy}/{mm}/` |
+| **M2: Mosaic** | `.tif` | `library_images/{sensor_buffer}/monthly/cog/{yyyy}/{mm}/` |
 | **M3: Samples** | `.shp` | `library_samples/{anual,monthly}/{ano}/` |
 | **M4: Train** | `.pb / .json` | `models/{version}/{region}/` |
-| **M5: Classify** | `.tif` | `library_images/{sensor}/monthly/classifications/raw_versions/v{v}/` |
+| **M5: Classify** | `.tif` | `library_images/{sensor_buffer}/monthly/classifications/raw_versions/v{v}/` |
 | **M7: Public** | Asset IC | `projects/mapbiomas-public/assets/{country}/fire/monitor/` |
 
 #### 🏷️ Regras de Nomenclatura Padrão
-*   **Fragmentos (M1):** `{sensor}_fire_{pais}_{yy}{mm}_{banda}.tif`
-*   **Mosaico COG (M2):** `{sensor}_fire_{pais}_{yy}{mm}_{banda}_cog.tif`
-*   **Classificação (M5):** `class_{sensor}_{pais}_{modelo}_{yymm}_v{v}.tif`
+*   **Fragmentos (M1):** `{sensor}{_buffer}_fire_{pais}_{yyyy}_{mm}_{banda}.tif`
+*   **Mosaico COG (M2):** `{sensor}{_buffer}_fire_{pais}_{yyyy}_{mm}_{banda}_cog.tif`
+*   **Classificação (M5):** `class_{sensor}_{pais}_{modelo}_{yyyy}_{mm}_v{v}.tif`
 
 ---
 #### 🔄 Retroalimentación y Tolerancia a Fallos
@@ -116,7 +116,7 @@ COUNTRY = "peru"
 
 from M0_auth_config import set_country, authenticate, set_global_opts
 set_country(COUNTRY)
-set_global_opts(sensor='sentinel2', periodicity='monthly')
+set_global_opts(sensor='sentinel2', periodicity='monthly', fire_potential_filter=True) # Activa Filtro INPE
 authenticate() 
 ```
 

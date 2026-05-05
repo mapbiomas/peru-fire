@@ -22,6 +22,7 @@ class ExportDispatcherUI(PipelineStepUI):
         )
         self.chk_dict = {}
         self.requested_years = years
+        self.btn_refresh = None
         self.is_refreshing = False
         
         try:
@@ -177,8 +178,10 @@ class ExportDispatcherUI(PipelineStepUI):
         
         try:
             self.is_refreshing = True
-            self.btn_refresh.disabled = True
-            self.btn_refresh.description = "Atualizando..."
+            if self.btn_refresh:
+                self.btn_refresh.disabled = True
+                self.btn_refresh.description = "Atualizando..."
+            self.show_loader("Sincronizando cache...")
             
             self.state = CacheManager.build_full_cache(logger=self.log, years=self.years)
             self.gcs_chunks = self.state.get('gcs_chunks', {})
@@ -188,8 +191,10 @@ class ExportDispatcherUI(PipelineStepUI):
             self.log(f"Erro ao atualizar GCS: {e}", "error")
         finally:
             self.is_refreshing = False
-            self.btn_refresh.disabled = False
-            self.btn_refresh.description = "Atualizar GCS"
+            if self.btn_refresh:
+                self.btn_refresh.disabled = False
+                self.btn_refresh.description = "Atualizar GCS"
+            self.hide_loader()
 
     def get_selected(self): return [chk._meta for chk in self.chk_dict.values() if chk.value]
 

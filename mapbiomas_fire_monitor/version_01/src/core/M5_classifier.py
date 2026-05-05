@@ -269,10 +269,10 @@ def upload_classified_tile(local_path, year, month, tile_id,
     r_str = '_'.join(regions)
 
     if period == 'monthly':
-        folder = (f"{CONFIG['base_path']}/classifications/monthly/"
+        folder = (f"{CONFIG['gcs_classifications']}/monthly/"
                   f"{year}/{month:02d}")
     else:
-        folder = f"{CONFIG['base_path']}/classifications/yearly/{year}"
+        folder = f"{CONFIG['gcs_classifications']}/yearly/{year}"
 
     fname = f"{name}_{tile_id}_cog.tif"
     dest  = gcs_path(f"{folder}/{fname}")
@@ -387,7 +387,7 @@ def run_classification_campaign(year, months, regions, version,
                     )
 
                     # Guardar local
-                    name = classification_name(regions, version, year, month)
+                    name = classification_name(year, month, regions[0], version)
                     out_path = os.path.join(tmpdir, f"{name}_{tile_id}_cls.tif")
                     save_classification_tile(classified, profile, out_path)
 

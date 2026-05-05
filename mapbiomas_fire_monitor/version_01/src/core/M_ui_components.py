@@ -14,16 +14,49 @@ class PipelineStepUI:
         self.title = title
         self.description = description
         
-        self.header = widgets.HTML(
-            value=f"<h3 style='margin-bottom:0;'>{self.title}</h3>"
-                  f"<p style='color:#666; margin-top:5px;'>{self.description}</p>"
+        # Loader CSS
+        self.loader_html = widgets.HTML(
+            value='''
+            <div id="mfm-loader" style="display:none; align-items:center; margin-left:15px;">
+                <div class="spinner"></div>
+                <span style="margin-left:8px; font-size:11px; color:#666;">Processando...</span>
+            </div>
+            <style>
+            .spinner {
+                border: 3px solid #f3f3f3;
+                border-top: 3px solid #3498db;
+                border-radius: 50%;
+                width: 16px;
+                height: 16px;
+                animation: mfm-spin 1s linear infinite;
+                display: inline-block;
+                vertical-align: middle;
+            }
+            @keyframes mfm-spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            </style>
+            '''
+        )
+        
+        self.header_title = widgets.HTML(
+            value=f"<h3 style='margin-bottom:0; display:inline-block;'>{self.title}</h3>",
+            layout=widgets.Layout(margin='0')
+        )
+        
+        self.header_box = widgets.HBox([self.header_title, self.loader_html], layout=widgets.Layout(align_items='center'))
+        
+        self.header_desc = widgets.HTML(
+            value=f"<p style='color:#666; margin-top:5px;'>{self.description}</p>"
         )
         
         self.main_area = widgets.VBox()
-        self.log_output = widgets.Output() # Logs podem continuar no Output para facilitar scroll/async
+        self.log_output = widgets.Output() 
         
         self.container = widgets.VBox([
-            self.header,
+            self.header_box,
+            self.header_desc,
             self.main_area,
             self.log_output
         ], layout=widgets.Layout(
@@ -37,6 +70,18 @@ class PipelineStepUI:
         """Renderiza o componente no notebook."""
         display(self.container)
         
+    def show_loader(self, message="Processando..."):
+        """Mostra o spinner de carregamento."""
+        self.loader_html.value = self.loader_html.value.replace('display:none', 'display:flex')
+        if message:
+            # Atualiza a mensagem se necessário (usando regex ou substituição simples)
+            import re
+            self.loader_html.value = re.sub(r'<span>.*?</span>', f'<span>{message}</span>', self.loader_html.value)
+
+    def hide_loader(self):
+        """Esconde o spinner de carregamento."""
+        self.loader_html.value = self.loader_html.value.replace('display:flex', 'display:none')
+
     def log(self, message, type="info"):
         """Adiciona uma mensagem textualmente formatada no Output de Logs."""
         color = "black"

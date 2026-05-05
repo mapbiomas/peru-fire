@@ -217,8 +217,10 @@ def get_quality_mosaic(sensor, year, start_date, end_date, bounds, month=None):
     
     full = spectral.addBands(doy).clip(bounds)
     
-    # Aplica máscara de buffer dos focos de calor INPE (apenas mosaicos mensais)
-    full = apply_inpe_buffer_mask(full, year, month)
+    # Aplica máscara de buffer dos focos de calor INPE (apenas mosaicos mensais e se habilitado)
+    from M0_auth_config import GLOBAL_OPTS
+    if GLOBAL_OPTS.get('FIRE_POTENTIAL_FILTER', False):
+        full = apply_inpe_buffer_mask(full, year, month)
     
     return full
 

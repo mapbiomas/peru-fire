@@ -63,6 +63,18 @@ var L = (function () {
             lbl_area: 'Área (ha)',
             lbl_count: 'Cant.',
             lbl_satellites_toggle: 'Satélites',
+            lbl_vis_preset: 'Visualización',
+            opt_rgb_fire: '[SWIR1/NIR/RED]',
+            opt_rgb_false: '[NIR/SWIR1/RED]',
+            opt_rgb_natural: '[RED/GREEN/BLUE]',
+            opt_gray_nir: 'NIR',
+            opt_gray_swir1: 'SWIR1',
+            opt_gray_swir2: 'SWIR2',
+            opt_gray_nbr: 'NBR',
+            opt_gray_ndvi: 'NDVI',
+            opt_rgb_swir_alt: '[SWIR2/SWIR1/NIR]',
+            cab_satellites: '🛰️ Satélite',
+            cab_reference: '📚 Referencia',
             loading: '🔄️'
         },
         pt: {
@@ -116,6 +128,18 @@ var L = (function () {
             lbl_area: 'Área (ha)',
             lbl_count: 'Qtd.',
             lbl_satellites_toggle: 'Satélites',
+            lbl_vis_preset: 'Visualização',
+            opt_rgb_fire: '[SWIR1/NIR/RED]',
+            opt_rgb_false: '[NIR/SWIR1/RED]',
+            opt_rgb_natural: '[RED/GREEN/BLUE]',
+            opt_gray_nir: 'NIR',
+            opt_gray_swir1: 'SWIR1',
+            opt_gray_swir2: 'SWIR2',
+            opt_gray_nbr: 'NBR',
+            opt_gray_ndvi: 'NDVI',
+            opt_rgb_swir_alt: '[SWIR2/SWIR1/NIR]',
+            cab_satellites: '🛰️ Satélite',
+            cab_reference: '📚 Referência',
             loading: '🔄️'
         },
         en: {
@@ -169,6 +193,18 @@ var L = (function () {
             lbl_area: 'Area (ha)',
             lbl_count: 'Qty.',
             lbl_satellites_toggle: 'Satellites',
+            lbl_vis_preset: 'Visualization',
+            opt_rgb_fire: '[SWIR1/NIR/RED]',
+            opt_rgb_false: '[NIR/SWIR1/RED]',
+            opt_rgb_natural: '[RED/GREEN/BLUE]',
+            opt_gray_nir: 'NIR',
+            opt_gray_swir1: 'SWIR1',
+            opt_gray_swir2: 'SWIR2',
+            opt_gray_nbr: 'NBR',
+            opt_gray_ndvi: 'NDVI',
+            opt_rgb_swir_alt: '[SWIR2/SWIR1/NIR]',
+            cab_satellites: '🛰️ Satellite',
+            cab_reference: '📚 Reference',
             loading: '🔄️'
         }
     };
@@ -203,8 +239,21 @@ var countryConfigs = {
 var current_regiones = ee.FeatureCollection(countryConfigs['Peru'].asset_regions);
 
 // --- VISUALIZATION SETTINGS ---
-var visAsset = { bands: ['swir1', 'nir', 'red'], min: 3, max: 40 };
-var visRaw = { bands: ['swir1', 'nir', 'red'], min: 3, max: 40 };
+var VIS_PRESETS = {
+    'fire': { bands: ['swir1', 'nir', 'red'], min: 3, max: 40 },
+    'false': { bands: ['nir', 'swir1', 'red'], min: 3, max: 40 },
+    'swir_alt': { bands: ['swir2', 'swir1', 'nir'], min: 3, max: 40 },
+    'natural': { bands: ['red', 'green', 'blue'], min: 3, max: 40 },
+    'nir': { bands: ['nir'], min: 3, max: 40 },
+    'swir1': { bands: ['swir1'], min: 3, max: 40 },
+    'swir2': { bands: ['swir2'], min: 3, max: 40 },
+    'nbr': { bands: ['nbr'], min: -0.5, max: 0.5 },
+    'ndvi': { bands: ['ndvi'], min: -0.5, max: 0.5 }
+};
+
+var currentVisMode = 'fire';
+var visAsset = VIS_PRESETS[currentVisMode];
+var visRaw = VIS_PRESETS[currentVisMode];
 
 var managedLayers = {};
 var rawCheckboxes = {};
@@ -408,16 +457,29 @@ function user_interface() {
 
     function getSelectedPeriods() {
         var periods = [];
+        if (typeof periodCheckboxes === 'undefined') return [];
         Object.keys(periodCheckboxes).forEach(function (k) {
             if (periodCheckboxes[k].getValue()) periods.push(k);
         });
         return periods;
     }
 
+    function getSelectedVis() {
+        var selected = [];
+        if (typeof visCheckboxes === 'undefined') return [];
+        Object.keys(visCheckboxes).forEach(function (k) {
+            if (visCheckboxes[k].getValue()) selected.push(k);
+        });
+        return selected;
+    }
+
     function updateMosaic() {
         var checkedPeriods = getSelectedPeriods();
+        var checkedVisKeys = getSelectedVis();
         var pais = getSelectedCountry().toLowerCase();
-        var bands = ['swir1', 'nir', 'red'];
+
+        // Base bands needed for loading
+        var baseBands = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2'];
 
         // Lógica de Regiões Selecionadas
         var selectedNames = [];
@@ -441,60 +503,87 @@ function user_interface() {
             var end = month ? start.advance(1, 'month') : start.advance(1, 'year');
             var folderPeriod = month ? 'MONTHLY' : 'ANNUAL';
 
-            // --- GESTÃO DE ASSETS (Mosaicos Oficiais) ---
-            if (assetCheckboxes['sentinel2'] && assetCheckboxes['sentinel2'].getValue()) {
-                var layerId = 'asset_s2_' + dateStr;
-                desiredLayerIds.push(layerId);
-                var name = 'sentinel2_fire_' + pais + '_' + dateStr;
-                var imgAsset = ee.Image().select();
-                try {
-                    bands.forEach(function (b) {
-                        var colId = 'projects/mapbiomas-mosaics/assets/FIRE/SENTINEL2/' + folderPeriod + '/' + b + '/' + name + '_' + b;
-                        imgAsset = imgAsset.addBands(ee.Image(colId));
-                    });
-                    updateManagedLayer(layerId, imgAsset.select(bands).updateMask(spatialMask), visAsset, 'Asset S2 - ' + dateStr);
-                } catch (e) {
-                    updateManagedLayer(layerId, ee.Image().select(), {}, 'Asset S2 - ' + dateStr + ' [Err]');
-                }
-            }
+            checkedVisKeys.forEach(function (visKey) {
+                var vis = VIS_PRESETS[visKey];
+                var requestedBands = vis.bands;
+                var visSuffix = ' [' + visKey.toUpperCase() + ']';
 
-            // --- GESTÃO DE RAW ---
-            ['sentinel2', 'landsat', 'modis', 'hls', 'planet'].forEach(function (s) {
-                if (rawCheckboxes[s] && rawCheckboxes[s].getValue()) {
-                    var layerId = 'raw_' + s + '_' + dateStr;
-                    desiredLayerIds.push(layerId);
-
-                    if (s === 'planet') {
-                        var planetCol = ee.ImageCollection('projects/planet-nicfi/assets/basemaps/americas')
-                            .filterDate(start, end).filterBounds(bounds)
-                            .map(function (img) { return img.select(['B', 'G', 'R', 'N'], ['blue', 'green', 'red', 'nir']); });
-                        updateManagedLayer(layerId, planetCol.mosaic().select(['red', 'green', 'blue']).updateMask(spatialMask), { "opacity": 1, "bands": ["red", "green", "blue"], "min": 125, "max": 1858, "gamma": 1 }, 'Planet - ' + dateStr);
-                        return;
+                // --- GESTÃO DE ASSETS (Mosaicos Oficiais) ---
+                ['sentinel2', 'sentinel2_buffer'].forEach(function (s) {
+                    if (assetCheckboxes[s] && assetCheckboxes[s].getValue()) {
+                        var layerId = 'asset_' + s + '_' + dateStr + '_' + visKey;
+                        desiredLayerIds.push(layerId);
+                        
+                        var isBuffer = s.indexOf('buffer') !== -1;
+                        var sensorFolder = isBuffer ? 'SENTINEL2_BUFFER' : 'SENTINEL2';
+                        var prefix = isBuffer ? 'sentinel2_buffer' : 'sentinel2';
+                        var name = prefix + '_fire_' + pais + '_' + dateStr;
+                        var imgAsset = ee.Image().select();
+                        try {
+                            baseBands.forEach(function (b) {
+                                var colId = 'projects/mapbiomas-mosaics/assets/FIRE/' + sensorFolder + '/' + folderPeriod + '/' + b + '/' + name + '_' + b;
+                                imgAsset = imgAsset.addBands(ee.Image(colId));
+                            });
+                            imgAsset = addIndices(imgAsset);
+                            var label = (isBuffer ? 'Asset S2 Buffer - ' : 'Asset S2 - ') + dateStr + visSuffix;
+                            updateManagedLayer(layerId, imgAsset.select(requestedBands).updateMask(spatialMask), vis, label);
+                        } catch (e) {
+                            updateManagedLayer(layerId, ee.Image().select(), {}, 'Asset ' + s + ' - ' + dateStr + ' [Err]');
+                        }
                     }
+                });
 
-                    var rawCol = ee.ImageCollection([]);
-                    var multiplier = 100;
-                    if (s === 'landsat') {
-                        var sensor_logic = { '1984_1998': ['L5'], '1999_2012': ['L5', 'L7'], '2013_2021': ['L7', 'L8'], '2022_2026': ['L8', 'L9'] };
-                        var current_constellation = year < 1999 ? sensor_logic['1984_1998'] : year <= 2012 ? sensor_logic['1999_2012'] : year <= 2021 ? sensor_logic['2013_2021'] : sensor_logic['2022_2026'];
-                        if (current_constellation.indexOf('L9') !== -1) rawCol = rawCol.merge(ee.ImageCollection("LANDSAT/LC09/C02/T1_L2").filterDate(start, end).filterBounds(bounds).map(processLS89));
-                        if (current_constellation.indexOf('L8') !== -1) rawCol = rawCol.merge(ee.ImageCollection("LANDSAT/LC08/C02/T1_L2").filterDate(start, end).filterBounds(bounds).map(processLS89));
-                        if (current_constellation.indexOf('L7') !== -1) rawCol = rawCol.merge(ee.ImageCollection("LANDSAT/LE07/C02/T1_L2").filterDate(start, end).filterBounds(bounds).map(processLS57));
-                        if (current_constellation.indexOf('L5') !== -1) rawCol = rawCol.merge(ee.ImageCollection("LANDSAT/LT05/C02/T1_L2").filterDate(start, end).filterBounds(bounds).map(processLS57));
-                    } else if (s === 'sentinel2') {
-                        rawCol = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED").filterDate(start, end).filterBounds(bounds).linkCollection(ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'), ['cs']).map(processS2);
-                        multiplier = 0.01;
-                    } else if (s === 'modis') {
-                        rawCol = ee.ImageCollection("MODIS/061/MOD09A1") // Terra
-                            // .merge(ee.ImageCollection("MODIS/061/MYD09A1")) // Aqua (comentado)
-                            .filterDate(start, end).filterBounds(bounds).map(processMODIS);
-                        multiplier = 0.01;
-                    } else if (s === 'hls') {
-                        rawCol = ee.ImageCollection("NASA/HLS/HLSS30/v002").filterDate(start, end).filterBounds(bounds).map(processHLS_S30).merge(ee.ImageCollection("NASA/HLS/HLSL30/v002").filterDate(start, end).filterBounds(bounds).map(processHLS_L30));
+                // --- GESTÃO DE RAW ---
+                ['sentinel2', 'landsat', 'modis', 'hls', 'planet'].forEach(function (s) {
+                    if (rawCheckboxes[s] && rawCheckboxes[s].getValue()) {
+                        var layerId = 'raw_' + s + '_' + dateStr + '_' + visKey;
+                        desiredLayerIds.push(layerId);
+
+                        if (s === 'planet') {
+                            var planetCol = ee.ImageCollection('projects/planet-nicfi/assets/basemaps/americas')
+                                .filterDate(start, end).filterBounds(bounds)
+                                .map(function (img) { return img.select(['B', 'G', 'R', 'N'], ['blue', 'green', 'red', 'nir']); });
+
+                            var planetImg = planetCol.mosaic();
+                            var planetVis = { "opacity": 1, "bands": ["red", "green", "blue"], "min": 125, "max": 1858, "gamma": 1 };
+                            var planetBands = ["red", "green", "blue"];
+
+                            // Fallback for Planet if SWIR is requested
+                            if (requestedBands.indexOf('swir1') === -1 && requestedBands.indexOf('swir2') === -1 && requestedBands.indexOf('nbr') === -1) {
+                                planetImg = addIndices(planetImg);
+                                planetVis = vis;
+                                planetBands = requestedBands;
+                            }
+
+                            updateManagedLayer(layerId, planetImg.select(planetBands).updateMask(spatialMask), planetVis, 'Planet - ' + dateStr + visSuffix);
+                            return;
+                        }
+
+                        var rawCol = ee.ImageCollection([]);
+                        var multiplier = 100;
+                        if (s === 'landsat') {
+                            var sensor_logic = { '1984_1998': ['L5'], '1999_2012': ['L5', 'L7'], '2013_2021': ['L7', 'L8'], '2022_2026': ['L8', 'L9'] };
+                            var current_constellation = year < 1999 ? sensor_logic['1984_1998'] : year <= 2012 ? sensor_logic['1999_2012'] : year <= 2021 ? sensor_logic['2013_2021'] : sensor_logic['2022_2026'];
+                            if (current_constellation.indexOf('L9') !== -1) rawCol = rawCol.merge(ee.ImageCollection("LANDSAT/LC09/C02/T1_L2").filterDate(start, end).filterBounds(bounds).map(processLS89));
+                            if (current_constellation.indexOf('L8') !== -1) rawCol = rawCol.merge(ee.ImageCollection("LANDSAT/LC08/C02/T1_L2").filterDate(start, end).filterBounds(bounds).map(processLS89));
+                            if (current_constellation.indexOf('L7') !== -1) rawCol = rawCol.merge(ee.ImageCollection("LANDSAT/LE07/C02/T1_L2").filterDate(start, end).filterBounds(bounds).map(processLS57));
+                            if (current_constellation.indexOf('L5') !== -1) rawCol = rawCol.merge(ee.ImageCollection("LANDSAT/LT05/C02/T1_L2").filterDate(start, end).filterBounds(bounds).map(processLS57));
+                        } else if (s === 'sentinel2') {
+                            rawCol = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED").filterDate(start, end).filterBounds(bounds).linkCollection(ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'), ['cs']).map(processS2);
+                            multiplier = 0.01;
+                        } else if (s === 'modis') {
+                            rawCol = ee.ImageCollection("MODIS/061/MOD09A1") // Terra
+                                // .merge(ee.ImageCollection("MODIS/061/MYD09A1")) // Aqua (comentado)
+                                .filterDate(start, end).filterBounds(bounds).map(processMODIS);
+                            multiplier = 0.01;
+                        } else if (s === 'hls') {
+                            rawCol = ee.ImageCollection("NASA/HLS/HLSS30/v002").filterDate(start, end).filterBounds(bounds).map(processHLS_S30).merge(ee.ImageCollection("NASA/HLS/HLSL30/v002").filterDate(start, end).filterBounds(bounds).map(processHLS_L30));
+                        }
+                        var spectral = rawCol.qualityMosaic('nbr').select(['blue', 'green', 'red', 'nir', 'swir1', 'swir2']).multiply(multiplier);
+                        spectral = addIndices(spectral);
+                        updateManagedLayer(layerId, spectral.select(requestedBands).updateMask(spatialMask), vis, 'Raw ' + s + ' - ' + dateStr + visSuffix);
                     }
-                    var spectral = rawCol.qualityMosaic('nbr').select(['blue', 'green', 'red', 'nir', 'swir1', 'swir2']).multiply(multiplier).byte();
-                    updateManagedLayer(layerId, spectral.select(bands).updateMask(spatialMask), visRaw, 'Raw ' + s + ' - ' + dateStr);
-                }
+                });
             });
 
             // --- GESTÃO DE REFERÊNCIA ---
@@ -769,15 +858,16 @@ function user_interface() {
     // ==========================================
     // CARD 1: FILTROS
     // ==========================================
-    function createCabinet(title, isOpen) {
-        var panel = ui.Panel({ style: { margin: '4px 0px', padding: '2px', border: '1px solid #dcdcdc', borderRadius: '4px', backgroundColor: '#fdfdfd' } });
+    function createCabinet(title, isOpen, customMargin) {
+        var panel = ui.Panel({ style: { margin: customMargin || '4px 0px', padding: '2px', border: '1px solid #dcdcdc', borderRadius: '4px', backgroundColor: '#fdfdfd' } });
         var content = ui.Panel({ style: { margin: '0px', padding: '0px', backgroundColor: '#fdfdfd' } });
         var header = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: { margin: '2px 0px', padding: '1px', backgroundColor: '#f0f0f0', border: '1px solid #ddd' } });
 
         var iconKey = isOpen ? 'arraw_v' : 'arraw_>';
         var toggleBtn = ui.Button({ imageUrl: b64.get(iconKey), style: { margin: '0px', padding: '0px', backgroundColor: 'ffffff00' } });
 
-        header.add(toggleBtn).add(ui.Label(title, { fontSize: '18px', fontWeight: 'bold', margin: '1px 4px', color: '#444', backgroundColor: 'ffffff00' }));
+        var fontSize = customMargin ? '15px' : '18px';
+        header.add(toggleBtn).add(ui.Label(title, { fontSize: fontSize, fontWeight: 'bold', margin: '1px 4px', color: '#444', backgroundColor: 'ffffff00' }));
         panel.add(header).add(content);
         content.style().set('shown', isOpen);
         toggleBtn.onClick(function () {
@@ -891,6 +981,10 @@ function user_interface() {
     var cabLayers = createCabinet(L.cab_layers, true);
     panel_control.add(cabLayers.panel);
 
+    var subCabSat = createCabinet(L.cab_satellites, true, '2px 2px 2px 10px');
+    var subCabRef = createCabinet(L.cab_reference, false, '2px 2px 2px 10px');
+    cabLayers.content.add(subCabSat.panel).add(subCabRef.panel);
+
     // 1. Define sub-drawers for Reference
     var extraCheckboxes = {};
     var drawerAQ = createLayerDrawer(L.lbl_burned, [
@@ -904,10 +998,27 @@ function user_interface() {
         { id: 'hotspots_inpe', label: 'Hotspots INPE', value: false }
     ]);
     drawerAQ.panel.style().set('shown', true); drawerFocos.panel.style().set('shown', true);
+    subCabRef.content.add(drawerAQ.panel).add(drawerFocos.panel);
 
     // 2. Define sub-drawers for Satellites
+    var drawerVis = createLayerDrawer(L.lbl_vis_preset, [
+        { id: 'fire', label: L.opt_rgb_fire, value: true },
+        { id: 'false', label: L.opt_rgb_false, value: false },
+        { id: 'swir_alt', label: L.opt_rgb_swir_alt, value: false },
+        { id: 'natural', label: L.opt_rgb_natural, value: false },
+        { id: 'nir', label: L.opt_gray_nir, value: false },
+        { id: 'swir1', label: L.opt_gray_swir1, value: false },
+        { id: 'swir2', label: L.opt_gray_swir2, value: false },
+        { id: 'nbr', label: L.opt_gray_nbr, value: false },
+        { id: 'ndvi', label: L.opt_gray_ndvi, value: false }
+    ]);
+    var visCheckboxes = drawerVis.checkboxes;
+
+    subCabSat.content.add(drawerVis.panel);
+
     var drawerAsset = createLayerDrawer(L.lbl_asset_mosaics, [
-        { id: 'sentinel2', label: 'Sentinel2', value: true }
+        { id: 'sentinel2', label: 'Sentinel2', value: false },
+        { id: 'sentinel2_buffer', label: 'Sentinel2 Buffer', value: true }
     ]);
     var assetCheckboxes = drawerAsset.checkboxes;
 
@@ -920,18 +1031,7 @@ function user_interface() {
     ]);
     rawCheckboxes = drawerRaw.checkboxes;
 
-    // 3. Define the main toggle drawer (now includes Satellites)
-    var drawerRefToggle = createLayerDrawer(L.lbl_ref_cats, [
-        { id: 'aq', label: L.lbl_burned, value: true, onChange: function (v) { drawerAQ.panel.style().set('shown', v); } },
-        { id: 'focos', label: L.lbl_hotspots, value: true, onChange: function (v) { drawerFocos.panel.style().set('shown', v); } },
-        { id: 'sats', label: L.lbl_satellites_toggle, value: true, onChange: function (v) { drawerAsset.panel.style().set('shown', v); drawerRaw.panel.style().set('shown', v); } }
-    ]);
-
-    // 4. Add to cabinet in the desired order
-    cabLayers.content.add(drawerRefToggle.panel);
-    cabLayers.content.add(drawerAsset.panel);
-    cabLayers.content.add(drawerRaw.panel);
-    cabLayers.content.add(drawerAQ.panel).add(drawerFocos.panel);
+    subCabSat.content.add(drawerAsset.panel).add(drawerRaw.panel);
 
     // Mesclar os checkboxes para o gerenciamento global
     Object.keys(drawerAQ.checkboxes).forEach(function (k) { extraCheckboxes[k] = drawerAQ.checkboxes[k]; });
@@ -1297,6 +1397,12 @@ function bitwiseExtract(value, fromBit, toBit) {
     var maskSize = ee.Number(1).add(toBit).subtract(fromBit);
     var mask = ee.Number(1).leftShift(maskSize).subtract(1);
     return value.rightShift(fromBit).bitwiseAnd(mask);
+}
+
+function addIndices(image) {
+    var ndvi = image.normalizedDifference(['nir', 'red']).rename('ndvi');
+    var nbr = image.normalizedDifference(['nir', 'swir2']).rename('nbr');
+    return image.addBands([ndvi, nbr]);
 }
 
 function addBand_NBR(image) {

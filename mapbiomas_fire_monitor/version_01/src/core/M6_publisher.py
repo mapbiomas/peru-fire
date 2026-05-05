@@ -99,13 +99,13 @@ def assemble_classified_mosaic(year, month, regions, version,
     name  = classification_name(regions, version, year, month)
 
     if period == 'monthly':
-        chunk_folder  = (f"{CONFIG['base_path']}/classifications/monthly/"
+        chunk_folder  = (f"{CONFIG['gcs_classifications']}/monthly/"
                          f"{year}/{month:02d}")
-        mosaic_folder = (f"{CONFIG['base_path']}/classifications/monthly/"
+        mosaic_folder = (f"{CONFIG['gcs_classifications']}/monthly/"
                          f"{year}/{month:02d}/mosaics")
     else:
-        chunk_folder  = f"{CONFIG['base_path']}/classifications/yearly/{year}"
-        mosaic_folder = f"{CONFIG['base_path']}/classifications/yearly/{year}/mosaics"
+        chunk_folder  = f"{CONFIG['gcs_classifications']}/yearly/{year}"
+        mosaic_folder = f"{CONFIG['gcs_classifications']}/yearly/{year}/mosaics"
 
     version_tag = f"{name}_draft" if draft else name
 
@@ -278,8 +278,8 @@ def start_filtering(ui):
         # Aquí reconstruimos el acceso y exportamos filt_
         # (Para una integración completa GEE requiere LoadGeoTIFF o Asset)
         
-        yymm = f"{str(year)[-2:]}{month:02d}"
-        source_name = f"klass_{CONFIG.get('country', 'peru')}_{region}_{model_id}_{yymm}"
+        yymm = f"{year}_{month:02d}"
+        source_name = classification_name(year, month, region, model_id)
         out_name = f"filt_{CONFIG.get('country', 'peru')}_{region}_{model_id}_{yymm}"
         
         print(f"    - Obteniendo: {source_name}")
@@ -290,7 +290,7 @@ def start_filtering(ui):
         
         # Fake task submission print since true loadGeoTiff requires Google Cloud Storage URIs
         desc = f"Export_{out_name}"
-        dest_prefix = f"{CONFIG['base_path']}/filtered/{year}/{month:02d}/{out_name}"
+        dest_prefix = f"{CONFIG['gcs_filtered']}/{year}/{month:02d}/{out_name}"
         
         print(f"    ✅ Tarea exportación iniciada: GCS {dest_prefix}")
         

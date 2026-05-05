@@ -333,8 +333,8 @@ def generate_analytics(model_info, out_widget=None):
     if out_widget:
         with out_widget:
             clear_output()
-            print(f"Iniciando análise profunda para: {model_info['version']} / {model_info['region']}")
-            print("Baixando dados (X_data, y_data, weights)...")
+            print(f"Iniciando análisis profundo para: {model_info['version']} / {model_info['region']}")
+            print("Descargando datos (X_data, y_data, weights)...")
             
     with tempfile.TemporaryDirectory() as tmpdir:
         for fname in ['extracted_pixels/X_data.npy', 'extracted_pixels/y_data.npy', 'metadata.json', 'weights.npz']:
@@ -344,7 +344,7 @@ def generate_analytics(model_info, out_widget=None):
                 subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except:
                 if out_widget:
-                    with out_widget: print(f"Erro: Não foi possível baixar {fname}")
+                    with out_widget: print(f"Error: No fue posible descargar {fname}")
                 return
                 
         X = np.load(os.path.join(tmpdir, 'extracted_pixels_X_data.npy'))
@@ -353,7 +353,7 @@ def generate_analytics(model_info, out_widget=None):
             hp = json.load(f)
             
         if out_widget:
-            with out_widget: print("Calculando matriz de confusão e relatório...")
+            with out_widget: print("Calculando matriz de confusión y reporte...")
             
         stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
         X_norm = normalize(X, stats)
@@ -386,22 +386,22 @@ def generate_analytics(model_info, out_widget=None):
         
         if out_widget:
             with out_widget:
-                print("✅ Análises salvas em metrics.json no GCS!")
+                print("✅ ¡Análisis guardados en metrics.json en GCS!")
                 fig, ax = plt.subplots(figsize=(5, 4))
                 cax = ax.matshow(cm, cmap='Blues', alpha=0.8)
                 fig.colorbar(cax)
                 for (i, j), z in np.ndenumerate(cm):
                     ax.text(j, i, f'{z:d}', ha='center', va='center', weight='bold', color='black')
-                ax.set_title('Matriz de Confusão (Todos os Dados)', pad=15)
-                ax.set_xlabel('Predição (0=Não-fogo, 1=Fogo)')
-                ax.set_ylabel('Realidade')
+                ax.set_title('Matriz de Confusión (Todos los Datos)', pad=15)
+                ax.set_xlabel('Predicción (0=No-fuego, 1=Fuego)')
+                ax.set_ylabel('Realidad')
                 plt.show()
 
 class ModelTrainerUI(PipelineStepUI):
     def __init__(self):
         super().__init__(
             title="M4 - Entrenador del Modelo (DNN)", 
-            description="Interface Matricial de Amostras, treinamento de rede neural e análises postergadas."
+            description="Interfaz Matricial de Muestras, entrenamiento de red neuronal y análisis postergados."
         )
         self.trainer_instance = None
         self.chk_dict = {}
@@ -420,25 +420,25 @@ class ModelTrainerUI(PipelineStepUI):
         samples_available = list_sample_collections_gcs()
         self.chk_dict = {}
         
-        self.btn_all = widgets.Button(description="Selecionar Todos", button_style='info', layout=L(width='155px'))
-        self.btn_none = widgets.Button(description="Limpar Seleção", button_style='info', layout=L(width='145px'))
-        self.btn_refresh = widgets.Button(description="Atualizar GCS", button_style='success', layout=L(width='150px'))
+        self.btn_all = widgets.Button(description="Seleccionar Todos", button_style='info', layout=L(width='155px'))
+        self.btn_none = widgets.Button(description="Limpiar Selección", button_style='info', layout=L(width='145px'))
+        self.btn_refresh = widgets.Button(description="Actualizar GCS", button_style='success', layout=L(width='150px'))
         
         self.btn_all.on_click(self._on_select_all)
         self.btn_none.on_click(self._on_select_none)
-        self.btn_refresh.on_click(lambda _: self._build_ui())
+        self.btn_refresh.on_click(lambda _: self._refresh_ui())
         
         toolbar = widgets.HBox([self.btn_all, self.btn_none, self.btn_refresh], layout=L(margin='0 0 10px 0'))
         
         css = PipelineStepUI.get_status_css()
         hdr = [
-            widgets.HTML('<span class="mfm-hdr">Nome da Amostra (GCS)</span>', layout=L(width='350px')),
-            widgets.HTML('<span class="mfm-hdr">Status / [S]</span>', layout=L(width='120px', text_align='center'))
+            widgets.HTML('<span class="mfm-hdr">Nombre de la Muestra (GCS)</span>', layout=L(width='350px')),
+            widgets.HTML('<span class="mfm-hdr">Estado / [S]</span>', layout=L(width='120px', text_align='center'))
         ]
         matrix_rows = [widgets.HBox(hdr, layout=L(border_bottom='2px solid #343a40', padding='8px 0'))]
         
         if not samples_available:
-            matrix_rows.append(widgets.HTML("<i>Nenhuma amostra encontrada no GCS.</i>", layout=L(padding='10px')))
+            matrix_rows.append(widgets.HTML("<i>Ninguna muestra encontrada en GCS.</i>", layout=L(padding='10px')))
         else:
             for s in samples_available:
                 chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
@@ -456,10 +456,15 @@ class ModelTrainerUI(PipelineStepUI):
         matrix = widgets.VBox(matrix_rows, layout=L(border='1px solid #dee2e6', padding='10px', max_height='300px', overflow_y='auto'))
         return widgets.VBox([css, toolbar, matrix])
 
+    def _refresh_ui(self):
+        self.show_loader("Actualizando lista de muestras...")
+        self._build_ui()
+        self.hide_loader()
+
     def _build_ui(self):
         L = widgets.Layout
         
-        # --- TAB 1: Configuração & Treinamento ---
+        # --- TAB 1: Configuración & Entrenamiento ---
         matrix_ui = self._build_matrix()
         
         band_items = []
@@ -469,30 +474,34 @@ class ModelTrainerUI(PipelineStepUI):
         self.band_checkboxes = dict(band_items)
         band_box = widgets.HBox([chk for _, chk in band_items], layout=L(flex_flow='row wrap', border='1px solid #dee2e6', padding='10px', border_radius='4px', margin='10px 0'))
         
-        self.w_iters = widgets.IntSlider(value=7000, min=1000, max=20000, step=500, description='Iterações:', style={'description_width': '150px'}, layout=L(width='400px'))
-        self.w_batch = widgets.IntSlider(value=1000, min=100, max=5000, step=100, description='Tamanho do Lote:', style={'description_width': '150px'}, layout=L(width='400px'))
-        self.w_lr = widgets.FloatText(value=0.001, description='Taxa de Aprendizado:', style={'description_width': '150px'}, layout=L(width='250px'))
-        self.w_layers = widgets.Text(value="7, 14, 7", description='Camadas Ocultas:', style={'description_width': '150px'}, tooltip="Ex: 128, 64, 32", layout=L(width='250px'))
+        self.w_iters = widgets.Text(value="7000", description='Iteraciones:', style={'description_width': '150px'}, layout=L(width='200px'))
+        lbl_iters = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Total de iteraciones de entrenamiento (Ej: 5000, 10000). Mayor = más entrenamiento.</span>")
+        box_iters = widgets.HBox([self.w_iters, lbl_iters], layout=L(align_items='center', margin='5px 0'))
         
-        hp_box = widgets.VBox([
-            widgets.HBox([self.w_iters, self.w_batch]), 
-            widgets.HBox([self.w_lr, self.w_layers])
-        ], layout=L(margin='10px 0'))
+        self.w_batch = widgets.Text(value="1000", description='Tamaño de Lote:', style={'description_width': '150px'}, layout=L(width='200px'))
+        lbl_batch = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Píxeles por iteración (Ej: 500, 1000). Controla el uso de memoria.</span>")
+        box_batch = widgets.HBox([self.w_batch, lbl_batch], layout=L(align_items='center', margin='5px 0'))
         
-        self.w_version = widgets.Text(value='v1', description='Versão:', style={'description_width': '80px'})
-        self.w_region = widgets.Text(value='peru_r1', description='Região:', style={'description_width': '80px'})
+        self.w_lr = widgets.Text(value="0.001", description='Tasa de Aprendizaje:', style={'description_width': '150px'}, layout=L(width='200px'))
+        lbl_lr = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Learning rate (Ej: 0.001, 0.01). Controla la velocidad de ajuste.</span>")
+        box_lr = widgets.HBox([self.w_lr, lbl_lr], layout=L(align_items='center', margin='5px 0'))
         
-        self.btn_extract_train = widgets.Button(description="Iniciar Treino Rápido & Salvar", button_style='primary', icon='rocket', layout=L(width='250px'))
-        self.btn_extract_train.on_click(self._on_train_clicked)
+        self.w_layers = widgets.Text(value="7, 14, 7", description='Capas Ocultas:', style={'description_width': '150px'}, layout=L(width='200px'))
+        lbl_layers = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Neuronas por capa, separadas por coma (Ej: 14, 28, 14).</span>")
+        box_layers = widgets.HBox([self.w_layers, lbl_layers], layout=L(align_items='center', margin='5px 0'))
+        
+        hp_box = widgets.VBox([box_iters, box_batch, box_lr, box_layers], layout=L(margin='10px 0'))
+        
+        self.w_version = widgets.Text(value='v1', description='Versión:', style={'description_width': '80px'})
+        self.w_region = widgets.Text(value='peru_r1', description='Nombre Corto:', style={'description_width': '100px'})
         
         tab_config = widgets.VBox([
-            widgets.HTML("<b>1. Seleção Múltipla de Dados (GCS)</b>"), matrix_ui,
-            widgets.HTML("<br><b>2. Variáveis Espectrais</b>"), band_box,
-            widgets.HTML("<b>3. Hiperparâmetros (DNN)</b>"), hp_box,
+            widgets.HTML("<b>1. Selección Múltiple de Datos (GCS)</b>"), matrix_ui,
+            widgets.HTML("<br><b>2. Variables Espectrales</b>"), band_box,
+            widgets.HTML("<b>3. Hiperparámetros (DNN)</b>"), hp_box,
             widgets.HTML("<hr style='margin:10px 0'>"),
-            widgets.HTML("<b>4. Destino Final no GCS</b>"),
-            widgets.HBox([self.w_version, self.w_region], layout=L(margin='10px 0')),
-            self.btn_extract_train
+            widgets.HTML("<b>4. Destino Final en GCS</b>"),
+            widgets.HBox([self.w_version, self.w_region], layout=L(margin='10px 0'))
         ], layout=L(padding='15px'))
         
         # --- TAB 2: Analytics & Monitoramento ---
@@ -501,17 +510,17 @@ class ModelTrainerUI(PipelineStepUI):
         self._refresh_models_list()
         
         tab_monitor = widgets.VBox([
-            widgets.HTML("<b>Treinamento Atual (Live)</b>"),
+            widgets.HTML("<b>Entrenamiento Actual (En vivo)</b>"),
             self.chart_output,
             widgets.HTML("<hr style='margin:15px 0'>"),
-            widgets.HTML("<b>Análises Complementares (Postergadas)</b>"),
-            widgets.HTML("<p style='font-size:11px;color:#666;'>Modelos prontos para análise profunda de matriz de confusão e importâncias.</p>"),
+            widgets.HTML("<b>Análisis Complementarios (Postergados)</b>"),
+            widgets.HTML("<p style='font-size:11px;color:#666;'>Modelos listos para análisis profundo de matriz de confusión e importancias.</p>"),
             self.analytics_area
         ], layout=L(padding='15px'))
         
         self.tabs = widgets.Tab(children=[tab_config, tab_monitor])
-        self.tabs.set_title(0, '⚙️ Configuração & Treinamento')
-        self.tabs.set_title(1, '📊 Monitoramento & Analytics')
+        self.tabs.set_title(0, '⚙️ Configuración & Entrenamiento')
+        self.tabs.set_title(1, '📊 Monitorización & Análisis')
         
         self.clear_main()
         self.main_area.children = [self.tabs]
@@ -525,9 +534,9 @@ class ModelTrainerUI(PipelineStepUI):
         items = []
         for m in models:
             has_metrics = fs.exists(f"{m['path']}/metrics.json")
-            status = "✅ Pronta" if has_metrics else "⏳ Pendente"
+            status = "✅ Lista" if has_metrics else "⏳ Pendente"
             btn = widgets.Button(
-                description="Gerar Análises" if not has_metrics else "Ver Análise", 
+                description="Generar Análisis" if not has_metrics else "Ver Análisis", 
                 button_style='info' if not has_metrics else 'success', 
                 icon='cogs' if not has_metrics else 'eye',
                 layout=widgets.Layout(width='150px')
@@ -548,74 +557,9 @@ class ModelTrainerUI(PipelineStepUI):
             items.append(row)
             
         if not items:
-            items = [widgets.HTML("<i>Nenhum modelo disponível no GCS.</i>")]
+            items = [widgets.HTML("<i>Ningún modelo disponible en GCS.</i>")]
             
         self.analytics_area.children = items
-
-    def _on_train_clicked(self, _):
-        selected_samples = [chk._meta for chk in self.chk_dict.values() if chk.value]
-        if not selected_samples:
-            self.log("Nenhuma amostra selecionada.", "error")
-            return
-            
-        self.tabs.selected_index = 1 
-        self.clear_logs()
-        self.chart_output.clear_output()
-        self.btn_extract_train.disabled = True
-        
-        bands = [b for b, chk in self.band_checkboxes.items() if chk.value]
-        layers = [int(x.strip()) for x in self.w_layers.value.split(',')]
-        
-        self.log(f"Extraindo píxeis de {len(selected_samples)} coleções. Aguarde...", "info")
-        
-        X, y = extract_pixels_from_gcs(selected_samples, bands, logger=self.log)
-        
-        if len(X) == 0:
-            self.log("Falha ao extrair píxeis.", "error")
-            self.btn_extract_train.disabled = False
-            return
-            
-        self.log(f"Sucesso: {len(X)} píxeis extraídos (Fogo: {y.sum()} | Não-fogo: {(y==0).sum()}).", "success")
-        
-        self.trainer_instance = ModelTrainer(num_input=len(bands), layers=layers, lr=self.w_lr.value)
-        self.trainer_instance._bands_input = bands
-        self.trainer_instance._sample_collections = selected_samples
-        self.trainer_instance._sample_count = {'burned': int(y.sum()), 'not_burned': int((y==0).sum())}
-        
-        self.log("Treinando DNN (Fast Mode)...", "warning")
-        
-        def update_chart(history):
-            with self.chart_output:
-                clear_output(wait=True)
-                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.5))
-                
-                ax1.plot(history['steps'], history['loss'], color='#d9534f', linewidth=2)
-                ax1.set_title('Função de Custo (Loss)', fontsize=10, weight='bold')
-                ax1.set_xlabel('Iteração', fontsize=9)
-                ax1.grid(True, linestyle='--', alpha=0.5)
-                
-                ax2.plot(history['steps'], history['acc'], color='#0275d8', label='Treino', linewidth=2)
-                ax2.plot(history['steps'], history['val_acc'], color='#5cb85c', label='Validação', linestyle='--', linewidth=2)
-                ax2.set_title('Acurácia', fontsize=10, weight='bold')
-                ax2.set_xlabel('Iteração', fontsize=9)
-                ax2.legend(fontsize=9)
-                ax2.grid(True, linestyle='--', alpha=0.5)
-                
-                plt.tight_layout()
-                plt.show()
-                
-        self.trainer_instance.train(X, y, batch_size=self.w_batch.value, n_iters=self.w_iters.value, logger=self.log, update_chart_fn=update_chart)
-        
-        self.log("Salvando estrutura (amostras, píxeis, metadados) no GCS...", "info")
-        try:
-            self.trainer_instance.save(self.w_version.value, self.w_region.value, logger=self.log)
-            self.log("Modelo salvo e pronto para uso no M5!", "success")
-            self.log("As análises profundas podem ser disparadas abaixo quando desejar.", "info")
-        except Exception as e:
-            self.log(f"Erro ao salvar: {e}", "error")
-            
-        self.btn_extract_train.disabled = False
-        self._refresh_models_list()
 
 def run_ui():
     ui = ModelTrainerUI()
@@ -623,4 +567,68 @@ def run_ui():
     return ui
 
 def start_training(ui):
-    pass
+    selected_samples = [chk._meta for chk in ui.chk_dict.values() if chk.value]
+    if not selected_samples:
+        print("Error: Ninguna muestra seleccionada.")
+        return
+        
+    ui.tabs.selected_index = 1 
+    ui.chart_output.clear_output()
+    
+    bands = [b for b, chk in ui.band_checkboxes.items() if chk.value]
+    layers = [int(x.strip()) for x in ui.w_layers.value.split(',')]
+    iters = int(ui.w_iters.value)
+    batch = int(ui.w_batch.value)
+    lr = float(ui.w_lr.value)
+    
+    print(f"Extrayendo píxeles de {len(selected_samples)} colecciones. Aguarde...")
+    
+    def _logger(msg, level="info"):
+        print(msg)
+        
+    X, y = extract_pixels_from_gcs(selected_samples, bands, logger=_logger)
+    
+    if len(X) == 0:
+        print("Fallo al extraer píxeles.")
+        return
+        
+    print(f"Éxito: {len(X)} píxeles extraídos (Fuego: {y.sum()} | No-fuego: {(y==0).sum()}).")
+    
+    ui.trainer_instance = ModelTrainer(num_input=len(bands), layers=layers, lr=lr)
+    ui.trainer_instance._bands_input = bands
+    ui.trainer_instance._sample_collections = selected_samples
+    ui.trainer_instance._sample_count = {'burned': int(y.sum()), 'not_burned': int((y==0).sum())}
+    
+    print("Entrenando DNN...")
+    
+    def update_chart(history):
+        with ui.chart_output:
+            clear_output(wait=True)
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.5))
+            
+            ax1.plot(history['steps'], history['loss'], color='#d9534f', linewidth=2)
+            ax1.set_title('Función de Costo (Loss)', fontsize=10, weight='bold')
+            ax1.set_xlabel('Iteración', fontsize=9)
+            ax1.grid(True, linestyle='--', alpha=0.5)
+            
+            ax2.plot(history['steps'], history['acc'], color='#0275d8', label='Entrenamiento', linewidth=2)
+            ax2.plot(history['steps'], history['val_acc'], color='#5cb85c', label='Validación', linestyle='--', linewidth=2)
+            ax2.set_title('Precisión', fontsize=10, weight='bold')
+            ax2.set_xlabel('Iteración', fontsize=9)
+            ax2.legend(fontsize=9)
+            ax2.grid(True, linestyle='--', alpha=0.5)
+            
+            plt.tight_layout()
+            plt.show()
+            
+    ui.trainer_instance.train(X, y, batch_size=batch, n_iters=iters, logger=_logger, update_chart_fn=update_chart)
+    
+    print("Guardando estructura (muestras, píxeles, metadatos) en GCS...")
+    try:
+        ui.trainer_instance.save(ui.w_version.value, ui.w_region.value, logger=_logger)
+        print("¡Modelo guardado y listo para usar en M5!")
+        print("Los análisis profundos pueden ser disparados en la pestaña superior cuando lo desee.")
+    except Exception as e:
+        print(f"Error al guardar: {e}")
+        
+    ui._refresh_models_list()
