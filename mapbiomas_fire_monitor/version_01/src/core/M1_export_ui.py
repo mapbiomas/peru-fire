@@ -25,11 +25,12 @@ class ExportDispatcherUI(PipelineStepUI):
         self.btn_refresh = None
         self.is_refreshing = False
         
-        self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
-        # A inicialização pesada foi movida para o run_ui para permitir exibir o loader
-    except Exception as e:
-        print(f"ERRO CRITICO NA INTERFACE: {e}")
-        traceback.print_exc()
+        try:
+            self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
+            # A inicialização pesada foi movida para o run_ui para permitir exibir o loader
+        except Exception as e:
+            print(f"ERRO CRITICO NA INTERFACE: {e}")
+            traceback.print_exc()
 
     def _init_data(self):
         self.sensor = GLOBAL_OPTS['SENSOR']

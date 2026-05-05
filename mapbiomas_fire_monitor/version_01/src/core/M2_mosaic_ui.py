@@ -19,10 +19,11 @@ class MosaicAssemblerUI(PipelineStepUI):
         self.requested_years = years
         self.is_refreshing = False
         
-        self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
-    except Exception as e:
-        print(f"ERRO CRITICO NA INTERFACE: {e}")
-        traceback.print_exc()
+        try:
+            self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
+        except Exception as e:
+            print(f"ERRO CRITICO NA INTERFACE: {e}")
+            traceback.print_exc()
 
     def _init_data(self):
         self.sensor = GLOBAL_OPTS['SENSOR']
