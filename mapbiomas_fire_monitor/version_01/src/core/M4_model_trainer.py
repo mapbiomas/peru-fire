@@ -676,7 +676,8 @@ class ModelTrainerUI(PipelineStepUI):
         # Ordem sugerida (Espectral) - Opcional e flexível
         BANDS_PRIORITY = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']
         
-        for (s, m), bands in sorted(available_combos.items()):
+        self.band_chk_map = {} # (sensor, mosaic, band) -> checkbox
+        matrix_rows = []
             label_text = f"{s.upper()} {m.replace('_', ' ').title()}"
             label_html = widgets.HTML(f'<div style="width:200px; font-weight:bold; color:#333; font-size:12px;">{label_text}</div>')
             
