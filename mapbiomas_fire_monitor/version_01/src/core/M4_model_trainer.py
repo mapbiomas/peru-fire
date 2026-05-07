@@ -562,57 +562,84 @@ class ModelTrainerUI(PipelineStepUI):
         )
         self.trainer_instance = None
         self.chk_dict = {}
+        self.search_query_samples = ""
         self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
-        # O _build_ui foi movido para o run_ui para permitir exibir o loader
 
-    def _on_select_all(self, _):
-        for chk in self.chk_dict.values():
-            if not chk.disabled: chk.value = True
+    def _on_select_all_samples(self, _):
+        """Seleciona apenas as amostras que estão visíveis pelo filtro."""
+        visible_keys = [s for s in self.chk_dict.keys() if self.search_query_samples.lower() in s.lower()]
+        for k in visible_keys:
+            self.chk_dict[k].value = True
 
-    def _on_select_none(self, _):
-        for chk in self.chk_dict.values():
-            if not chk.disabled: chk.value = False
+    def _on_select_none_samples(self, _):
+        """Limpa apenas as amostras que estão visíveis pelo filtro."""
+        visible_keys = [s for s in self.chk_dict.keys() if self.search_query_samples.lower() in s.lower()]
+        for k in visible_keys:
+            self.chk_dict[k].value = False
+
+    def _on_search_samples_change(self, change):
+        self.search_query_samples = change['new']
+        self._refresh_matrix_only()
+
+    def _refresh_matrix_only(self):
+        new_matrix = self._build_matrix_content()
+        self.matrix_container.children = [new_matrix]
+
+    def _build_matrix_content(self):
+        """Constrói apenas a lista de linhas filtradas."""
+        L = widgets.Layout
+        samples_available = list_sample_collections_gcs()
+        matrix_rows = []
+        
+        for s in samples_available:
+            if self.search_query_samples and self.search_query_samples.lower() not in s.lower():
+                continue
+                
+            if s not in self.chk_dict:
+                self.chk_dict[s] = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
+            
+            chk = self.chk_dict[s]
+            status_cell = PipelineStepUI.make_status_cell(chk, 'OK', 'mfm-ok', width='120px')
+            
+            row = widgets.HBox([
+                widgets.HTML(f'<div style="width:350px;font-family:monospace;">{s}</div>'),
+                status_cell
+            ], layout=L(align_items='center', margin='2px 0', border_bottom='1px solid #dee2e6'))
+            matrix_rows.append(row)
+            
+        if not matrix_rows:
+            return widgets.HTML('<div style="padding:10px; color:#999;"><i>Nenhuma amostra encontrada com este filtro.</i></div>')
+            
+        return widgets.VBox(matrix_rows)
 
     def _build_matrix(self):
         L = widgets.Layout
-        samples_available = list_sample_collections_gcs()
-        self.chk_dict = {}
-        
-        self.btn_all = widgets.Button(description="Seleccionar Todos", button_style='info', layout=L(width='155px'))
-        self.btn_none = widgets.Button(description="Limpiar Selección", button_style='info', layout=L(width='145px'))
-        self.btn_refresh = widgets.Button(description="Actualizar GCS", button_style='success', layout=L(width='150px'))
-        
-        self.btn_all.on_click(self._on_select_all)
-        self.btn_none.on_click(self._on_select_none)
-        self.btn_refresh.on_click(lambda _: self._refresh_ui())
-        
-        toolbar = widgets.HBox([self.btn_all, self.btn_none, self.btn_refresh], layout=L(margin='0 0 10px 0'))
-        
         css = PipelineStepUI.get_status_css()
-        hdr = [
-            widgets.HTML('<span class="mfm-hdr">Nombre de la Muestra (GCS)</span>', layout=L(width='350px')),
-            widgets.HTML('<span class="mfm-hdr">Estado / [S]</span>', layout=L(width='120px', text_align='center'))
-        ]
-        matrix_rows = [widgets.HBox(hdr, layout=L(border_bottom='2px solid #343a40', padding='8px 0'))]
         
-        if not samples_available:
-            matrix_rows.append(widgets.HTML("<i>Ninguna muestra encontrada en GCS.</i>", layout=L(padding='10px')))
-        else:
-            for s in samples_available:
-                chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
-                chk._meta = s
-                self.chk_dict[s] = chk
-                
-                status_cell = PipelineStepUI.make_status_cell(chk, 'OK', 'mfm-ok', width='120px')
-                
-                row = widgets.HBox([
-                    widgets.HTML(f'<div style="width:350px;font-family:monospace;">{s}</div>'),
-                    status_cell
-                ], layout=L(align_items='center', margin='2px 0', border_bottom='1px solid #dee2e6'))
-                matrix_rows.append(row)
-                
-        matrix = widgets.VBox(matrix_rows, layout=L(border='1px solid #dee2e6', padding='10px', max_height='300px', overflow_y='auto'))
-        return widgets.VBox([css, toolbar, matrix])
+        # BARRA DE BUSCA
+        self.txt_search_samples = widgets.Text(
+            value=self.search_query_samples,
+            placeholder='Buscar amostras (ex: r10)...',
+            layout=L(width='300px')
+        )
+        self.txt_search_samples.observe(self._on_search_samples_change, names='value')
+
+        btn_all = widgets.Button(description="Selecionar Filtradas", button_style='info', icon='check-square', layout=L(width='180px'))
+        btn_none = widgets.Button(description="Limpar Filtradas", button_style='warning', icon='square-o', layout=L(width='180px'))
+        btn_refresh = widgets.Button(description="", button_style='success', icon='refresh', layout=L(width='40px'))
+        
+        btn_all.on_click(self._on_select_all_samples)
+        btn_none.on_click(self._on_select_none_samples)
+        btn_refresh.on_click(lambda _: self._refresh_ui())
+        
+        toolbar = widgets.HBox([self.txt_search_samples, btn_all, btn_none, btn_refresh], layout=L(margin='0 0 10px 0', gap='10px', align_items='center'))
+        
+        # Container persistente para a matriz
+        self.matrix_container = widgets.VBox([self._build_matrix_content()], layout=L(
+            border='1px solid #dee2e6', padding='10px', max_height='300px', overflow_y='auto'
+        ))
+        
+        return widgets.VBox([css, toolbar, self.matrix_container])
 
     def _build_extraction_matrix(self):
         """Constrói a matriz dinâmica baseada no que existe no GCS."""
