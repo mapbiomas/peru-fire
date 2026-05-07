@@ -92,7 +92,11 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
         if logger: logger(f"Lendo amostras: {group}.csv", "info")
         try:
             with fs.open(sample_path, 'r') as f:
-                dfs.append(pd.read_csv(f))
+                temp_df = pd.read_csv(f)
+                if not temp_df.empty and 'period' in temp_df.columns:
+                    p_found = temp_df['period'].unique().tolist()
+                    if logger: logger(f"  🔍 Conteúdo: {len(temp_df)} pontos | Períodos no CSV: {p_found}", "info")
+                dfs.append(temp_df)
         except Exception as e:
             if logger: logger(f"Erro ao ler {group}: {e}", "error")
             
