@@ -139,10 +139,11 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
             band_paths[b] = f"gs://{CONFIG['bucket']}/{rel_folder}/{m_file_name}"
 
         if missing_bands:
-            if logger: logger(f"Pulo período {p}: Faltam mosaicos ({', '.join(missing_bands)})", "warning")
+            if logger: logger(f"⚠️ Pulo período {p}: Faltam {len(missing_bands)} bandas ({', '.join(missing_bands)})", "warning")
             continue
 
-        if logger: logger(f"Extraindo {len(geometries)} amostras de {p}...", "info")
+        if logger: logger(f"✅ Mosaicos OK para {p}: {len(band_paths)} bandas prontas para extração.", "info")
+        if logger: logger(f"📡 Extraindo {len(geometries)} amostras de {p}...", "info")
         
         # --- LEITURA REAL DAS BANDAS ---
         band_data_list = []
