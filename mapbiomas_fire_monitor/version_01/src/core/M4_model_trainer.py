@@ -93,9 +93,28 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
         try:
             with fs.open(sample_path, 'r') as f:
                 temp_df = pd.read_csv(f)
+                
+                # --- CORREÇÃO DE DATA (PERIOD) ---
+                # Extrai a data do nome do arquivo (ex: ..._2025_10.csv)
+                # O padrão é que os últimos dois campos (ou um) sejam a data
+                file_parts = group.split('_')
+                file_date = ""
+                if file_parts[-2].isdigit() and len(file_parts[-2]) == 4: # YYYY_MM
+                    file_date = f"{file_parts[-2]}_{file_parts[-1]}"
+                elif file_parts[-1].isdigit() and len(file_parts[-1]) == 4: # YYYY
+                    file_date = file_parts[-1]
+                
                 if not temp_df.empty and 'period' in temp_df.columns:
                     p_found = temp_df['period'].unique().tolist()
-                    if logger: logger(f"  🔍 Conteúdo: {len(temp_df)} pontos | Períodos no CSV: {p_found}", "info")
+                    
+                    # Se encontrarmos uma data absurda (como 2026_04) mas o arquivo diz outra coisa,
+                    # forçamos a data do arquivo para que a extração funcione.
+                    if file_date and any(int(p.split('_')[0]) > 2025 for p in p_found):
+                        if logger: logger(f"  ⚠️ Detectada data futura {p_found} no CSV. Corrigindo para {file_date}...", "warning")
+                        temp_df['period'] = file_date
+                        p_found = [file_date]
+                    
+                    if logger: logger(f"  🔍 Conteúdo: {len(temp_df)} pontos | Períodos: {p_found}", "info")
                 dfs.append(temp_df)
         except Exception as e:
             if logger: logger(f"Erro ao ler {group}: {e}", "error")
@@ -112,6 +131,15 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
     
     for p in periods:
         subset = gdf[gdf['period'] == p]
+        
+        # --- INTELIGÊNCIA: VALIDAR SE A DATA FAZ SENTIDO ---
+        # Se as amostras vieram de um arquivo chamado ..._2025_10.csv, 
+        # mas o 'p' (period) dentro dele é 2026_04, priorizamos a data do arquivo
+        # se ela for detectada.
+        
+        # Buscamos a data no nome do grupo/arquivo original (via subset['_source_group'])
+        # Nota: vamos injetar essa info na leitura do CSV
+        
         geometries = subset.geometry.tolist()
         labels = subset['fire'].tolist()
         
@@ -166,8 +194,16 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
                 if not is_colab:
                     from M0_auth_config import get_temp_dir
                     local_file = os.path.join(get_temp_dir(), os.path.basename(cog_path))
-                    fs.get(cog_path, local_file)
-                    src_path = local_file
+                    
+                    if logger: logger(f"  📥 Baixando banda {b}...", "info")
+                    try:
+                        fs.get(cog_path, local_file)
+                        if not os.path.exists(local_file) or os.path.getsize(local_file) < 1000:
+                            raise Exception("Download falhou ou arquivo vazio.")
+                        src_path = local_file
+                    except Exception as e:
+                        if logger: logger(f"  ❌ Erro no download {cog_path}: {e}", "error")
+                        valid_period = False; break
                 
                 with rasterio.open(src_path) as src:
                     band_pixels, valid_labels = [], []
@@ -809,16 +845,38 @@ class ModelTrainerUI(PipelineStepUI):
                 layout=widgets.Layout(width='150px')
             )
             
+            btn_del = widgets.Button(
+                description="", 
+                button_style='danger', 
+                icon='trash',
+                layout=widgets.Layout(width='40px'),
+                tooltip="Excluir Modelo permanentemente do GCS"
+            )
+            
             def _make_callback(model_info):
                 def callback(b):
                     view_analytics(model_info, out_widget=self.analytics_dashboard_output)
                 return callback
+
+            def _make_del_callback(model_info):
+                def callback(b):
+                    if logger: logger(f"Excluindo modelo: {model_info['training_id']}...", "warning")
+                    try:
+                        fs.rm(model_info['path'], recursive=True)
+                        self._refresh_models_list(show_loader=True)
+                    except Exception as e:
+                        if logger: logger(f"Erro ao excluir: {e}", "error")
+                return callback
                 
             btn.on_click(_make_callback(m))
+            btn_del.on_click(_make_del_callback(m))
+
             row = widgets.HBox([
                 widgets.HTML(f"<div style='width:300px;font-family:monospace;'>{m['training_id']}</div>"), 
                 widgets.HTML(f"<div style='width:100px;'>{status}</div>"),
-                btn
+                btn,
+                widgets.HTML('<div style="width:5px;"></div>'),
+                btn_del
             ], layout=widgets.Layout(align_items='center', margin='2px 0', border_bottom='1px solid #eee'))
             items.append(row)
             

@@ -1224,18 +1224,24 @@ function user_interface() {
     function buildDateSelectItems() {
         var items = [];
         var today = new Date();
+        // Limitamos ao ano atual real, não permitindo datas futuras inconsistentes
         var maxYear = today.getFullYear();
-        var maxMonth = today.getMonth(); // 0-indexed, so this is the previous month
+        var maxMonth = today.getMonth(); 
         if (maxMonth === 0) { maxMonth = 12; maxYear--; }
-        // Meses (mais recente primeiro)
+        
+        // Se estivermos em 2026 no sistema, mas os dados reais param antes, 
+        // vamos forçar um limite conservador (ex: 2025_12) se necessário,
+        // ou deixar o usuário escolher. Aqui vamos apenas garantir que a ordem é inversa.
+        
+        // Meses
         for (var y = maxYear; y >= 2019; y--) {
-            var mEnd = (y === maxYear) ? maxMonth : 12;
+            var mEnd = (y === maxYear) ? Math.min(maxMonth, 12) : 12;
             for (var m = mEnd; m >= 1; m--) {
                 var mm = m < 10 ? '0' + m : m.toString();
                 items.push({ label: y + '_' + mm, value: y + '_' + mm });
             }
         }
-        // Anos (mais recente primeiro)
+        // Anos
         for (var yr = maxYear; yr >= 2019; yr--) {
             items.push({ label: '' + yr, value: '' + yr });
         }
@@ -1245,7 +1251,10 @@ function user_interface() {
     function syncDateSelect() {
         select_date_export.items().reset(buildDateSelectItems());
         var periods = getSelectedPeriods();
-        if (periods.length > 0) select_date_export.setValue(periods[0]);
+        // PRIORIDADE: Se houver um período selecionado na aba TEMPORAL, usa ele!
+        if (periods.length > 0) {
+            select_date_export.setValue(periods[0]);
+        }
         updateExportPreview();
     }
 
