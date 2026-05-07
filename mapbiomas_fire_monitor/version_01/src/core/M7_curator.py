@@ -26,21 +26,22 @@ def list_filtered_variants(region):
 
 # ─── EXPORTACIÓN DE GEE (Colección Pre-Oficial) ─────────────────────────────
 
-def publish_preofficial_to_gee(image_path, version, collection_name, metadata):
+def publish_preofficial_to_gee(image_path, training_id, temporal_id, metadata):
     """
     Toma un raster filt_ de GCS y lo exporta a GEE Asset.
     """
+    from M0_auth_config import get_asset_official
     # En producción usaríamos el path GCS: gs://.../filt_...
     # image = ee.Image.loadGeoTIFF(image_path)
     
     # Fake submission for architecture
     img_final = ee.Image(0).set(metadata)
     
-    asset_id = f"{CONFIG['asset_classification']}/{collection_name}/{version}"
+    asset_id = get_asset_official(temporal_id)
     
     # task = ee.batch.Export.image.toAsset(
     #     image       = img_final,
-    #     description = f'PUBLISH_{version}',
+    #     description = f'PUBLISH_{training_id}_{temporal_id}',
     #     assetId     = asset_id,
     #     scale       = 10,
     #     pyramidingPolicy = {'.default': 'mode'}
@@ -65,8 +66,8 @@ class CuratorUI:
             </div>
         """)
         
-        self.w_collection_name = widgets.Text(value='peru_fire_collection1', description='Colección:', layout=widgets.Layout(width='300px'))
-        self.w_version = widgets.Text(value='v1', description='Versión Pub:', layout=widgets.Layout(width='300px'))
+        self.w_temporal_id = widgets.Text(value='2024_08', description='Periodo:', layout=widgets.Layout(width='300px'))
+        self.w_training_id = widgets.Text(value='42', description='Training ID:', layout=widgets.Layout(width='300px'))
         
         if self.preset_votes:
             preset_html = "<ul>"
@@ -85,7 +86,7 @@ class CuratorUI:
 
         self.ui = widgets.VBox([
             title,
-            widgets.HBox([self.w_collection_name, self.w_version]),
+            widgets.HBox([self.w_temporal_id, self.w_training_id]),
             self.selection_panel
         ])
 
@@ -95,7 +96,7 @@ class CuratorUI:
         else:
             votes = {'region_1': self.w_variant.value}
             
-        return votes, self.w_collection_name.value, self.w_version.value
+        return votes, self.w_temporal_id.value, self.w_training_id.value
 
     def show(self):
         display(self.ui)
@@ -113,28 +114,28 @@ def start_curation(ui):
         print("⚠️ Esta función requiere el objeto devuelto por run_ui() de M7.")
         return
         
-    votes, collection_name, version = ui.get_curation_selection()
+    votes, temporal_id, training_id = ui.get_curation_selection()
     
     print(f"🚀 Iniciando Curaduría (Exportación Pre-Oficial)")
-    print(f"   Colección: {collection_name} | Versión: {version}\n")
+    print(f"   Periodo: {temporal_id} | Training ID: {training_id}\n")
     
     for region, variant in votes.items():
         if not variant: continue
         print(f"  > Aprobado {region} -> {variant}")
         
         desc = (
-            f"Col: {collection_name} | Ver: {version}\n"
+            f"Periodo: {temporal_id} | Training ID: {training_id}\n"
             f"Variante Origen: {variant}"
         )
         metadata = {
             'country': CONFIG.get('country', 'peru'),
-            'version': version,
-            'collection': collection_name,
+            'training_id': training_id,
+            'temporal_id': temporal_id,
             'description': desc,
             'publish_date': datetime.now().isoformat()
         }
         
-        # publish_preofficial_to_gee("gs://...", version, collection_name, metadata)
+        # publish_preofficial_to_gee("gs://...", training_id, temporal_id, metadata)
         print(f"    ✅ Exportación GEE Asset iniciada para {region}.")
         
     print("\n✅ Resumen de Configuración Usada (PRESET):")

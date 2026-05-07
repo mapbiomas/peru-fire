@@ -263,25 +263,30 @@ def save_classification_tile(classified, profile, output_path):
 # ─── SUBIR ────────────────────────────────────────────────────────────────────
 
 def upload_classified_tile(local_path, year, month, tile_id,
-                            regions, version, period='monthly'):
+                            regions, training_id, period='monthly'):
     """Subir fragmento clasificado a la carpeta de fragmentos de GCS."""
-    name = classification_name(regions, version, year, month)
+    from M0_auth_config import get_gcs_regional
+    
+    temporal_id = f"{year}_{month:02d}" if period == 'monthly' else f"{year}"
     r_str = '_'.join(regions)
-
-    if period == 'monthly':
-        folder = (f"{CONFIG['gcs_classifications']}/monthly/"
-                  f"{year}/{month:02d}")
-    else:
-        folder = f"{CONFIG['gcs_classifications']}/yearly/{year}"
-
-    fname = f"{name}_{tile_id}_cog.tif"
-    dest  = gcs_path(f"{folder}/{fname}")
+    
+    # Usa o novo gerador de nome/caminho (Singleband Architecture)
+    dest_path = get_gcs_regional(r_str, training_id, temporal_id)
+    # Como dest_path é o nome base, adicionamos o sufixo do tile
+    # A estrutura get_gcs_regional retorna o nome do asset, não a pasta diretamente, 
+    # mas o bucket requer o path base completo. 
+    # Reestruturando:
+    folder = "/".join(dest_path.split('/')[:-1])
+    base_name = dest_path.split('/')[-1]
+    
+    fname = f"{base_name}_{tile_id}.tif"
+    dest = gcs_path(f"{folder}/{fname}")
 
     subprocess.run(['gsutil', 'cp', local_path, dest], check=True)
     return dest
 
 
-def upload_to_gee_asset(classified_ee, name, year, month, regions, version):
+def upload_to_gee_asset(classified_ee, name, year, month, regions, training_id):
     """
     Subir la clasificación ensamblada a GEE Asset.
     classified_ee: ee.Image donde quemado = dayOfYear, no quemado = 0.
@@ -299,22 +304,30 @@ def upload_to_gee_asset(classified_ee, name, year, month, regions, version):
         'month':      month,
         'period':     'monthly',
         'sensor':     'sentinel2',
-        'version':    version,
+        'training_id': training_id,
         'regions':    regions,
         'bands_input': CONFIG['bands_model_default'],
         'pixel_unit': 'day_of_year',
         'description': (
             f"MapBiomas Fuego — {CONFIG['country'].upper()} Área Quemada Mensual\n"
-            f"Sensor: Sentinel-2 | Versión: {version}\n"
+            f"Sensor: Sentinel-2 | Training ID: {training_id}\n"
             f"Regiones: {', '.join(regions)}\n"
             f"Valor del píxel: día del año en el que se detectó la quemadura (0 = no quemado)"
         ),
     })
 
-    asset_id = f"{CONFIG['asset_classification']}/{name}"
+    from M1_export_logic import ensure_asset_path
+    
+    # O name aqui já vem de get_asset_regional que é o path inteiro
+    asset_id = name
+    
+    # Extrair coleção base
+    collection_id = "/".join(asset_id.split('/')[:-1])
+    ensure_asset_path(collection_id, 'IMAGE_COLLECTION')
+
     task = ee.batch.Export.image.toAsset(
         image       = img,
-        description = f'CLASS_{name}',
+        description = f'CLASS_{asset_id.split("/")[-1]}',
         assetId     = asset_id,
         scale       = 10,
         maxPixels   = 1e13,
@@ -326,12 +339,13 @@ def upload_to_gee_asset(classified_ee, name, year, month, regions, version):
 
 # ─── EJECUTOR DE CAMPAÑA COMPLETA ─────────────────────────────────────────────
 
-def run_classification_campaign(year, months, regions, version,
+def run_classification_campaign(year, months, regions, training_id,
                                  period='monthly', out_widget=None):
     """
     Ejecutar un pipeline de clasificación completo para una campaña.
-    Carga el modelo de GCS, genera la cuadrícula, clasifica todos los mosaicos, sube los resultados.
     """
+    from M0_auth_config import get_asset_regional
+    
     def _print(msg):
         if out_widget:
             with out_widget:
@@ -340,25 +354,25 @@ def run_classification_campaign(year, months, regions, version,
             print(msg)
 
     _print(f"🔥 Iniciando campaña de clasificación")
-    _print(f"   Año      : {year}")
-    _print(f"   Meses    : {months}")
-    _print(f"   Regiones : {regions}")
-    _print(f"   Versión  : {version}\n")
+    _print(f"   Año        : {year}")
+    _print(f"   Meses      : {months}")
+    _print(f"   Regiones   : {regions}")
+    _print(f"   Training ID: {training_id}\n")
 
     # Carga el modelo
     trainer = ModelTrainer(num_input=len(CONFIG['bands_model_default']))
-    trainer.load(version, regions[0])  # cargar el modelo de la primera región
+    # Assume que a region é o shortname
+    shortname = regions[0]
+    trainer.load(training_id, shortname)
     selected_bands = trainer._bands_input or CONFIG['bands_model_default']
-    _print(f"   Modelo   : {version}/{regions[0]}")
+    _print(f"   Modelo   : {training_id}/{shortname}")
     _print(f"   Bandas   : {selected_bands}  (NUM_INPUT={len(selected_bands)})\n")
 
-    # Construir la geometría combinada de todas las regiones seleccionadas
     region_geoms = [get_region_geometry(r) for r in regions]
     combined_geom = ee.Geometry.MultiPolygon(
         [g.coordinates().getInfo() for g in region_geoms]
     )
 
-    # Generar cuadrícula para la región combinada
     tiles = generate_dynamic_grid(combined_geom)
     _print(f"   Cuadrícula: {len(tiles)} fragmentos × {CONFIG['tile_size_deg']}°\n")
 
@@ -367,12 +381,16 @@ def run_classification_campaign(year, months, regions, version,
         for month in months:
             _print(f"\n  📅  {year}-{month:02d}")
             tile_results = []
+            temporal_id = f"{year}_{month:02d}" if period == 'monthly' else f"{year}"
+            
+            # Asset Path Base
+            asset_path = get_asset_regional('_'.join(regions), training_id, temporal_id)
+            name_base = asset_path.split("/")[-1]
 
             for tile in tiles:
                 tile_id = tile['tile_id']
                 _print(f"      ↳ fragmento {tile_id}", end='  ')
 
-                # Extraer fragmento de mosaico (desde el VRT nacional)
                 tif_path = download_mosaic_tile(
                     year, month, tile, period, tmpdir
                 )
@@ -380,20 +398,16 @@ def run_classification_campaign(year, months, regions, version,
                     _print("⚠️  no se ha podido extraer el fragmento, omitiendo")
                     continue
 
-                # Clasificar
                 try:
                     classified, profile = classify_tile(
                         tif_path, trainer, selected_bands
                     )
 
-                    # Guardar local
-                    name = classification_name(year, month, regions[0], version)
-                    out_path = os.path.join(tmpdir, f"{name}_{tile_id}_cls.tif")
+                    out_path = os.path.join(tmpdir, f"{name_base}_{tile_id}_cls.tif")
                     save_classification_tile(classified, profile, out_path)
 
-                    # Subir a GCS
                     dest = upload_classified_tile(
-                        out_path, year, month, tile_id, regions, version
+                        out_path, year, month, tile_id, regions, training_id
                     )
                     _print(f"✅  → {dest.split('/')[-1]}")
                     tile_results.append({'tile_id': tile_id, 'gcs': dest})
@@ -469,10 +483,10 @@ class ClassifierUI:
                 style       = {'description_width': '100px'},
                 layout      = widgets.Layout(height='120px', width='420px')
             )
-            self.w_version = widgets.Text(value='v1', description='Versión del modelo:',
+            self.w_training_id = widgets.Text(value='42', description='Training ID:',
                                            style={'description_width': '120px'},
                                            layout=widgets.Layout(width='250px'))
-            self.model_panel = widgets.VBox([self.w_version, self.w_regions])
+            self.model_panel = widgets.VBox([self.w_training_id, self.w_regions])
 
         self.ui = widgets.VBox([
             title,
@@ -486,7 +500,7 @@ class ClassifierUI:
         if self.preset_models:
             model_dict = self.preset_models
         else:
-            model_dict = {self.w_version.value: list(self.w_regions.value)}
+            model_dict = {self.w_training_id.value: list(self.w_regions.value)}
             
         return model_dict, list(self.w_months.value), list(self.w_years.value)
 
@@ -519,12 +533,12 @@ def start_classification(ui):
     out = widgets.Output()
     display(out)
     
-    for model_version, regions in model_dict.items():
+    for training_id, regions in model_dict.items():
         if not regions: continue
         for year in years:
             run_classification_campaign(
                 year=year, months=months, regions=regions,
-                version=model_version, out_widget=out
+                training_id=training_id, out_widget=out
             )
             
     print("\n✅ Resumen de Configuración Usada (PRESET):")

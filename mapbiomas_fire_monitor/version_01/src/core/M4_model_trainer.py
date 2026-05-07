@@ -35,21 +35,23 @@ from M_ui_components import PipelineStepUI
 
 # ─── EXTRAÇÃO DE DADOS (GCS) ──────────────────────────────────────────────────
 
-ALL_BANDS = {
-    'blue':      {'desc': 'Blue',      'default': False},
-    'green':     {'desc': 'Green',     'default': False},
-    'red':       {'desc': 'Red',       'default': True},
-    'nir':       {'desc': 'NIR',       'default': True},
-    'swir1':     {'desc': 'SWIR1',     'default': True},
-    'swir2':     {'desc': 'SWIR2',     'default': True},
-    'dayOfYear': {'desc': 'DayOfYear', 'default': False}
+# Mapeamento de bandas permitidas por combinação Sensor+Mosaico
+# Isso garante que a interface mostre apenas o que existe no GCS
+SENSOR_MOSAIC_BANDS = {
+    ('sentinel2', 'minnbr'):        ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'],
+    ('sentinel2', 'minnbr_buffer'): ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'],
+    ('landsat',   'minnbr'):        ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'],
+    ('hls',       'minnbr'):        ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'],
 }
+
+ALL_BANDS_LIST = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']
 
 def list_sample_collections_gcs():
     """Lista arquivos CSV de amostras curadas no GCS."""
+    from M0_auth_config import CONFIG
     try:
         fs = _get_fs()
-        path = f"{CONFIG['bucket']}/{CONFIG['gcs_samples']}"
+        path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}"
         files = fs.ls(path)
         return sorted([f.split('/')[-1].replace('.csv', '') for f in files if f.endswith('.csv')], reverse=True)
     except Exception:
@@ -57,29 +59,32 @@ def list_sample_collections_gcs():
 
 def list_trained_models():
     """Lista modelos já treinados no GCS."""
+    from M0_auth_config import _gcs_library_base
     try:
         fs = _get_fs()
-        path = f"{CONFIG['bucket']}/{CONFIG['gcs_models']}"
+        path = f"{CONFIG['bucket']}/{_gcs_library_base()}/models"
         models = []
         if fs.exists(path):
-            versions = fs.ls(path)
-            for v_dir in versions:
-                v_name = v_dir.split('/')[-1]
-                regions = fs.ls(v_dir)
-                for r_dir in regions:
-                    r_name = r_dir.split('/')[-1]
-                    models.append({'version': v_name, 'region': r_name, 'path': r_dir})
+            trainings = fs.ls(path)
+            for t_dir in trainings:
+                t_name = t_dir.split('/')[-1]
+                if t_name.startswith('training_'):
+                    models.append({'training_id': t_name, 'path': t_dir})
         return models
     except Exception:
         return []
 
-def extract_pixels_from_gcs(sample_groups, bands, logger=None):
-    from M0_auth_config import mosaic_name, monthly_mosaic_path, yearly_mosaic_path, monthly_cog_path, yearly_cog_path, get_temp_dir
+def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
+    """
+    Extrai píxeis do GCS baseado em uma configuração flexível de bandas.
+    bands_config: { 'red': {'sensor': 'sentinel2', 'mosaic': 'minnbr'}, ... }
+    """
+    from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, _gcs_mosaic_path
     fs = _get_fs()
     
     dfs = []
     for group in sample_groups:
-        sample_path = f"{CONFIG['bucket']}/{CONFIG['gcs_samples']}/{group}.csv"
+        sample_path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{group}.csv"
         if logger: logger(f"Lendo amostras: {group}.csv", "info")
         try:
             with fs.open(sample_path, 'r') as f:
@@ -100,119 +105,86 @@ def extract_pixels_from_gcs(sample_groups, bands, logger=None):
     for p in periods:
         if logger: logger(f"Extraindo píxeis para o período: {p}", "info")
         subset = gdf[gdf['period'] == p]
+        geometries = subset.geometry.tolist()
+        labels = subset['fire'].tolist()
         
+        # temporal_id parse (YYYY_MM ou YYYY)
         parts = str(p).split('_')
         y = int(parts[0])
         m = int(parts[1]) if len(parts) > 1 else None
-        per = 'monthly' if m else 'yearly'
+        periodicity = 'monthly' if m else 'yearly'
         
-        folder = monthly_mosaic_path(y, m) if m else yearly_mosaic_path(y)
-        m_name = mosaic_name(y, m, per)
-        
-        geometries = subset.geometry.values
-        labels = subset['fire'].values
-        
-        period_y = []
+        period_y = np.array([])
         band_data_list = []
+        bands_sorted = sorted(bands_config.keys()) # Garante ordem consistente
         
-        for band in bands:
-            # Tenta caminhos possíveis (novo /cog/, raiz, e fallback buffer)
-            possible_paths = [
-                f"{CONFIG['bucket']}/{monthly_cog_path(y, m) if m else yearly_cog_path(y)}/{m_name}_{band}_cog.tif",
-                f"{CONFIG['bucket']}/{folder}/{m_name}_{band}_cog.tif"
-            ]
+        valid_period = True
+        for b in bands_sorted:
+            config = bands_config[b]
+            s_name = config.get('sensor', GLOBAL_OPTS['SENSOR']).lower()
+            m_type = config.get('mosaic', GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).lower()
             
-            cog_path = None
-            for path_opt in possible_paths:
-                if fs.exists(path_opt):
-                    cog_path = path_opt
-                    break
+            # Reconstrói o path para este sensor/mosaico específico
+            from M0_auth_config import _gcs_library_base
+            # Hack temporário para simular a base do sensor correto sem mudar o global permanentemente
+            base_sensor = f"{CONFIG['gcs_library_images']}/{s_name}"
+            rel_folder = f"{base_sensor}/{periodicity}/{m_type}/{p}"
             
-            if not cog_path:
-                if logger: logger(f"COG ausente ({band}) em {possible_paths[0]}. Ignorando período {p}.", "warning")
-                band_data_list = []
-                break
-                
-            is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
-
+            m_name = mosaic_name(y, m, periodicity, band=b, mosaic=m_type, sensor=s_name)
+            cog_path = f"gs://{CONFIG['bucket']}/{rel_folder}/{m_name}.tif"
+            
             try:
-                if is_colab:
-                    if logger: logger(f"⚡ Streaming nativo {band} via /vsigs/ (Colab)...", "info")
-                    vsigs_path = f"/vsigs/{cog_path}"
-                    
-                    with rasterio.Env(GDAL_DISABLE_READDIR_ON_OPEN='EMPTY_DIR'):
-                        with rasterio.open(vsigs_path) as src:
-                            band_pixels, valid_labels = [], []
-                            for geom, label in zip(geometries, labels):
-                                try:
-                                    out_image, _ = mask(src, [geom], crop=True, filled=False)
-                                    if out_image.mask.all():
-                                        continue
-                                    valid_pixels = out_image.data[~out_image.mask]
-                                    band_pixels.extend(valid_pixels)
-                                    if len(period_y) == 0: 
-                                        valid_labels.extend([label] * len(valid_pixels))
-                                except (ValueError, Exception):
-                                    pass
-                                    
-                            if len(band_pixels) == 0:
-                                if logger: logger(f"Aviso: Nenhum pixel extraído para {band} no período {p}.", "warning")
-                                band_data_list = []
-                                break
-        
-                            band_data_list.append(np.array(band_pixels))
-                            if len(period_y) == 0:
-                                period_y = np.array(valid_labels)
-                else:
-                    local_cog_path = os.path.join(get_temp_dir(), f"{m_name}_{band}_cog.tif")
-                    try:
-                        if logger: logger(f"⬇️ Baixando {band} para cache efêmero (Local)...", "info")
-                        fs.get(cog_path, local_cog_path)
-                        
-                        with rasterio.open(local_cog_path) as src:
-                            band_pixels, valid_labels = [], []
-                            for geom, label in zip(geometries, labels):
-                                try:
-                                    out_image, _ = mask(src, [geom], crop=True, filled=False)
-                                    if out_image.mask.all():
-                                        continue
-                                    valid_pixels = out_image.data[~out_image.mask]
-                                    band_pixels.extend(valid_pixels)
-                                    if len(period_y) == 0: 
-                                        valid_labels.extend([label] * len(valid_pixels))
-                                except (ValueError, Exception):
-                                    pass
-                                    
-                            if len(band_pixels) == 0:
-                                if logger: logger(f"Aviso: Nenhum pixel extraído para {band} no período {p}.", "warning")
-                                band_data_list = []
-                                break
-        
-                            band_data_list.append(np.array(band_pixels))
-                            if len(period_y) == 0:
-                                period_y = np.array(valid_labels)
-                    finally:
-                        if os.path.exists(local_cog_path):
+                # Tenta leitura via /vsigs/ se estiver no Linux/Colab, ou cache local se no Windows
+                if 'COLAB_RELEASE_TAG' in os.environ:
+                    vsigs_path = f"/vsigs/{cog_path.replace('gs://', '')}"
+                    with rasterio.open(vsigs_path) as src:
+                        band_pixels, valid_labels = [], []
+                        for geom, label in zip(geometries, labels):
                             try:
-                                os.remove(local_cog_path)
-                            except Exception:
-                                pass
+                                out_image, _ = mask(src, [geom], crop=True, filled=False)
+                                if not out_image.mask.all():
+                                    v_px = out_image.data[~out_image.mask]
+                                    band_pixels.extend(v_px)
+                                    if len(period_y) == 0: valid_labels.extend([label] * len(v_px))
+                            except: pass
+                        
+                        if not band_pixels:
+                            valid_period = False; break
+                        band_data_list.append(np.array(band_pixels))
+                        if len(period_y) == 0: period_y = np.array(valid_labels)
+                else:
+                    # Windows: Download para pasta temporária
+                    from M0_auth_config import get_temp_dir
+                    local_cog = os.path.join(get_temp_dir(), f"{m_name}.tif")
+                    try:
+                        fs.get(cog_path, local_cog)
+                        with rasterio.open(local_cog) as src:
+                            band_pixels, valid_labels = [], []
+                            for geom, label in zip(geometries, labels):
+                                try:
+                                    out_image, _ = mask(src, [geom], crop=True, filled=False)
+                                    if not out_image.mask.all():
+                                        v_px = out_image.data[~out_image.mask]
+                                        band_pixels.extend(v_px)
+                                        if len(period_y) == 0: valid_labels.extend([label] * len(v_px))
+                                except: pass
+                            
+                            if not band_pixels:
+                                valid_period = False; break
+                            band_data_list.append(np.array(band_pixels))
+                            if len(period_y) == 0: period_y = np.array(valid_labels)
+                    finally:
+                        if os.path.exists(local_cog): os.remove(local_cog)
             except Exception as e:
-                import traceback
-                error_msg = f"Erro ao ler COG {band} ({cog_path}): {str(e)}"
-                if logger: logger(error_msg, "error")
-                print(traceback.format_exc())
-                band_data_list = []
-                break
-                
-        if len(band_data_list) == len(bands) and len(period_y) > 0:
-            period_X = np.column_stack(band_data_list)
-            X_all.append(period_X)
+                if logger: logger(f"Erro ao ler banda {b} em {cog_path}: {e}", "warning")
+                valid_period = False; break
+        
+        if valid_period and len(band_data_list) == len(bands_sorted):
+            X_period = np.column_stack(band_data_list)
+            X_all.append(X_period)
             y_all.append(period_y)
             
-    if not X_all:
-        return np.array([]), np.array([])
-        
+    if not X_all: return np.array([]), np.array([])
     return np.concatenate(X_all, axis=0), np.concatenate(y_all, axis=0)
 
 
@@ -342,9 +314,50 @@ class ModelTrainer:
         rep = classification_report(self._y_raw, preds, output_dict=True)
         return cm, rep
 
-    def save(self, version, region, comment="", logger=None):
+    def load(self, training_id, shortname):
         import subprocess, tempfile
-        base_path = model_path(version, region)
+        from M0_auth_config import GLOBAL_OPTS, model_path
+        base_path = model_path(training_id, shortname)
+        fs = _get_fs()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for fname in ['weights.npz', 'metadata.json']:
+                src = gcs_path(f"{base_path}/{fname}")
+                dest = os.path.join(tmpdir, fname)
+                subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            with open(os.path.join(tmpdir, 'metadata.json')) as f:
+                hp = json.load(f)
+                
+            self.num_input = hp['num_input']
+            self.layers = hp['layers']
+            self.lr = hp.get('lr', 0.001)
+            self._bands_input = hp.get('bands_input')
+            self.norm_stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
+            
+            self._saved_vars = dict(np.load(os.path.join(tmpdir, 'weights.npz')))
+            
+    def predict_array(self, X_raw):
+        """Aplica a inferência (forward pass manual usando os pesos numpy)."""
+        if not hasattr(self, '_saved_vars'):
+            raise RuntimeError("Modelo não treinado/carregado.")
+            
+        layer = normalize(X_raw, self.norm_stats)
+        for i in range(len(self.layers)):
+            W = self._saved_vars[f'fc_{i}/kernel:0']
+            b = self._saved_vars[f'fc_{i}/bias:0']
+            layer = np.maximum(0, np.dot(layer, W) + b)
+            
+        W_out = self._saved_vars['output/kernel:0']
+        b_out = self._saved_vars['output/bias:0']
+        logits = np.dot(layer, W_out) + b_out
+        preds = (1 / (1 + np.exp(-logits))).flatten() > 0.5
+        return preds.astype(np.uint8)
+
+    def save(self, training_id, shortname, comment="", logger=None):
+        import subprocess, tempfile
+        from M0_auth_config import GLOBAL_OPTS
+        base_path = model_path(training_id, shortname)
         fs = _get_fs()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -353,10 +366,10 @@ class ModelTrainer:
 
             # 2. Metadata
             hp = {
-                'version':      version,
+                'training_id':  training_id,
+                'shortname':    shortname,
                 'country':      CONFIG['country'],
-                'region':       region,
-                'sensor':       'sentinel2',
+                'sensor':       GLOBAL_OPTS['SENSOR'],
                 'bands_input':  getattr(self, '_bands_input', CONFIG['bands_model_default']),
                 'num_input':    self.num_input,
                 'layers':       self.layers,
@@ -402,7 +415,7 @@ class ModelTrainer:
         if logger: logger("Copiando arquivos CSV das amostras para persistência...", "info")
         collections = getattr(self, '_sample_collections', [])
         for coll in collections:
-            src = gcs_path(f"sudamerica/{CONFIG['country']}/monitor/library_samples/{coll}.csv")
+            src = gcs_path(f"{CONFIG['gcs_library_samples']}/{coll}.csv")
             dest = gcs_path(f"{base_path}/samples/{coll}.csv")
             subprocess.run(['gsutil', 'cp', src, dest], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -422,7 +435,7 @@ def view_analytics(model_info, out_widget=None):
     if out_widget:
         out_widget.clear_output(wait=True)
         with out_widget:
-            print(f"Carregando Dashboard para: {model_info['version']} / {model_info['region']}...")
+            print(f"Carregando Dashboard para: {model_info['training_id']}...")
             
     with tempfile.TemporaryDirectory() as tmpdir:
         for fname in ['metadata.json', 'metrics.json']:
@@ -469,7 +482,7 @@ def view_analytics(model_info, out_widget=None):
         html_content = f"""
         {style}
         <div class="dash-card">
-            <div class="dash-title">📄 Model Card: {hp.get('version')} / {hp.get('region')}</div>
+            <div class="dash-title">📄 Model Card: {hp.get('training_id')} / {hp.get('shortname')}</div>
             <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 15px;">
                 <div style="flex: 2; min-width: 300px;">
                     <p class="meta-text"><b>Data de Criação:</b> {date_str}</p>
@@ -601,6 +614,63 @@ class ModelTrainerUI(PipelineStepUI):
         matrix = widgets.VBox(matrix_rows, layout=L(border='1px solid #dee2e6', padding='10px', max_height='300px', overflow_y='auto'))
         return widgets.VBox([css, toolbar, matrix])
 
+    def _build_extraction_matrix(self):
+        """Constrói a matriz dinâmica baseada no que existe no GCS."""
+        L = widgets.Layout
+        from M_cache import CacheManager
+        self.state = CacheManager.load() or {}
+        
+        # Obtém o estado atual do cache
+        gcs_data = self.state.get('gcs_chunks', {}) # Chave: nome_base, Valor: lista_bandas
+        
+        # Agrupa por sensor e mosaico
+        available_combos = {}
+        for m_name, bands in gcs_data.items():
+            # Ex: image_peru_fire_sentinel2_minnbr_buffer_2026_03
+            # Ex: image_peru_fire_sentinel2_minnbr_2026_03
+            parts = m_name.split('_')
+            if len(parts) >= 6:
+                sensor = parts[3]
+                # Pega do índice 4 até o penúltimo antes da data (YYYY_MM)
+                # No caso de 2026_03, a data ocupa dois slots
+                if parts[-2].isdigit() and len(parts[-2]) == 4: # Formato YYYY_MM
+                    mosaic = "_".join(parts[4:-2])
+                else: # Formato YYYY
+                    mosaic = "_".join(parts[4:-1])
+                
+                combo = (sensor, mosaic)
+                if combo not in available_combos:
+                    available_combos[combo] = set()
+                for b in bands: available_combos[combo].add(b)
+        
+        if not available_combos:
+            return widgets.HTML('<div style="padding:20px; color:#999;"><i>Nenhum dado encontrado no GCS. Sincronize os dados no M1 ou M2 primeiro.</i></div>')
+
+        self.band_chk_map = {} # (sensor, mosaic, band) -> checkbox
+        matrix_rows = []
+        
+        for (s, m), bands in sorted(available_combos.items()):
+            label_text = f"{s.upper()} {m.replace('_', ' ').title()}"
+            label_html = widgets.HTML(f'<div style="width:200px; font-weight:bold; color:#333; font-size:12px;">{label_text}</div>')
+            
+            band_widgets = []
+            for b in sorted(list(bands)):
+                chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
+                self.band_chk_map[(s, m, b)] = chk
+                
+                # Célula de status onde o texto é o nome da banda
+                # Usamos mfm-ok (verde) quando selecionado, mfm-null quando não
+                status_cell = PipelineStepUI.make_status_cell(chk, b.upper(), 'mfm-ok', width='90px')
+                band_widgets.append(status_cell)
+                
+            row = widgets.HBox([label_html] + band_widgets, layout=L(align_items='center', padding='5px 0', border_bottom='1px solid #eee'))
+            matrix_rows.append(row)
+            
+        return widgets.VBox(matrix_rows, layout=L(
+            border='1px solid #dee2e6', padding='10px', margin='10px 0',
+            background_color='#fff', border_radius='4px', max_height='400px', overflow_y='auto'
+        ))
+
     def _refresh_ui(self):
         self.show_loader("Actualizando lista de muestras...")
         self._build_ui()
@@ -608,16 +678,11 @@ class ModelTrainerUI(PipelineStepUI):
 
     def _build_ui(self):
         L = widgets.Layout
+        css_tags = widgets.HTML("<style>.widget-toggle-button { border-radius:12px !important; }</style>")
         
         # --- TAB 1: Configuración & Entrenamiento ---
         matrix_ui = self._build_matrix()
-        
-        band_items = []
-        for band, info in ALL_BANDS.items():
-            chk = widgets.Checkbox(value=info['default'], description=info['desc'], layout=L(width='auto', margin='0 15px 0 0'))
-            band_items.append((band, chk))
-        self.band_checkboxes = dict(band_items)
-        band_box = widgets.HBox([chk for _, chk in band_items], layout=L(flex_flow='row wrap', border='1px solid #dee2e6', padding='10px', border_radius='4px', margin='10px 0'))
+        extraction_matrix = self._build_extraction_matrix()
         
         self.w_iters = widgets.Text(value="7000", description='Iteraciones:', style={'description_width': '150px'}, layout=L(width='350px'))
         lbl_iters = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Total de iteraciones de entrenamiento (Ej: 5000, 10000). Mayor = más entrenamiento.</span>")
@@ -637,22 +702,22 @@ class ModelTrainerUI(PipelineStepUI):
         
         hp_box = widgets.VBox([box_iters, box_batch, box_lr, box_layers], layout=L(margin='10px 0'))
         
-        self.w_version = widgets.Text(value='v1', description='Versión:', style={'description_width': '80px'})
-        self.w_region = widgets.Text(value='peru_r1', description='Nombre Corto:', style={'description_width': '100px'})
+        self.w_training_id = widgets.Text(value='42', description='Training ID:', style={'description_width': '80px'})
+        self.w_shortname = widgets.Text(value='peru_r1', description='Nombre Corto:', style={'description_width': '100px'})
         self.w_comment = widgets.Textarea(
-            placeholder='Describa aquí los detalles de este entrenamiento (ej: pruebas con swir2, menos píxeles de agua, etc.)',
-            description='Comentario:',
+            placeholder='Describa aqui os detalhes de este treinamento...',
+            description='Comentário:',
             style={'description_width': '100px'},
             layout=L(width='98%', height='80px')
         )
         
         tab_config = widgets.VBox([
-            widgets.HTML("<b>1. Selección Múltiple de Datos (GCS)</b>"), matrix_ui,
-            widgets.HTML("<br><b>2. Variables Espectrales</b>"), band_box,
-            widgets.HTML("<b>3. Hiperparámetros (DNN)</b>"), hp_box,
+            widgets.HTML("<b>1. Seleção de Amostras (Matriz GCS)</b>"), matrix_ui,
+            widgets.HTML("<br><b>2. Matriz de Extração (Bandas por Sensor+Mosaico)</b>"), extraction_matrix,
+            widgets.HTML("<b>3. Hiperparâmetros (DNN)</b>"), hp_box,
             widgets.HTML("<hr style='margin:10px 0'>"),
-            widgets.HTML("<b>4. Destino Final en GCS</b>"),
-            widgets.HBox([self.w_version, self.w_region], layout=L(margin='10px 0')),
+            widgets.HTML("<b>4. Destino Final no GCS</b>"),
+            widgets.HBox([self.w_training_id, self.w_shortname], layout=L(margin='10px 0')),
             self.w_comment
         ], layout=L(padding='15px'))
         
@@ -680,7 +745,7 @@ class ModelTrainerUI(PipelineStepUI):
         self.tabs.set_title(1, '📊 Monitorización & Análisis')
         
         self.clear_main()
-        self.main_area.children = [self.tabs]
+        self.main_area.children = [css_tags, self.tabs]
 
     def _refresh_models_list(self, show_loader=False):
         if show_loader: self.show_loader("Actualizando lista de modelos...")
@@ -706,7 +771,7 @@ class ModelTrainerUI(PipelineStepUI):
                 
             btn.on_click(_make_callback(m))
             row = widgets.HBox([
-                widgets.HTML(f"<div style='width:300px;font-family:monospace;'>{m['version']} / {m['region']}</div>"), 
+                widgets.HTML(f"<div style='width:300px;font-family:monospace;'>{m['training_id']}</div>"), 
                 widgets.HTML(f"<div style='width:100px;'>{status}</div>"),
                 btn
             ], layout=widgets.Layout(align_items='center', margin='2px 0', border_bottom='1px solid #eee'))
@@ -738,18 +803,32 @@ def start_training(ui):
     ui.training_chart_output.clear_output()
     ui.analytics_dashboard_output.clear_output()
     
-    bands = [b for b, chk in ui.band_checkboxes.items() if chk.value]
+    # Constrói o dicionário de configuração de bandas a partir da nova Matriz Premium
+    bands_config = {}
+    for (s, m, b), chk in ui.band_chk_map.items():
+        if chk.value:
+            # Se a mesma banda for selecionada em múltiplos sensores, a última prevalece
+            # Mas na prática o usuário escolherá uma fonte por banda
+            bands_config[b] = {
+                'sensor': s,
+                'mosaic': m
+            }
+            
+    if not bands_config:
+        print("Error: Ninguna banda seleccionada en la Matriz de Extracción.")
+        return
+
     layers = [int(x.strip()) for x in ui.w_layers.value.split(',')]
     iters = int(ui.w_iters.value)
     batch = int(ui.w_batch.value)
     lr = float(ui.w_lr.value)
     
-    print(f"Extrayendo píxeles de {len(selected_samples)} colecciones. Aguarde...")
+    print(f"Extrayendo píxeles de {len(selected_samples)} colecciones usando Matriz Flexible ({len(bands_config)} bandas). Aguarde...")
     
     def _logger(msg, level="info"):
         print(msg)
         
-    X, y = extract_pixels_from_gcs(selected_samples, bands, logger=_logger)
+    X, y = extract_pixels_from_gcs(selected_samples, bands_config, logger=_logger)
     
     if len(X) == 0:
         print("Fallo al extraer píxeles.")
@@ -757,8 +836,9 @@ def start_training(ui):
         
     print(f"Éxito: {len(X)} píxeles extraídos (Fuego: {y.sum()} | No-fuego: {(y==0).sum()}).")
     
-    ui.trainer_instance = ModelTrainer(num_input=len(bands), layers=layers, lr=lr)
-    ui.trainer_instance._bands_input = bands
+    ui.trainer_instance = ModelTrainer(num_input=len(bands_config), layers=layers, lr=lr)
+    ui.trainer_instance._bands_input = sorted(bands_config.keys()) # Salva a ordem das bandas
+    ui.trainer_instance._bands_config = bands_config # Salva a configuração completa
     ui.trainer_instance._sample_collections = selected_samples
     ui.trainer_instance._sample_count = {'burned': int(y.sum()), 'not_burned': int((y==0).sum())}
     
@@ -788,11 +868,15 @@ def start_training(ui):
     
     print("Guardando estructura (muestras, píxeles, metadatos, métricas) en GCS...")
     try:
-        ui.trainer_instance.save(ui.w_version.value, ui.w_region.value, comment=ui.w_comment.value, logger=_logger)
+        ui.trainer_instance.save(ui.w_training_id.value, ui.w_shortname.value, comment=ui.w_comment.value, logger=_logger)
         print("¡Modelo y Model Card guardados exitosamente!")
         
         # Carregar o Model Card automaticamente no dashboard inferior
-        model_info = {'version': ui.w_version.value, 'region': ui.w_region.value, 'path': f"sudamerica/{CONFIG['country']}/monitor/{CONFIG['version']}/models/{ui.w_version.value}/{ui.w_region.value}"}
+        from M0_auth_config import model_path
+        model_info = {
+            'training_id': f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{GLOBAL_OPTS['SENSOR'].lower()}", 
+            'path': model_path(ui.w_training_id.value, ui.w_shortname.value)
+        }
         view_analytics(model_info, out_widget=ui.analytics_dashboard_output)
         
     except Exception as e:

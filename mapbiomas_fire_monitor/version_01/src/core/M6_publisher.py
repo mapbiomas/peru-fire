@@ -87,7 +87,7 @@ def remove_isolated_pixels_ee(classified_image, min_connected=4):
 
 # ─── ENSAMBLAJE DE MOSAICO NACIONAL ──────────────────────────────────────────
 
-def assemble_classified_mosaic(year, month, regions, version,
+def assemble_classified_mosaic(year, month, regions, training_id,
                                 period='monthly', draft=True):
     """
     1. Descargar todos los fragmentos clasificados de GCS
@@ -95,19 +95,21 @@ def assemble_classified_mosaic(year, month, regions, version,
     3. Subir a la carpeta de mosaicos de GCS
     Devuelve la ruta GCS del COG ensamblado.
     """
+    from M0_auth_config import get_gcs_regional, get_gcs_candidate
+    
+    temporal_id = f"{year}_{month:02d}" if period == 'monthly' else f"{year}"
     r_str = '_'.join(regions)
-    name  = classification_name(regions, version, year, month)
+    
+    # Path of the regional tiles
+    regional_path = get_gcs_regional(r_str, training_id, temporal_id)
+    chunk_folder = "/".join(regional_path.split('/')[:-1])
+    
+    # Target path for candidate (assembled/filtered)
+    candidate_path = get_gcs_candidate(r_str, training_id, temporal_id)
+    mosaic_folder = "/".join(candidate_path.split('/')[:-1])
+    base_name = candidate_path.split('/')[-1]
 
-    if period == 'monthly':
-        chunk_folder  = (f"{CONFIG['gcs_classifications']}/monthly/"
-                         f"{year}/{month:02d}")
-        mosaic_folder = (f"{CONFIG['gcs_classifications']}/monthly/"
-                         f"{year}/{month:02d}/mosaics")
-    else:
-        chunk_folder  = f"{CONFIG['gcs_classifications']}/yearly/{year}"
-        mosaic_folder = f"{CONFIG['gcs_classifications']}/yearly/{year}/mosaics"
-
-    version_tag = f"{name}_draft" if draft else name
+    version_tag = f"{base_name}_draft" if draft else base_name
 
     with tempfile.TemporaryDirectory() as tmpdir:
         print(f"  ⬇️  Descargando fragmentos: gs://{CONFIG['bucket']}/{chunk_folder}/")
@@ -207,7 +209,7 @@ class FilterUI:
         
         self.w_year = widgets.IntSlider(value=2024, min=2017, max=2026, step=1, description='Año:', layout=widgets.Layout(width='300px'))
         self.w_month = widgets.IntSlider(value=8, min=1, max=12, step=1, description='Mes:', layout=widgets.Layout(width='300px'))
-        self.w_model = widgets.Text(value='v1', description='Modelo ID:', layout=widgets.Layout(width='300px'))
+        self.w_training_id = widgets.Text(value='42', description='Training ID:', layout=widgets.Layout(width='300px'))
         self.w_out_type = widgets.RadioButtons(options=['doy', 'binary'], value='doy', description='Output Type:')
         
         if self.preset_filters:
@@ -230,7 +232,7 @@ class FilterUI:
 
         self.ui = widgets.VBox([
             title,
-            widgets.HBox([self.w_year, self.w_month, self.w_model]),
+            widgets.HBox([self.w_year, self.w_month, self.w_training_id]),
             self.w_out_type,
             self.filter_panel
         ])
@@ -248,7 +250,7 @@ class FilterUI:
                 'open_filter': self.w_open.value if self.w_open.value > 0 else None,
                 'close_filter': self.w_close.value if self.w_close.value > 0 else None
             }
-        }, self.w_year.value, self.w_month.value, self.w_model.value, self.w_out_type.value
+        }, self.w_year.value, self.w_month.value, self.w_training_id.value, self.w_out_type.value
 
     def show(self):
         display(self.ui)
@@ -266,31 +268,25 @@ def start_filtering(ui):
         print("⚠️ Esta función requiere el objeto devuelto por run_ui() de M6.")
         return
         
-    config, year, month, model_id, out_type = ui.get_filter_config()
+    config, year, month, training_id, out_type = ui.get_filter_config()
+    from M0_auth_config import get_gcs_candidate
     
     print(f"🚀 Iniciando Filtrado M6")
-    print(f"   Periodo : {year}-{month:02d} | Modelo: {model_id} | Output: {out_type}")
+    print(f"   Periodo : {year}-{month:02d} | Training ID: {training_id} | Output: {out_type}")
     
     for region, opts in config.items():
         print(f"  > Procesando {region}: LULC={opts.get('mask_classes')}, Open={opts.get('open_filter')}, Close={opts.get('close_filter')}")
         
-        # M5 guarda klass_[pais]_[regiao]_[modelo]_[yymm]
-        # Aquí reconstruimos el acceso y exportamos filt_
-        # (Para una integración completa GEE requiere LoadGeoTIFF o Asset)
-        
         yymm = f"{year}_{month:02d}"
-        source_name = classification_name(year, month, region, model_id)
-        out_name = f"filt_{CONFIG.get('country', 'peru')}_{region}_{model_id}_{yymm}"
         
-        print(f"    - Obteniendo: {source_name}")
+        dest_prefix = get_gcs_candidate(region, training_id, yymm)
         
         # Como es una tarea GEE toCloudStorage, enviamos la tarea.
         # Por seguridad y contexto de demostración:
         import struct 
         
         # Fake task submission print since true loadGeoTiff requires Google Cloud Storage URIs
-        desc = f"Export_{out_name}"
-        dest_prefix = f"{CONFIG['gcs_filtered']}/{year}/{month:02d}/{out_name}"
+        desc = f"Export_Candidate_{dest_prefix.split('/')[-1]}"
         
         print(f"    ✅ Tarea exportación iniciada: GCS {dest_prefix}")
         

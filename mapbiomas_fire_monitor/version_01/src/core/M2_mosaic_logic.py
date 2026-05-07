@@ -79,20 +79,23 @@ def run_cmd(args, label="Comando"):
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Erro em {label}: {e.stderr.strip() if e.stderr else e.stdout.strip()}")
 
-def assemble_country_mosaic(year, month=None, period='monthly', bands=None, logger=None, progress_idx=0, progress_total=0, start_time=None):
+def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sensor=None, mosaic_method='minnbr', logger=None, progress_idx=0, progress_total=0, start_time=None):
     import shutil
     import time
     from datetime import timedelta
 
+    s = sensor or GLOBAL_OPTS['SENSOR']
+    m_method = mosaic_method or 'minnbr'
+
     if period == 'monthly':
-        chunk_prefix  = monthly_chunk_path(year, month)
-        mosaic_prefix = monthly_cog_path(year, month)
-        base_name = mosaic_name(year, month, 'monthly')
+        chunk_prefix  = monthly_chunk_path(year, month, mosaic=m_method, sensor=s)
+        mosaic_prefix = monthly_cog_path(year, month, mosaic=m_method, sensor=s)
+        base_name = mosaic_name(year, month, 'monthly', mosaic=m_method, sensor=s)
         label = f"{year}-{month:02d}"
     else:
-        chunk_prefix  = yearly_chunk_path(year)
-        mosaic_prefix = yearly_cog_path(year)
-        base_name = mosaic_name(year, period='yearly')
+        chunk_prefix  = yearly_chunk_path(year, mosaic=m_method, sensor=s)
+        mosaic_prefix = yearly_cog_path(year, mosaic=m_method, sensor=s)
+        base_name = mosaic_name(year, period='yearly', mosaic=m_method, sensor=s)
         label = f"{year} Anual"
 
     missing = check_m2_dependencies()
@@ -146,6 +149,9 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, logg
         current_step = progress_idx
 
         for b_name, remote_shards in band_files.items():
+            # Normalização da banda (ex: dayOfYear)
+            clean_b_name = "dayOfYear" if b_name.lower() == "dayofyear" else b_name
+            
             current_step += 1
             progress_str = f"[{current_step}/{progress_total}]" if progress_total > 0 else ""
             
@@ -170,18 +176,20 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, logg
                 vrt_path = os.path.join(tmp_path, f"{base_name}_{b_name}.vrt")
                 run_cmd(['gdalbuildvrt', vrt_path] + local_shards, label=f"VRT ({b_name})")
 
-                cog_remote_name = f"{base_name}_{b_name}_cog.tif"
+                # Nome do COG remoto (incluindo o sufixo _cog conforme legado)
+                cog_remote_name = f"{mosaic_name(year, month, period, clean_b_name, sensor=s, mosaic=m_method)}_cog.tif"
                 cog_local_path = os.path.join(tmp_path, cog_remote_name)
                 
                 # Determinar tipo de dado (ot)
-                dt = BAND_DATATYPES.get(b_name, 'Float32')
+                dt = BAND_DATATYPES.get(clean_b_name, 'Float32')
                 
                 run_cmd([
                     'gdal_translate', '-of', 'COG', '-ot', dt,
                     '-co', 'COMPRESS=LZW', '-co', 'PREDICTOR=2',
                     '-co', 'NUM_THREADS=2', '-co', 'BIGTIFF=YES', vrt_path, cog_local_path
-                ], label=f"Conversão COG ({b_name})")
+                ], label=f"Conversão COG ({clean_b_name})")
 
+                # Salva no destino oficial (que já inclui /cog/ via M0_auth_config)
                 dest = f"gs://{CONFIG['bucket']}/{mosaic_prefix}/{cog_remote_name}"
                 run_cmd([gsutil_cmd, 'cp', cog_local_path, dest], label=f"Upload ({b_name})")
                 
@@ -224,7 +232,7 @@ def delete_cogs(year, month=None, period='monthly', bands=None, logger=None):
     deleted = []
 
     for b in target_bands:
-        cog_remote_name = f"{base_name}_{b}_cog.tif"
+        cog_remote_name = f"{mosaic_name(year, month, period, b)}.tif"
         dest = f"gs://{CONFIG['bucket']}/{mosaic_prefix}/{cog_remote_name}"
         
         try:

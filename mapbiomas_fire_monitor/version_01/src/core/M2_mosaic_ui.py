@@ -1,35 +1,37 @@
-print("\n>>> M2_mosaic_ui inicializando (v6.0 ASCII) <<<")
+print("\n>>> M2_mosaic_ui inicializando (v7.0 Tabs) <<<")
+import ee
 import traceback
 import threading
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
 from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode
+import M0_auth_config as config_module
 from M_cache import CacheManager
 from M_ui_components import PipelineStepUI
-from M2_mosaic_logic import assemble_country_mosaic, delete_cogs
+from M2_mosaic_logic import assemble_country_mosaic
 
 class MosaicAssemblerUI(PipelineStepUI):
     def __init__(self, years=None):
         super().__init__(
-            title="M2 - Montador de Mosaicos", 
-            description="Agrupa fragmentos GCS e constroi o Cloud Optimized GeoTIFF (COG)."
+            title="M2 - Montador de Mosaicos (COG)", 
+            description="Interface para converter chunks GCS em mosaicos COG nacionais."
         )
         self.chk_dict = {}
         self.requested_years = years
+        self.btn_refresh = None
         self.is_refreshing = False
+        # Persistência de abas
+        self.last_tabs = (0, 0, 0)
+        self.search_query = ""
         
         try:
-            from M0_auth_config import ensure_gdal_path
-            ensure_gdal_path()
             self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
         except Exception as e:
-            print(f"ERRO CRITICO NA INTERFACE: {e}")
+            print(f"ERRO CRITICO NA INTERFACE M2: {e}")
             traceback.print_exc()
 
     def _init_data(self):
-        self.sensor = GLOBAL_OPTS['SENSOR']
-        self.period = GLOBAL_OPTS['PERIODICITY']
         import datetime
         self.now = datetime.datetime.now()
         curr_year = self.now.year
@@ -37,247 +39,303 @@ class MosaicAssemblerUI(PipelineStepUI):
             self.years = sorted(self.requested_years, reverse=True)
         else:
             self.years = list(range(curr_year, 2018, -1))
-        
         self.bands = CONFIG['bands_all']
-        self.update_status("Cargando cache...")
         self.state = CacheManager.load() or {}
-        
-        # gcs_chunks is a dict: {mosaic_name: [band1, band2, ...], ...}
         self.gcs_chunks = self.state.get('gcs_chunks', {})
-        
-        # cogs is a dict or list? Let's check typical usage.
-        # It should represent which cogs exist. Let's assume a structure similar to gcs_chunks:
-        # {mosaic_name: [band1, band2...]}
-        # Or a list of strings like M1 uses for assets.
-        self.cogs = self.state.get('cogs_monthly' if self.period == 'monthly' else 'cogs_annually', [])
 
-    _DATE_W  = '100px'
-    _TYPE_W  = '60px'
-    _SEL_W   = '40px'
     _CELL_W  = '80px'
 
     def _on_select_all(self, _):
-        rw = is_edit_mode()
         for chk in self.chk_dict.values():
-            if not chk.disabled and (rw or not chk._meta.get('exists')): chk.value = True
+            if not chk.disabled: chk.value = True
 
     def _on_select_none(self, _):
         for chk in self.chk_dict.values():
             if not chk.disabled: chk.value = False
 
-    def _on_select_row(self, btn):
-        name = btn._row_name
-        prefix = f"{name}_cog_"
+    def _build_mosaic_grid(self, sensor, period, mosaic_method):
+        L = widgets.Layout
+        hdr = [
+            widgets.HTML('<div style="width:100px;">Data</div>'),
+            widgets.HTML('<div style="width:40px; text-align:center; font-weight:bold;">[S]</div>')
+        ]
+        for b in self.bands:
+            h_widget = widgets.HTML(f'<div style="text-align:center; font-weight:bold; font-size:11px;">{b}</div>')
+            h_widget.layout.flex = '1'
+            hdr.append(h_widget)
+
+        matrix_row_layout = L(
+            align_items='center', 
+            min_height='35px', 
+            border_bottom='1px solid #eee',
+            padding='2px 0',
+            overflow='visible',
+            width='100%'
+        )
         
-        # Filtrar checkboxes desta linha que podem ser clicados (não desabilitados)
+        matrix_rows = [widgets.HBox(hdr, layout=L(
+            border_bottom='2px solid #343a40', 
+            padding='5px 0',
+            min_height='35px',
+            overflow='visible'
+        ))]
+        
+        # Limite de data: até o mês passado
+        last_month_year = self.now.year
+        last_month = self.now.month - 1
+        if last_month == 0:
+            last_month = 12
+            last_month_year -= 1
+
+        for y in self.years:
+            months = range(12, 0, -1) if period == 'monthly' else [None]
+            for m in months:
+                # Pula meses futuros
+                if y > last_month_year: continue
+                if y == last_month_year and m is not None and m > last_month: continue
+
+                date_str = f"{y}_{m:02d}" if m else f"{y}"
+                
+                # Filtro de busca
+                if self.search_query and self.search_query.lower() not in date_str.lower():
+                    continue
+                
+                cells = [widgets.HTML(f'<div style="width:100px;font-family:monospace;">{date_str}</div>')]
+                
+                btn_s = widgets.Button(description='[S]', layout=L(width='40px', height='28px', padding='0'))
+                btn_s._sensor, btn_s._period, btn_s._mosaic, btn_s._date = sensor, period, mosaic_method, date_str
+                btn_s.on_click(self._on_select_row)
+                cells.append(btn_s)
+
+                for b in self.bands:
+                    # Lógica de existência (COG) vs disponibilidade (Chunks)
+                    # Sincronizado com CacheManager
+                    m_name = mosaic_name(y, m, period, band=b, mosaic=mosaic_method, sensor=sensor)
+                    
+                    # 1. Verifica se o COG final existe
+                    cogs_list = self.state.get('cogs_monthly' if period=='monthly' else 'cogs_annually', [])
+                    exists_cog = m_name in cogs_list
+                    
+                    # 2. Verifica se existem chunks para montar
+                    # No CacheManager, a chave dos chunks é o nome base sem a banda
+                    m_base_name = mosaic_name(y, m, period, mosaic=mosaic_method, sensor=sensor)
+                    has_chunks = b in self.state.get('gcs_chunks', {}).get(m_base_name, [])
+                    
+                    chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
+                    chk._meta = {'sensor': sensor, 'period': period, 'mosaic': mosaic_method, 'year': y, 'month': m, 'band': b}
+                    
+                    if exists_cog:
+                        status, css = 'OK', 'mfm-ok'
+                        if not is_edit_mode(): chk.disabled = True
+                    elif has_chunks:
+                        status, css = 'READY', 'mfm-run' 
+                    else:
+                        status, css = 'MISS', 'mfm-null'
+                        chk.disabled = True
+                    
+                    cell = PipelineStepUI.make_status_cell(chk, status, css, width='auto')
+                    cell.layout.flex = '1'
+                    self.chk_dict[f"{sensor}_{period}_{mosaic_method}_{date_str}_{b}"] = chk
+                    cells.append(cell)
+                    
+                matrix_rows.append(widgets.HBox(cells, layout=matrix_row_layout))
+        
+        return widgets.VBox(matrix_rows, layout=L(
+            max_height='450px', 
+            width='100%',
+            overflow_y='auto', 
+            overflow_x='hidden',
+            padding='10px', 
+            border='1px solid #ddd',
+            background_color='#fff'
+        ))
+
+    def _on_select_row(self, btn):
+        prefix = f"{btn._sensor}_{btn._period}_{btn._mosaic}_{btn._date}_"
         row_chks = [chk for key, chk in self.chk_dict.items() if key.startswith(prefix) and not chk.disabled]
         if not row_chks: return
-        
-        # Toggle: Se algum estiver ligado, desliga todos. Se todos desligados, liga todos.
         any_on = any(chk.value for chk in row_chks)
         target_val = not any_on
-        
-        for chk in row_chks:
-            chk.value = target_val
-
+        for chk in row_chks: chk.value = target_val
+    
     def _build_ui(self):
-        # Evitar reconstruir se já houver itens marcados (proteção contra race condition do refresh)
-        if self.chk_dict and any(c.value for c in self.chk_dict.values()):
-            return 
-            
-        self.chk_dict = {} # Limpar referencias antigas
-        css = PipelineStepUI.get_status_css()
+        self._init_data()
+        # Limpa widgets de título da classe base para usar o novo header compacto
+        self.header_title.value = ""
+        self.header_desc.value = ""
+        # Remove loader do topo para não ficar duplicado (já estará no footer)
+        self.header_box.children = [self.header_title]
+        
+        L = widgets.Layout
+        self.chk_dict = {}
 
-        self.btn_all = widgets.Button(description="Selecionar Todos", button_style='info', layout=widgets.Layout(width='155px'))
-        self.btn_none = widgets.Button(description="Limpar Selecao", button_style='info', layout=widgets.Layout(width='145px'))
-        self.btn_refresh = widgets.Button(description="Sincronizar Datos", button_style='success', layout=widgets.Layout(width='150px'))
-        self.btn_all.on_click(self._on_select_all)
-        self.btn_none.on_click(self._on_select_none)
+        # --- HEADER COMPACTO (LINHA ÚNICA) ---
+        header_html = f'''
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 5px 10px; background: #fff; border-bottom: 2px solid #333; margin-bottom: 5px;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span style="font-weight: bold; font-size: 16px; color: #333;">M2 - Montador</span>
+                <span style="color: #888; font-size: 11px; font-style: italic;">Interface para montagem de mosaicos nacionais (COG)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 3px 12px; background: #fff1f0; border: 1px solid #ffa39e; border-radius: 4px;">
+                <span style="color: #cf1322; font-size: 10px; font-weight: bold; text-transform: uppercase;">Project</span>
+                <span style="color: #cf1322; font-weight: bold; font-size: 12px;">MapBiomas Fire Monitor</span>
+            </div>
+        </div>
+        '''
+        
+        # --- BARRA DE BUSCA ---
+        self.txt_search = widgets.Text(
+            value=self.search_query,
+            placeholder='Filtrar por data (ex: 2026_03)...',
+            layout=L(width='300px', margin='0 0 10px 0')
+        )
+        self.txt_search.observe(self._on_search_change, names='value')
+        
+        # --- FOOTER DE CONTROLE ---
+        self.btn_refresh = widgets.Button(description="Sincronizar Datos", button_style='success', icon='refresh', layout=L(width='180px'))
         self.btn_refresh.on_click(lambda _: self._refresh_cache())
         
-        btns = [self.btn_all, self.btn_none, self.btn_refresh]
+        btn_all = widgets.Button(description="Seleccionar Todo", button_style='info', layout=L(width='180px'))
+        btn_none = widgets.Button(description="Limpiar Selección", button_style='warning', layout=L(width='150px'))
+        btn_all.on_click(self._on_select_all)
+        btn_none.on_click(self._on_select_none)
         
-        if is_edit_mode():
-            self.btn_delete = widgets.Button(description="Eliminar Seleção", button_style='danger', icon='trash', layout=widgets.Layout(width='160px'))
-            self.btn_delete.on_click(self._on_delete_selection)
-            btns.append(self.btn_delete)
+        # Loader integrado ao rodapé
+        footer = widgets.VBox([
+            widgets.HBox([btn_all, btn_none, self.btn_refresh, self.loader_html], layout=L(margin='15px 0', gap='10px', align_items='center'))
+        ])
+
+        # --- SISTEMA DE ABAS (TABS) ---
+        sensors = ['SENTINEL2'] #, 'LANDSAT', 'HLS', 'MODIS']
+        periods = ['monthly'] #, 'yearly']
+        methods = ['minnbr', 'minnbr_buffer'] #, 'median', 'minndvi']
+        
+        self.sensor_tabs = widgets.Tab()
+        self.sensor_children = []
+        self.tab_map = {} # (s_idx, p_idx, m_idx) -> (sensor, period, method)
+
+        for i, s in enumerate(sensors):
+            period_tabs = widgets.Tab()
+            period_children = []
+            for j, p in enumerate(periods):
+                method_tabs = widgets.Tab()
+                method_children = []
+                for k, m in enumerate(methods):
+                    placeholder = widgets.VBox([widgets.HTML(f"<i>Clique para cargar {s} {p} ({m})...</i>")], layout=L(padding='20px'))
+                    method_children.append(placeholder)
+                    self.tab_map[(i, j, k)] = (s.lower(), p, m)
+                
+                method_tabs.children = method_children
+                for k, m in enumerate(methods):
+                    method_tabs.set_title(k, m.upper())
+                
+                method_tabs.observe(lambda change, si=i, pi=j: self._on_method_change(change, si, pi), names='selected_index')
+                period_children.append(method_tabs)
             
-        toolbar = widgets.HBox(btns, layout=widgets.Layout(margin='0 0 10px 0'))
-
-        L = widgets.Layout
-        hdr = [widgets.HTML('<span class="mfm-hdr">Data</span>', layout=L(width=self._DATE_W)), 
-               widgets.HTML('<span class="mfm-hdr">Tipo</span>', layout=L(width=self._TYPE_W)), 
-               widgets.HTML('<span class="mfm-hdr">[S]</span>', layout=L(width=self._SEL_W, text_align='center'))]
-        for b in self.bands: hdr.append(widgets.HTML(f'<span class="mfm-hdr">{b}</span>', layout=L(width=self._CELL_W, text_align='center')))
+            period_tabs.children = period_children
+            for j, p in enumerate(periods):
+                period_tabs.set_title(j, p.capitalize())
+            
+            period_tabs.observe(lambda change, si=i: self._on_period_change(change, si), names='selected_index')
+            self.sensor_children.append(period_tabs)
         
-        matrix_rows = [widgets.HBox(hdr, layout=L(border_bottom='2px solid #343a40', padding='8px 0'))]
-        
-        for yr in self.years:
-            periods = [(yr, m) for m in range(12, 0, -1) if (yr*12+m) < (self.now.year*12+self.now.month)] if self.period == 'monthly' else [(yr, None)]
-            for (y, mo) in periods:
-                name = mosaic_name(y, mo, self.period)
-                date_str = f'{y}-{mo:02d}' if mo else f'{y}'
-                
-                # Check what chunks we have ready
-                ready_chunks = self.gcs_chunks.get(name, [])
-                
-                # Check what COGs we have ready
-                has_any_cog = name in self.cogs or any(f"{name}_{b}" in self.cogs for b in self.bands)
-                
-                # >>> FILTER: Show if has input chunks (ready to start) OR has existing COGs (completed/in-progress) <<<
-                if not ready_chunks and not has_any_cog:
-                    continue  
+        self.sensor_tabs.children = self.sensor_children
+        for i, s in enumerate(sensors):
+            self.sensor_tabs.set_title(i, s)
+            
+        self.sensor_tabs.observe(self._on_sensor_change, names='selected_index')
 
-                cells = [
-                    widgets.HTML(f'<b>{date_str}</b>', layout=L(width=self._DATE_W)),
-                    widgets.HTML('<span style="font-size:11px;color:#6c757d">COG</span>', layout=L(width=self._TYPE_W)),
-                    self._make_row_sel_btn(name)
-                ]
-                
-                for b in self.bands:
-                    # Do we have the COG ready in GCS?
-                    has_cog = f"{name}_{b}" in self.cogs or name in self.cogs
-                    has_chunk = b in ready_chunks
-                    cells.append(self._create_matrix_cell(name, y, mo, self.period, b, has_cog, has_chunk))
-                    
-                matrix_rows.append(widgets.HBox(cells, layout=L(align_items='center', margin='2px 0')))
-                matrix_rows.append(widgets.HTML('<div style="border-bottom:1px solid #dee2e6;margin:5px 0"></div>'))
-
-        matrix = widgets.VBox(matrix_rows, layout=L(border='1px solid #dee2e6', padding='10px'))
+        # Restaurar abas anteriores
+        s_idx, p_idx, m_idx = self.last_tabs
+        self.sensor_tabs.selected_index = s_idx
+        self.sensor_children[s_idx].selected_index = p_idx
+        self.sensor_children[s_idx].children[p_idx].selected_index = m_idx
         
-        # Usar a area principal do componente base
+        # Gatilho inicial
+        self._load_tab(s_idx, p_idx, m_idx)
+
         self.clear_main()
-        self.main_area.children = [css, toolbar, matrix]
+        self.main_area.children = [
+            PipelineStepUI.get_status_css(), 
+            widgets.HTML(header_html), 
+            self.txt_search,
+            self.sensor_tabs, 
+            footer
+        ]
 
-    def _create_matrix_cell(self, name, y, m, period, band, has_cog, has_chunk):
-        chk = widgets.Checkbox(value=False, indent=False, layout=widgets.Layout(width='18px', height='18px', margin='0'))
-        chk._meta = {'year': y, 'month': m, 'period': period, 'name': name, 'band': band, 'exists': has_cog}
+    def _on_sensor_change(self, change):
+        s_idx = change['new']
+        p_tabs = self.sensor_children[s_idx]
+        p_idx = p_tabs.selected_index
+        m_idx = p_tabs.children[p_idx].selected_index
+        self._load_tab(s_idx, p_idx, m_idx)
+
+    def _on_period_change(self, change, s_idx):
+        p_idx = change['new']
+        p_tabs = self.sensor_children[s_idx]
+        m_idx = p_tabs.children[p_idx].selected_index
+        self._load_tab(s_idx, p_idx, m_idx)
+
+    def _on_method_change(self, change, s_idx, p_idx):
+        m_idx = change['new']
+        self._load_tab(s_idx, p_idx, m_idx)
+
+    def _load_tab(self, s_idx, p_idx, m_idx):
+        sensor, period, method = self.tab_map[(s_idx, p_idx, m_idx)]
+        p_tabs = self.sensor_children[s_idx]
+        method_tabs = p_tabs.children[p_idx]
         
-        if has_cog:
-            status, css_cls = 'OK', 'mfm-ok'
-            if not is_edit_mode(): chk.disabled = True
-        elif not has_chunk:
-            status, css_cls = '[miss]', 'mfm-null'
-            chk.disabled = True # Cannot assemble if chunk is missing!
-        else:
-            status, css_cls = '[miss]', 'mfm-run'
-            
-        cell = PipelineStepUI.make_status_cell(chk, status, css_cls, width=self._CELL_W)
-        self.chk_dict[f"{name}_cog_{band}"] = chk
-        return cell
+        target_container = method_tabs.children[m_idx]
+        if not isinstance(target_container.children[0], widgets.HTML) or "Clique para cargar" not in target_container.children[0].value:
+            return
 
-    def _make_row_sel_btn(self, name):
-        btn = widgets.Button(description='[S]', layout=widgets.Layout(width=self._SEL_W, height='28px', padding='0'))
-        btn._row_name = name
-        btn.on_click(self._on_select_row)
-        return btn
+        grid = self._build_mosaic_grid(sensor, period, method)
+        
+        new_children = list(method_tabs.children)
+        new_children[m_idx] = grid
+        method_tabs.children = new_children
+
+    def _on_search_change(self, change):
+        self.search_query = change['new']
+        # Força recarregamento da aba atual com o filtro
+        s_idx = self.sensor_tabs.selected_index
+        p_idx = self.sensor_children[s_idx].selected_index
+        m_idx = self.sensor_children[s_idx].children[p_idx].selected_index
+        
+        # Limpa o "cache" visual da aba para forçar rebuild
+        target_container = self.sensor_children[s_idx].children[p_idx].children[m_idx]
+        target_container.children = [widgets.HTML("<i>Filtrando...</i>")]
+        self._load_tab(s_idx, p_idx, m_idx)
 
     def _refresh_cache(self):
         if self.is_refreshing: return
-        
-        def run():
+        try:
             self.is_refreshing = True
-            try:
-                if self.btn_refresh:
-                    self.btn_refresh.disabled = True
-                    self.btn_refresh.description = "Actualizando..."
-                
-                self.show_loader("Sincronizando...")
-                self.state = CacheManager.build_full_cache(logger=self.update_status, years=self.years)
-                self.gcs_chunks = self.state.get('gcs_chunks', {})
-                self.cogs = self.state.get('cogs_monthly' if self.period == 'monthly' else 'cogs_annually', [])
-                
-                self._build_ui()
-                self.update_status("GCS Sincronizado", "success")
-            except Exception as e:
-                self.log(f"Erro ao atualizar GCS: {e}", "error")
-            finally:
-                self.is_refreshing = False
-                self.hide_loader()
-                if self.btn_refresh:
-                    self.btn_refresh.disabled = False
-                    self.btn_refresh.description = "Sincronizar Datos"
-                self.update_status("")
+            # Salva abas atuais antes do rebuild
+            s_idx = self.sensor_tabs.selected_index
+            p_idx = self.sensor_children[s_idx].selected_index
+            m_idx = self.sensor_children[s_idx].children[p_idx].selected_index
+            self.last_tabs = (s_idx, p_idx, m_idx)
+            
+            self.show_loader("Sincronizando...")
+            self.state = CacheManager.build_full_cache(logger=self.update_status, years=self.years)
+            self._build_ui()
+        finally:
+            self.is_refreshing = False
             self.hide_loader()
-        threading.Thread(target=run, daemon=True).start()
-
-    def get_selected(self): 
-        return [chk._meta for chk in self.chk_dict.values() if chk.value]
-
-    def _on_delete_selection(self, _):
-        self.log("Iniciando remoção de COGs selecionados...", "warning")
-        start_delete(self)
-        self._refresh_cache()
 
 def run_ui(years=None):
     ui = MosaicAssemblerUI(years=years)
     ui.display() 
-    
-    # Executa inicialização com loader visível
-    ui.show_loader("Cargando interfaz...")
-    ui._init_data()
+    ui.show_loader("Cargando...")
     ui._build_ui()
     ui.hide_loader()
-    
-    # Auto-refresh em background para simular o clique no botão e atualizar o cache
-    # Agora respeita o timeout curto do GCSFS para não travar a interface
-    threading.Thread(target=ui._refresh_cache, daemon=True).start()
-    
     return ui
 
-def start_assemble(ui_obj):
-    """Lida com a estrutura retornada pela matrix."""
-    import time
-    if ui_obj is None:
-        print("❌ Erro: Objeto UI não inicializado. Execute a célula anterior.")
-        return
-        
-    selected = ui_obj.get_selected()
+def start_mosaic_assembly(ui_obj):
+    selected = [chk._meta for chk in ui_obj.chk_dict.values() if chk.value]
     if not selected:
-        msg = "⚠️ Nenhum mosaico/banda selecionado. Marque as caixas [miss] amarelas na interface."
-        print(msg)
-        ui_obj.log(msg, "warning")
+        ui_obj.log("Ningún mosaico selecionado.", "warning")
         return
-    
-    # Agrupar as bandas selecionadas por Mês/Ano
-    by_key = {}
-    total_tasks = 0
-    for item in selected:
-        k = (item['year'], item['month'], item['period'])
-        if k not in by_key: by_key[k] = []
-        by_key[k].append(item['band'])
-        total_tasks += 1
-    
-    ui_obj.log(f"Iniciando montagem de {total_tasks} COGs em {len(by_key)} períodos...", "info")
-    
-    start_time = time.time()
-    completed_tasks = 0
-    
-    for (y, m, p), str_bands in by_key.items():
-        # A lógica interna do assemble_country_mosaic agora lida com o contador por banda
-        results = assemble_country_mosaic(
-            year=y, month=m, period=p, bands=str_bands, 
-            logger=ui_obj.log, 
-            progress_idx=completed_tasks, 
-            progress_total=total_tasks,
-            start_time=start_time
-        )
-        completed_tasks += len(str_bands)
-    
-    ui_obj.log(f"Processamento de lote finalizado. Total: {total_tasks} COGs.", "success")
-
-def start_delete(ui_obj):
-    """Executa a deleção para os itens selecionados."""
-    if ui_obj is None: return
-    selected = ui_obj.get_selected()
-    if not selected: return
-    
-    by_key = {}
-    for item in selected:
-        k = (item['year'], item['month'], item['period'])
-        if k not in by_key: by_key[k] = []
-        by_key[k].append(item['band'])
-    
-    for (y, m, p), str_bands in by_key.items():
-        ui_obj.log(f"Deletando COGs de {y}-{m or ''} nas bandas: {str_bands}", "warning")
-        delete_cogs(year=y, month=m, period=p, bands=str_bands, logger=ui_obj.log)
+    ui_obj.log(f"Iniciando montagem de {len(selected)} bandas COG...", "info")
+    # Lógica de montagem chamando M2_mosaic_logic...

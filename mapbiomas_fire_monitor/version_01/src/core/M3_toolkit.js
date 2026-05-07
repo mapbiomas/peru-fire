@@ -6,6 +6,9 @@ v10: Exclusive Tool for Sample Collection and Export (Vectors)
 - Dynamic update of Destination/Source Assets
 ********************************************/
 
+// ─── GLOBAL CONFIGURATION ───────────────────────────────────────────────────
+var PERSONAL_TASK_FLAG = 'MONITOR';
+
 // ─── LANGUAGE CONFIGURATION ─────────────────────────────────────────────────
 // Change APP_LANG to switch the interface language: 'es', 'pt', 'en'
 var APP_LANG = 'es';
@@ -23,7 +26,7 @@ var L = (function () {
             lbl_periodicity: 'Periodicidad',
             opt_annual: 'Anual',
             opt_monthly: 'Mensual',
-            lbl_asset_mosaics: 'Mosaicos classificados buffer',
+            lbl_asset_mosaics: 'Mosaicos classificados',
             lbl_raw_mosaics: 'Mosaicos on the fly',
             lbl_ref_cats: 'Categorías de Referencia',
             lbl_burned: 'Área Quemada',
@@ -38,7 +41,7 @@ var L = (function () {
             tab_import: '📥 IMPORTAR',
             tab_export: '📤 EXPORTAR',
             btn_load: 'Cargar',
-            lbl_version: 'Versión:',
+            lbl_version: 'Sample id:',
             lbl_shortname: 'Nombre corto (opcional):',
             lbl_comment: 'Comentario (metadato):',
             lbl_date: 'Fecha representada:',
@@ -64,7 +67,8 @@ var L = (function () {
             lbl_count: 'Cant.',
             lbl_satellites_toggle: 'Satélites',
             lbl_vis_preset: 'Visualización',
-            opt_rgb_fire: '[SWIR1/NIR/RED]',
+            opt_rgb_fire: '[SWIR1/NIR/RED] A',
+            opt_rgb_coverage: '[SWIR1/NIR/RED] B',
             opt_rgb_false: '[NIR/SWIR1/RED]',
             opt_rgb_natural: '[RED/GREEN/BLUE]',
             opt_gray_nir: 'NIR',
@@ -88,7 +92,7 @@ var L = (function () {
             lbl_periodicity: 'Periodicidade',
             opt_annual: 'Anual',
             opt_monthly: 'Mensal',
-            lbl_asset_mosaics: 'Mosaicos classificados buffer',
+            lbl_asset_mosaics: 'Mosaicos classificados',
             lbl_raw_mosaics: 'Mosaicos on the fly',
             lbl_ref_cats: 'Categorias de Referência',
             lbl_burned: 'Área Queimada',
@@ -103,7 +107,7 @@ var L = (function () {
             tab_import: '📥 IMPORTAR',
             tab_export: '📤 EXPORTAR',
             btn_load: 'Carregar',
-            lbl_version: 'Versão:',
+            lbl_version: 'Sample id:',
             lbl_shortname: 'Shortname (opcional):',
             lbl_comment: 'Comentário (metadado):',
             lbl_date: 'Data representada:',
@@ -129,7 +133,8 @@ var L = (function () {
             lbl_count: 'Qtd.',
             lbl_satellites_toggle: 'Satélites',
             lbl_vis_preset: 'Visualização',
-            opt_rgb_fire: '[SWIR1/NIR/RED]',
+            opt_rgb_fire: '[SWIR1/NIR/RED] A',
+            opt_rgb_coverage: '[SWIR1/NIR/RED] B',
             opt_rgb_false: '[NIR/SWIR1/RED]',
             opt_rgb_natural: '[RED/GREEN/BLUE]',
             opt_gray_nir: 'NIR',
@@ -153,7 +158,7 @@ var L = (function () {
             lbl_periodicity: 'Periodicity',
             opt_annual: 'Annual',
             opt_monthly: 'Monthly',
-            lbl_asset_mosaics: 'Mosaicos classificados buffer',
+            lbl_asset_mosaics: 'Mosaicos classificados',
             lbl_raw_mosaics: 'Mosaicos on the fly',
             lbl_ref_cats: 'Reference Categories',
             lbl_burned: 'Burned Area',
@@ -168,7 +173,7 @@ var L = (function () {
             tab_import: '📥 IMPORT',
             tab_export: '📤 EXPORT',
             btn_load: 'Load',
-            lbl_version: 'Version:',
+            lbl_version: 'Sample id:',
             lbl_shortname: 'Short name (optional):',
             lbl_comment: 'Comment (metadata):',
             lbl_date: 'Represented date:',
@@ -194,7 +199,8 @@ var L = (function () {
             lbl_count: 'Qty.',
             lbl_satellites_toggle: 'Satellites',
             lbl_vis_preset: 'Visualization',
-            opt_rgb_fire: '[SWIR1/NIR/RED]',
+            opt_rgb_fire: '[SWIR1/NIR/RED] A',
+            opt_rgb_coverage: '[SWIR1/NIR/RED] B',
             opt_rgb_false: '[NIR/SWIR1/RED]',
             opt_rgb_natural: '[RED/GREEN/BLUE]',
             opt_gray_nir: 'NIR',
@@ -214,7 +220,9 @@ var L = (function () {
 // ─── ICON REPOSITORY ────────────────────────────────────────────────────────
 // Using base64 strings for simple, self-contained UI icons
 var ICONS = {
-    load: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAdUlEQVR4nGNgGAWjYBSMglEwCkbBSAMMDA0Nf//+Zf7//z8DIyNjOxBnoig8DMUuKPLBUPyGog8NixMQp4EIFIDiNBB9vBSNdMAwNDTEAwMDA6Dof0SGYuC/BCh+Q5EvAMVpIPrpUDTSAEPDQ0M8MNAAoPANAOfdJAmhH1mMAAAAAElFTkSuQmCC'
+    load: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAdUlEQVR4nGNgGAWjYBSMglEwCkbBSAMMDA0Nf//+Zf7//z8DIyNjOxBnoig8DMUuKPLBUPyGog8NixMQp4EIFIDiNBB9vBSNdMAwNDTEAwMDA6Dof0SGYuC/BCh+Q5EvAMVpIPrpUDTSAEPDQ0M8MNAAoPANAOfdJAmhH1mMAAAAAElFTkSuQmCC',
+    download: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAgklEQVR4nO2UOQqAMBQF5xpWFhY2FlpYeXuDHkLQwkKwEI8QCViI+5IgaAYeBAJvyA8J/IkMkGOECYGcxQoWSCv4nqBaKd1KeUcQA92J8h5I7p4iAtqdcrUX8hAfqFfKGyBAEy5QTMrV/XhoxgHy8VdVa4t+xIWHJQ8iTAtSAwN4iQH5pnQ8NtSv6QAAAABJRU5ErkJggg==",
+
 };
 
 Map.setOptions('SATELLITE');
@@ -228,9 +236,9 @@ var countryConfigs = {
     // },
     'Peru': {
         asset_regions: 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
-        asset_samples: 'projects/mapbiomas-peru/assets/FIRE/MONITOR/VERSION_01/LIBRARY_SAMPLES',
+        asset_samples: 'projects/mapbiomas-peru/assets/FIRE/MONITOR_01/LIBRARY_SAMPLES',
         bucket: 'mapbiomas-fire',
-        gcs_samples: 'sudamerica/peru/monitor/library_samples',
+        gcs_samples: 'sudamerica/peru/monitor/version_01/library_samples',
         property: 'region_nam'
     }
 };
@@ -241,14 +249,15 @@ var current_regiones = ee.FeatureCollection(countryConfigs['Peru'].asset_regions
 // --- VISUALIZATION SETTINGS ---
 var VIS_PRESETS = {
     'fire': { bands: ['swir1', 'nir', 'red'], min: 3, max: 40 },
+    'coverage': { 'bands': ['swir1', 'nir', 'red'], 'gain': [8, 6, 20], 'gamma': 0.85 },
     'false': { bands: ['nir', 'swir1', 'red'], min: 3, max: 40 },
     'swir_alt': { bands: ['swir2', 'swir1', 'nir'], min: 3, max: 40 },
-    'natural': { bands: ['red', 'green', 'blue'], min: 3, max: 40 },
-    'nir': { bands: ['nir'], min: 3, max: 40 },
-    'swir1': { bands: ['swir1'], min: 3, max: 40 },
-    'swir2': { bands: ['swir2'], min: 3, max: 40 },
-    'nbr': { bands: ['nbr'], min: -0.5, max: 0.5 },
-    'ndvi': { bands: ['ndvi'], min: -0.5, max: 0.5 }
+    'natural': { bands: ['red', 'green', 'blue'], min: 4, max: 14, gamma: 2 },
+    'nir': { bands: ['nir'], min: 16, max: 48 },
+    'swir1': { bands: ['swir1'], min: 16, max: 48 },
+    'swir2': { bands: ['swir2'], min: 16, max: 48 },
+    'nbr': { bands: ['nbr'], min: -0.1, max: 0.5 },
+    'ndvi': { bands: ['ndvi'], min: 0.1, max: 0.8 }
 };
 
 var currentVisMode = 'fire';
@@ -397,7 +406,7 @@ function user_interface() {
         title: { margin: '1px', padding: '2px', fontSize: '13px', fontWeight: 'bold', color: '#333' },
         label: { margin: '1px', padding: '0px', fontSize: '12px', color: '#555' },
         input: { margin: '1px', padding: '0px', stretch: 'horizontal' },
-        btn_blue: { margin: '1px', padding: '0px', color: '#1a73e8', fontWeight: 'bold' },
+        btn_blue: { margin: '2px', padding: '0px', color: '#1a73e8', fontWeight: 'bold' },
         btn_green: { margin: '1px', padding: '0px', color: '#0f9d58', fontWeight: 'bold' },
         btn_red: { margin: '1px', padding: '0px', color: '#d32f2f', fontWeight: 'bold' },
         tab_active: { margin: '0px', padding: '1px', border: '1px solid #1a73e8', color: '#1a73e8', fontWeight: 'bold', backgroundColor: '#e8f0fe', stretch: 'horizontal' },
@@ -501,7 +510,8 @@ function user_interface() {
             var month = dateStr.indexOf('_') !== -1 ? parseInt(dateStr.split('_')[1], 10) : null;
             var start = month ? ee.Date.fromYMD(year, month, 1) : ee.Date.fromYMD(year, 1, 1);
             var end = month ? start.advance(1, 'month') : start.advance(1, 'year');
-            var folderPeriod = month ? 'MONTHLY' : 'ANNUAL';
+            var folderPeriod = month ? 'MONTHLY' : 'YEARLY';
+            var periodicity = month ? 'monthly' : 'yearly';
 
             checkedVisKeys.forEach(function (visKey) {
                 var vis = VIS_PRESETS[visKey];
@@ -513,17 +523,30 @@ function user_interface() {
                     if (assetCheckboxes[s] && assetCheckboxes[s].getValue()) {
                         var layerId = 'asset_' + s + '_' + dateStr + '_' + visKey;
                         desiredLayerIds.push(layerId);
-                        
+
                         var isBuffer = s.indexOf('buffer') !== -1;
-                        var sensorFolder = isBuffer ? 'SENTINEL2_BUFFER' : 'SENTINEL2';
-                        var prefix = isBuffer ? 'sentinel2_buffer' : 'sentinel2';
-                        var name = prefix + '_fire_' + pais + '_' + dateStr;
+                        var sensorFolder = 'SENTINEL2'; // Sensor base
+                        var mosaicType = isBuffer ? 'MINNBR_BUFFER' : 'MINNBR';
+                        var periodFolder = folderPeriod;
+
+                        var assetBase = 'projects/mapbiomas-peru/assets/FIRE/MONITOR_01/LIBRARY_IMAGES';
                         var imgAsset = ee.Image().select();
+
                         try {
                             baseBands.forEach(function (b) {
-                                var colId = 'projects/mapbiomas-mosaics/assets/FIRE/' + sensorFolder + '/' + folderPeriod + '/' + b + '/' + name + '_' + b;
-                                imgAsset = imgAsset.addBands(ee.Image(colId));
+                                // Nova Estrutura: {base}/{sensor}/{period}/{mosaic}/{band}
+                                var colId = [assetBase, sensorFolder, periodFolder, mosaicType, b].join('/');
+                                var col = ee.ImageCollection(colId);
+
+                                // Filtra a imagem pelo nome institucional ou metadados
+                                var dateKey = periodicity === 'monthly' ? year + '_' + ('0' + month).slice(-2) : year;
+                                var imgName = 'image_peru_fire_sentinel2_' + mosaicType.toLowerCase() + '_' + b + '_' + dateKey;
+
+                                // Tenta carregar a imagem da coleção
+                                var bandImg = col.filter(ee.Filter.eq('system:index', imgName)).first();
+                                imgAsset = imgAsset.addBands(bandImg.rename(b));
                             });
+
                             imgAsset = addIndices(imgAsset);
                             var label = (isBuffer ? 'Asset S2 Buffer - ' : 'Asset S2 - ') + dateStr + visSuffix;
                             updateManagedLayer(layerId, imgAsset.select(requestedBands).updateMask(spatialMask), vis, label);
@@ -988,7 +1011,7 @@ function user_interface() {
     // 1. Define sub-drawers for Reference
     var extraCheckboxes = {};
     var drawerAQ = createLayerDrawer(L.lbl_burned, [
-        { id: 'mcd64a1', label: 'MODIS BA', value: false },
+        { id: 'mcd64a1', label: 'MODIS MCD64A1', value: false },
         { id: 'gabam', label: 'GABAM', value: false },
         { id: 'fire_cci', label: 'FIRE_CCI', value: false },
         { id: 'peru_ref', label: 'Cicatrizes Peru', value: false }
@@ -1003,6 +1026,7 @@ function user_interface() {
     // 2. Define sub-drawers for Satellites
     var drawerVis = createLayerDrawer(L.lbl_vis_preset, [
         { id: 'fire', label: L.opt_rgb_fire, value: true },
+        { id: 'coverage', label: L.opt_rgb_coverage, value: false },
         { id: 'false', label: L.opt_rgb_false, value: false },
         { id: 'swir_alt', label: L.opt_rgb_swir_alt, value: false },
         { id: 'natural', label: L.opt_rgb_natural, value: false },
@@ -1082,7 +1106,7 @@ function user_interface() {
     var btnFire = ui.Button({ label: 'Fire', style: { color: '#d32f2f', margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { setLayerMode('fire'); } });
     var btnNotFire = ui.Button({ label: 'Not Fire', style: { color: '#1a73e8', margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { setLayerMode('notFire'); } });
     var btnHand = ui.Button({ label: '✋', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { Map.drawingTools().setShape(null); } });
-    var btnClear = ui.Button({ label: '🧹', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: clearDrawingTools });
+    var btnClear = ui.Button({ label: '🗑️Delete', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: clearDrawingTools });
     var btnCenter = ui.Button({ label: '📍', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: centerDrawingTools });
 
     rowDraw.add(btnFire).add(btnNotFire).add(btnHand).add(btnClear).add(btnCenter);
@@ -1097,7 +1121,7 @@ function user_interface() {
     var select_address = ui.Select({ style: styles.input });
 
     var btt_import_action = ui.Button({
-        imageUrl: ICONS.load, style: styles.btn_blue,
+        imageUrl: ICONS.download, style: styles.btn_blue,
         onClick: function () {
             var id = select_address.getValue();
             if (!id) return;
@@ -1145,36 +1169,50 @@ function user_interface() {
 
     // --- Versão automática ---
     var lab_version_status = ui.Label(L.ver_checking, { fontSize: '10px', color: '#888', margin: '1px' });
-    var txt_version = ui.Textbox({ placeholder: 'v0001', value: 'v0001', onChange: updateExportPreview, style: { margin: '1px', padding: '0px', width: '55px' } });
+    var txt_version = ui.Textbox({ placeholder: '0001', value: 'v0001', onChange: updateExportPreview, style: { margin: '1px', padding: '0px', width: '55px' } });
 
     function suggestNextVersion() {
         lab_version_status.setValue(L.ver_checking).style().set('color', '#888');
         var conf = countryConfigs[getSelectedCountry()];
+
         try {
             var assetList = ee.data.listAssets(conf.asset_samples);
             var assets = assetList ? assetList.assets : [];
+
             if (!assets || assets.length === 0) {
-                txt_version.setValue('v0001');
+                txt_version.setValue('0001');
                 lab_version_status.setValue(L.ver_empty).style().set('color', '#e65100');
                 updateExportPreview();
                 return;
             }
+
             var maxV = 0;
+
             assets.forEach(function (a) {
                 var fname = a.id.split('/').slice(-1)[0];
-                var m = fname.match(/v(\d{4})/);
+
+                var m = fname.match(/^samples_(\d{4})$/);
+
                 if (m) {
                     var n = parseInt(m[1], 10);
                     if (n > maxV) maxV = n;
                 }
             });
-            var next = 'v' + ('000' + (maxV + 1)).slice(-4);
-            txt_version.setValue(next);
-            lab_version_status.setValue(L.ver_suggested + next).style().set('color', '#0f9d58');
+
+            var nextNumber = ('000' + (maxV + 1)).slice(-4);
+            var next = 'samples_' + nextNumber;
+
+            txt_version.setValue(nextNumber);
+
+            lab_version_status
+                .setValue(L.ver_suggested + next)
+                .style().set('color', '#0f9d58');
+
         } catch (e) {
-            txt_version.setValue('v0001');
+            txt_version.setValue('0001');
             lab_version_status.setValue(L.ver_empty).style().set('color', '#e65100');
         }
+
         updateExportPreview();
     }
 
@@ -1231,9 +1269,13 @@ function user_interface() {
         satValues.forEach(function (sv) { if (satCheckboxes[sv].getValue()) sats.push(sv); });
         return sats;
     }
-
+    function getSampleName() {
+        var num = txt_version.getValue() || '0001';
+        num = num.replace(/^samples_/, '');
+        return 'samples_' + num;
+    }
     function updateExportPreview() {
-        var ver = txt_version.getValue() || 'v0001';
+        var ver = getSampleName();
         var sn = txt_shortname.getValue() ? redundanceReplace(txt_shortname.getValue()) : '';
         var dt = select_date_export.getValue();
 
@@ -1241,14 +1283,16 @@ function user_interface() {
 
         var dt_label = dt || 'YYYY';
         var parts = [ver];
+
         if (sn) parts.push(sn);
         parts.push(redundanceReplace(dt_label));
+
         lab_export_preview.setValue('📄 ' + parts.join('_'));
     }
 
     // Alias para compatibilidade com outros módulos que chamam updateExportLabel
     function updateExportLabel() { updateExportPreview(); }
- 
+
     function updateShortnameSuggestion() {
         var selected = [];
         Object.keys(regionCheckboxes).forEach(function (k) {
@@ -1272,7 +1316,7 @@ function user_interface() {
         Object.keys(regionCheckboxes).forEach(function (k) { if (regionCheckboxes[k].getValue()) selectedNames.push(k); });
         var safeRegion = selectedNames.length === 1 ? selectedNames[0] : (selectedNames.length > 1 ? 'multi' : 'none');
         var datePeriod = select_date_export.getValue() || 'YYYY';
-        var ver = txt_version.getValue() || 'v0001';
+        var ver = getSampleName();
         var sn = txt_shortname.getValue() || '';
         var comment = txt_comment.getValue() || '';
         var now = new Date();
@@ -1313,7 +1357,7 @@ function user_interface() {
             var sats = getSelectedSatellites();
             if (sats.length === 0) { print(L.err_no_sat); return; }
             var conf = countryConfigs[getSelectedCountry()];
-            var ver = txt_version.getValue() || 'v0001';
+            var ver = getSampleName();
             var sn = txt_shortname.getValue() ? redundanceReplace(txt_shortname.getValue()) : '';
             var dt_formatted = redundanceReplace(dt || 'YYYY');
 
@@ -1332,12 +1376,12 @@ function user_interface() {
 
             Export.table.toAsset({
                 collection: vec,
-                description: 'samples_toAsset_' + desc,
+                description: PERSONAL_TASK_FLAG + '_ASSET_' + desc,
                 assetId: conf.asset_samples + '/' + desc
             });
             Export.table.toCloudStorage({
                 collection: vec,
-                description: 'samples_toGCS_' + desc,
+                description: PERSONAL_TASK_FLAG + '_GCS_' + desc,
                 bucket: conf.bucket,
                 fileNamePrefix: conf.gcs_samples + '/' + desc,
                 fileFormat: 'CSV'
