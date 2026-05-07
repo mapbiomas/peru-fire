@@ -673,15 +673,18 @@ class ModelTrainerUI(PipelineStepUI):
         if not available_combos:
             return widgets.HTML('<div style="padding:20px; color:#999;"><i>Nenhum dado encontrado no GCS. Sincronize os dados no M1 ou M2 primeiro.</i></div>')
 
-        self.band_chk_map = {} # (sensor, mosaic, band) -> checkbox
-        matrix_rows = []
+        # Ordem sugerida (Espectral) - Opcional e flexível
+        BANDS_PRIORITY = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']
         
         for (s, m), bands in sorted(available_combos.items()):
             label_text = f"{s.upper()} {m.replace('_', ' ').title()}"
             label_html = widgets.HTML(f'<div style="width:200px; font-weight:bold; color:#333; font-size:12px;">{label_text}</div>')
             
+            # Ordenação inteligente: prioridade primeiro, o resto alfabético no fim
+            sorted_bands = sorted(list(bands), key=lambda x: BANDS_PRIORITY.index(x) if x in BANDS_PRIORITY else 999 + ord(x[0]))
+            
             band_widgets = []
-            for b in sorted(list(bands)):
+            for b in sorted_bands:
                 chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
                 self.band_chk_map[(s, m, b)] = chk
                 
