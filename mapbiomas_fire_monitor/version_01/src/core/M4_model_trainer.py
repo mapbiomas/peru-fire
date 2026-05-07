@@ -678,6 +678,8 @@ class ModelTrainerUI(PipelineStepUI):
         
         self.band_chk_map = {} # (sensor, mosaic, band) -> checkbox
         matrix_rows = []
+        
+        for (s, m), bands in sorted(available_combos.items()):
             label_text = f"{s.upper()} {m.replace('_', ' ').title()}"
             label_html = widgets.HTML(f'<div style="width:200px; font-weight:bold; color:#333; font-size:12px;">{label_text}</div>')
             
