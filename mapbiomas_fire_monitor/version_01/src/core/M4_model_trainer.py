@@ -77,10 +77,14 @@ def list_trained_models():
 def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
     """
     Extrai píxeis do GCS baseado em uma configuração flexível de bandas.
-    bands_config: { 'red': {'sensor': 'sentinel2', 'mosaic': 'minnbr'}, ... }
+    Validando existência prévia para evitar erros silenciosos.
     """
-    from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, _gcs_mosaic_path
+    from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name
+    from M_cache import CacheManager
+    
     fs = _get_fs()
+    state = CacheManager.load() or {}
+    gcs_chunks = state.get('gcs_chunks', {})
     
     dfs = []
     for group in sample_groups:
@@ -92,8 +96,7 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
         except Exception as e:
             if logger: logger(f"Erro ao ler {group}: {e}", "error")
             
-    if not dfs:
-        return np.array([]), np.array([])
+    if not dfs: return np.array([]), np.array([])
         
     df = pd.concat(dfs, ignore_index=True)
     df['geometry'] = df['.geo'].apply(lambda x: shape(json.loads(x)))
@@ -101,84 +104,88 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
     
     X_all, y_all = [], []
     periods = gdf['period'].unique()
+    bands_sorted = sorted(bands_config.keys())
     
     for p in periods:
-        if logger: logger(f"Extraindo píxeis para o período: {p}", "info")
         subset = gdf[gdf['period'] == p]
         geometries = subset.geometry.tolist()
         labels = subset['fire'].tolist()
         
-        # temporal_id parse (YYYY_MM ou YYYY)
         parts = str(p).split('_')
-        y = int(parts[0])
-        m = int(parts[1]) if len(parts) > 1 else None
-        periodicity = 'monthly' if m else 'yearly'
+        y = int(parts[0]); m = int(parts[1]) if len(parts) > 1 else None
+        periodicity = 'monthly' if m else 'annually'
         
-        period_y = np.array([])
-        band_data_list = []
-        bands_sorted = sorted(bands_config.keys()) # Garante ordem consistente
+        # --- VERIFICAÇÃO PRÉVIA DE DISPONIBILIDADE ---
+        missing_bands = []
+        band_paths = {}
         
-        valid_period = True
         for b in bands_sorted:
             config = bands_config[b]
-            s_name = config.get('sensor', GLOBAL_OPTS['SENSOR']).lower()
-            m_type = config.get('mosaic', GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).lower()
+            s_name = config.get('sensor').lower()
+            m_type = config.get('mosaic').lower()
             
-            # Reconstrói o path para este sensor/mosaico específico
-            from M0_auth_config import _gcs_library_base
-            # Hack temporário para simular a base do sensor correto sem mudar o global permanentemente
-            base_sensor = f"{CONFIG['gcs_library_images']}/{s_name}"
-            rel_folder = f"{base_sensor}/{periodicity}/{m_type}/{p}"
+            # Constrói o nome base do mosaico para buscar no cache
+            # image_peru_fire_{sensor}_{mosaic}_{date}
+            m_base_name = f"image_peru_fire_{s_name}_{m_type}_{p}"
             
-            m_name = mosaic_name(y, m, periodicity, band=b, mosaic=m_type, sensor=s_name)
-            cog_path = f"gs://{CONFIG['bucket']}/{rel_folder}/{m_name}.tif"
+            # Verifica no cache se esta banda existe para este mosaico
+            if m_base_name not in gcs_chunks or b not in gcs_chunks[m_base_name]:
+                missing_bands.append(f"{s_name}/{m_type}/{b}")
+                continue
             
-            try:
-                # Tenta leitura via /vsigs/ se estiver no Linux/Colab, ou cache local se no Windows
-                if 'COLAB_RELEASE_TAG' in os.environ:
-                    vsigs_path = f"/vsigs/{cog_path.replace('gs://', '')}"
-                    with rasterio.open(vsigs_path) as src:
-                        band_pixels, valid_labels = [], []
-                        for geom, label in zip(geometries, labels):
-                            try:
-                                out_image, _ = mask(src, [geom], crop=True, filled=False)
-                                if not out_image.mask.all():
-                                    v_px = out_image.data[~out_image.mask]
-                                    band_pixels.extend(v_px)
-                                    if len(period_y) == 0: valid_labels.extend([label] * len(v_px))
-                            except: pass
-                        
-                        if not band_pixels:
-                            valid_period = False; break
-                        band_data_list.append(np.array(band_pixels))
-                        if len(period_y) == 0: period_y = np.array(valid_labels)
-                else:
-                    # Windows: Download para pasta temporária
-                    from M0_auth_config import get_temp_dir
-                    local_cog = os.path.join(get_temp_dir(), f"{m_name}.tif")
-                    try:
-                        fs.get(cog_path, local_cog)
-                        with rasterio.open(local_cog) as src:
-                            band_pixels, valid_labels = [], []
-                            for geom, label in zip(geometries, labels):
-                                try:
-                                    out_image, _ = mask(src, [geom], crop=True, filled=False)
-                                    if not out_image.mask.all():
-                                        v_px = out_image.data[~out_image.mask]
-                                        band_pixels.extend(v_px)
-                                        if len(period_y) == 0: valid_labels.extend([label] * len(v_px))
-                                except: pass
-                            
-                            if not band_pixels:
-                                valid_period = False; break
-                            band_data_list.append(np.array(band_pixels))
-                            if len(period_y) == 0: period_y = np.array(valid_labels)
-                    finally:
-                        if os.path.exists(local_cog): os.remove(local_cog)
-            except Exception as e:
-                if logger: logger(f"Erro ao ler banda {b} em {cog_path}: {e}", "warning")
-                valid_period = False; break
+            # Constrói o path real do COG
+            m_file_name = f"{mosaic_name(y, m, periodicity, band=b, mosaic=m_type, sensor=s_name)}_cog.tif"
+            rel_folder = f"{CONFIG['gcs_library_images']}/{s_name}/{periodicity}/{m_type}/{p}/cog"
+            band_paths[b] = f"gs://{CONFIG['bucket']}/{rel_folder}/{m_file_name}"
+
+        if missing_bands:
+            if logger: logger(f"Pulo período {p}: Faltam mosaicos ({', '.join(missing_bands)})", "warning")
+            continue
+
+        if logger: logger(f"Extraindo {len(geometries)} amostras de {p}...", "info")
         
+        # --- LEITURA REAL DAS BANDAS ---
+        band_data_list = []
+        valid_period = True
+        period_y = np.array([])
+        
+        for b in bands_sorted:
+            cog_path = band_paths[b]
+            try:
+                # Tenta leitura via /vsigs/ (Linux/Colab) ou local (Windows)
+                is_colab = 'COLAB_RELEASE_TAG' in os.environ
+                src_path = f"/vsigs/{cog_path.replace('gs://', '')}" if is_colab else None
+                
+                # Para Windows, fazemos download temporário
+                local_file = None
+                if not is_colab:
+                    from M0_auth_config import get_temp_dir
+                    local_file = os.path.join(get_temp_dir(), os.path.basename(cog_path))
+                    fs.get(cog_path, local_file)
+                    src_path = local_file
+                
+                with rasterio.open(src_path) as src:
+                    band_pixels, valid_labels = [], []
+                    for geom, label in zip(geometries, labels):
+                        try:
+                            out_image, _ = mask(src, [geom], crop=True, filled=False)
+                            if not out_image.mask.all():
+                                v_px = out_image.data[~out_image.mask]
+                                band_pixels.extend(v_px)
+                                if len(period_y) == 0: valid_labels.extend([label] * len(v_px))
+                        except: pass
+                    
+                    if not band_pixels:
+                        valid_period = False; break
+                    band_data_list.append(np.array(band_pixels))
+                    if len(period_y) == 0: period_y = np.array(valid_labels)
+                    
+                if local_file and os.path.exists(local_file): os.remove(local_file)
+                
+            except Exception as e:
+                if logger: logger(f"Erro crítico ao ler {b} em {p}: {e}", "error")
+                valid_period = False; break
+                
         if valid_period and len(band_data_list) == len(bands_sorted):
             X_period = np.column_stack(band_data_list)
             X_all.append(X_period)
@@ -827,7 +834,7 @@ def run_ui():
     return ui
 
 def start_training(ui):
-    selected_samples = [chk._meta for chk in ui.chk_dict.values() if chk.value]
+    selected_samples = [name for name, chk in ui.chk_dict.items() if chk.value]
     if not selected_samples:
         print("Error: Ninguna muestra seleccionada.")
         return
