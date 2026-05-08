@@ -6,6 +6,7 @@ import os
 import subprocess
 import glob
 import time
+from datetime import timedelta
 
 from M0_auth_config import (
     CONFIG, mosaic_name, 
@@ -13,8 +14,6 @@ from M0_auth_config import (
     yearly_chunk_path, yearly_mosaic_path, yearly_cog_path,
     gcs_chunks_prefix, get_temp_dir, check_command_exists
 )
-
-_GCS_CACHE = None
 
 # Mapeamento de Tipos de Dados Recomendado (IPAM/MapBiomas)
 BAND_DATATYPES = {
@@ -25,39 +24,30 @@ BAND_DATATYPES = {
     'probability': 'Float32', 'score': 'Float32'
 }
 
-def fetch_all_gcs_files(force=False, logger=None):
-    """Lista arquivos GCS dos prefixos otimizado sem listagem global pesada."""
-    global _GCS_CACHE
-    if _GCS_CACHE is not None and not force:
-        return _GCS_CACHE
-
+def list_gcs_files(prefix, logger=None):
+    """Lista shards diretamente no diretório GCS alvo."""
     import platform
     cmd = 'gsutil.cmd' if platform.system() == 'Windows' else 'gsutil'
-
-    if logger: logger("Conectando ao GCS e listando chunks...", "info")
-
+    
+    bucket_url = f"gs://{CONFIG['bucket']}"
+    # Garante que o prefixo comece certo e termine com barra
+    clean_prefix = prefix.replace(f"gs://{CONFIG['bucket']}/", "").strip("/")
+    target_url = f"{bucket_url}/{clean_prefix}/"
+    
+    if logger: logger(f"Buscando shards em: {target_url}", "info")
+    
     try:
-        all_files = []
-        prefixes = [gcs_chunks_prefix('monthly'), gcs_chunks_prefix('yearly')]
+        # Listagem recursiva apenas da pasta alvo
+        result = subprocess.run([cmd, 'ls', '-r', target_url], capture_output=True, text=True)
         
-        for prefix in prefixes:
-            result = subprocess.run([cmd, 'ls', f"gs://{CONFIG['bucket']}/{prefix}/"], capture_output=True, text=True)
-            if result.returncode == 0:
-                lines = [l.strip() for l in result.stdout.splitlines() if l.strip().endswith('.tif')]
-                all_files.extend(lines)
-        
-        _GCS_CACHE = all_files
-        if logger: logger(f"Cache GCS carregado com {len(_GCS_CACHE)} chunks.", "success")
-        return _GCS_CACHE
+        if result.returncode != 0:
+            return []
+            
+        files = [l.strip() for l in result.stdout.splitlines() if l.strip().endswith('.tif')]
+        return files
     except Exception as e:
-        if logger: logger(f"Erro no GCS: {e}", "error")
+        if logger: logger(f"Erro ao acessar GCS: {e}", "error")
         return []
-
-def list_gcs_files(prefix):
-    """Filtra shards na lista indexada baseada em sub-prefixo alvo."""
-    all_files = fetch_all_gcs_files()
-    target_prefix = f"gs://{CONFIG['bucket']}/{prefix}"
-    return [f for f in all_files if f.startswith(target_prefix)]
 
 def check_m2_dependencies():
     """Valida se utilitarios estao integrados."""
@@ -81,8 +71,7 @@ def run_cmd(args, label="Comando"):
 
 def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sensor=None, mosaic_method='minnbr', logger=None, progress_idx=0, progress_total=0, start_time=None):
     import shutil
-    import time
-    from datetime import timedelta
+    from M0_auth_config import GLOBAL_OPTS
 
     s = sensor or GLOBAL_OPTS['SENSOR']
     m_method = mosaic_method or 'minnbr'
@@ -100,12 +89,7 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
 
     missing = check_m2_dependencies()
     if missing:
-        msg = f"❌ Faltam dependências vitais: {missing}. "
-        if 'gdalbuildvrt' in missing or 'gdal_translate' in missing:
-            msg += "\n💡 No Colab, execute: !apt-get install -y gdal-bin\n💡 No Windows, instale GDAL via OSGeo4W ou Conda."
-        
-        # Em Colab, print direto garante que o usuário veja mesmo fora do Output widget
-        print(msg)
+        msg = f"❌ Faltam dependências vitais: {missing}"
         if logger: logger(msg, "error")
         return []
 
@@ -120,49 +104,44 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
     results = []
 
     try:
-        if logger: logger(f"Buscando chunks GCS para {base_name} em {chunk_prefix}", "info")
-        ls_res = subprocess.run([gsutil_cmd, 'ls', f"gs://{CONFIG['bucket']}/{chunk_prefix}/*.tif"], capture_output=True, text=True)
+        # Busca direta no GCS
+        gcs_files = list_gcs_files(chunk_prefix, logger=logger)
         
-        if ls_res.returncode != 0:
-            err_msg = ls_res.stderr.strip() if ls_res.stderr else "Nenhum fragmento .tif encontrado no diretório."
-            if logger: logger(f"Erro ao listar GCS ({base_name}): {err_msg}", "warning")
+        if not gcs_files:
+            if logger: logger(f"Nenhum shard encontrado no GCS para {label}.", "warning")
             return []
-
-        all_remote_files = [line.strip() for line in ls_res.stdout.splitlines() if line.strip()]
+            
+        found_bands = {}
+        for f in gcs_files:
+            fname = os.path.basename(f)
+            # Match mais flexível: busca a banda cercada por separadores
+            for b_name in (bands or CONFIG['bands_all']):
+                # Procuramos a banda como um "token" isolado no nome do arquivo
+                # Ex: _blue_ ou _blue.tif ou _blue-
+                if f"_{b_name}_" in fname or f"_{b_name}." in fname:
+                    if b_name not in found_bands: found_bands[b_name] = []
+                    found_bands[b_name].append(f)
+                    break
+        
+        # Log para conferência
+        if logger:
+            for b, f_list in found_bands.items():
+                logger(f"[DEBUG] Banda {b}: {len(f_list)} shards encontrados.", "info")
         
         target_bands = bands or CONFIG['bands_all']
-        band_files = {}
+        bands_to_process = {b: found_bands[b] for b in target_bands if b in found_bands}
         
-        for f in all_remote_files:
-            fname = os.path.basename(f)
-            for b_name in target_bands:
-                if fname.startswith(f"{base_name}_{b_name}"):
-                    if b_name not in band_files: band_files[b_name] = []
-                    band_files[b_name].append(f)
-                    break
-
-        if not band_files:
+        if not bands_to_process:
             if logger: logger(f"Bandas alvo {target_bands} não detectadas no GCS para {base_name}.", "warning")
             return []
 
-        # Contador local para o lote atual
         current_step = progress_idx
 
-        for b_name, remote_shards in band_files.items():
-            # Normalização da banda (ex: dayOfYear)
+        for b_name, remote_shards in bands_to_process.items():
             clean_b_name = "dayOfYear" if b_name.lower() == "dayofyear" else b_name
-            
             current_step += 1
-            progress_str = f"[{current_step}/{progress_total}]" if progress_total > 0 else ""
             
-            eta_str = ""
-            if start_time and current_step > 1:
-                elapsed = time.time() - start_time
-                avg_time = elapsed / (current_step - 1)
-                remaining = (progress_total - (current_step - 1)) * avg_time
-                eta_str = f" | ⏳ ETA: ~{str(timedelta(seconds=int(remaining)))}"
-
-            if logger: logger(f"{progress_str} Processando [{b_name}] ({len(remote_shards)} shards){eta_str}", "info")
+            if logger: logger(f"Processando [{b_name}] ({len(remote_shards)} shards)...", "info")
             
             band_tmp = os.path.join(tmp_path, b_name)
             os.makedirs(band_tmp, exist_ok=True)
@@ -176,12 +155,10 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
                 vrt_path = os.path.join(tmp_path, f"{base_name}_{b_name}.vrt")
                 run_cmd(['gdalbuildvrt', vrt_path] + local_shards, label=f"VRT ({b_name})")
 
-                # Nome do COG remoto (incluindo o sufixo _cog conforme legado)
                 cog_remote_name = f"{mosaic_name(year, month, period, clean_b_name, sensor=s, mosaic=m_method)}_cog.tif"
                 cog_local_path = os.path.join(tmp_path, cog_remote_name)
                 
-                # Determinar tipo de dado (ot)
-                dt = BAND_DATATYPES.get(clean_b_name, 'Float32')
+                dt = BAND_DATATYPES.get(clean_b_name, 'Int16')
                 
                 run_cmd([
                     'gdal_translate', '-of', 'COG', '-ot', dt,
@@ -189,57 +166,15 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
                     '-co', 'NUM_THREADS=2', '-co', 'BIGTIFF=YES', vrt_path, cog_local_path
                 ], label=f"Conversão COG ({clean_b_name})")
 
-                # Salva no destino oficial (que já inclui /cog/ via M0_auth_config)
                 dest = f"gs://{CONFIG['bucket']}/{mosaic_prefix}/{cog_remote_name}"
                 run_cmd([gsutil_cmd, 'cp', cog_local_path, dest], label=f"Upload ({b_name})")
                 
-                check_ls = subprocess.run([gsutil_cmd, 'ls', dest], capture_output=True)
-                if check_ls.returncode == 0:
-                    if logger: logger(f"Sucesso exportado: {cog_remote_name}", "success")
-                    results.append(dest)
-                else:
-                    if logger: logger(f"Falha salvando {dest}", "error")
+                if logger: logger(f"✅ Sucesso: {cog_remote_name}", "success")
+                results.append(dest)
             finally:
-                # Limpeza severa imediata por banda para evitar oclusão de disco
-                try:
-                    # Remove pasta de chunks da banda
-                    if os.path.exists(band_tmp): shutil.rmtree(band_tmp)
-                    # Remove VRT e COG local desta banda específica
-                    if 'vrt_path' in locals() and os.path.exists(vrt_path): os.remove(vrt_path)
-                    if 'cog_local_path' in locals() and os.path.exists(cog_local_path): os.remove(cog_local_path)
-                except: pass
+                if os.path.exists(band_tmp): shutil.rmtree(band_tmp)
 
     finally:
-        try:
-            shutil.rmtree(tmp_path)
-        except: pass
+        if os.path.exists(tmp_path): shutil.rmtree(tmp_path)
 
     return results
-
-def delete_cogs(year, month=None, period='monthly', bands=None, logger=None):
-    """Remove os COGs selecionados do GCS."""
-    import platform
-    gsutil_cmd = 'gsutil.cmd' if platform.system() == 'Windows' else 'gsutil'
-    
-    if period == 'monthly':
-        mosaic_prefix = monthly_cog_path(year, month)
-        base_name = mosaic_name(year, month, 'monthly')
-    else:
-        mosaic_prefix = yearly_cog_path(year)
-        base_name = mosaic_name(year, period='yearly')
-
-    target_bands = bands or CONFIG['bands_all']
-    deleted = []
-
-    for b in target_bands:
-        cog_remote_name = f"{mosaic_name(year, month, period, b)}.tif"
-        dest = f"gs://{CONFIG['bucket']}/{mosaic_prefix}/{cog_remote_name}"
-        
-        try:
-            if logger: logger(f"Removendo {cog_remote_name}...", "warning")
-            subprocess.run([gsutil_cmd, 'rm', dest], check=True, capture_output=True)
-            deleted.append(dest)
-        except Exception as e:
-            if logger: logger(f"Falha ao remover {cog_remote_name}: {e}", "error")
-            
-    return deleted

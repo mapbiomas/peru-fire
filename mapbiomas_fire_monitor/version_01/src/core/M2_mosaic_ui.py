@@ -183,19 +183,11 @@ class MosaicAssemblerUI(PipelineStepUI):
         </div>
         '''
         
-        # --- BARRA DE BUSCA ---
-        self.txt_search = widgets.Text(
-            value=self.search_query,
-            placeholder='Filtrar por data (ex: 2026_03)...',
-            layout=L(width='300px', margin='0 0 10px 0')
-        )
-        self.txt_search.observe(self._on_search_change, names='value')
-        
         # --- FOOTER DE CONTROLE ---
         self.btn_refresh = widgets.Button(description="Sincronizar Datos", button_style='success', icon='refresh', layout=L(width='180px'))
         self.btn_refresh.on_click(lambda _: self._refresh_cache())
         
-        btn_all = widgets.Button(description="Seleccionar Todo", button_style='info', layout=L(width='180px'))
+        btn_all = widgets.Button(description="Seleccionar Pendientes", button_style='info', layout=L(width='180px'))
         btn_none = widgets.Button(description="Limpiar Selección", button_style='warning', layout=L(width='150px'))
         btn_all.on_click(self._on_select_all)
         btn_none.on_click(self._on_select_none)
@@ -258,7 +250,6 @@ class MosaicAssemblerUI(PipelineStepUI):
         self.main_area.children = [
             PipelineStepUI.get_status_css(), 
             widgets.HTML(header_html), 
-            self.txt_search,
             self.sensor_tabs, 
             footer
         ]
@@ -335,7 +326,28 @@ def run_ui(years=None):
 def start_mosaic_assembly(ui_obj):
     selected = [chk._meta for chk in ui_obj.chk_dict.values() if chk.value]
     if not selected:
-        ui_obj.log("Ningún mosaico selecionado.", "warning")
+        print("[WARNING] Ningún mosaico selecionado.")
         return
-    ui_obj.log(f"Iniciando montagem de {len(selected)} bandas COG...", "info")
-    # Lógica de montagem chamando M2_mosaic_logic...
+    
+    print(f"[INFO] Iniciando montagem de {len(selected)} bandas COG...")
+    
+    from M2_mosaic_logic import assemble_country_mosaic
+    
+    try:
+        for item in selected:
+            d_label = f"{item['year']}_{item['month']:02d}" if item['month'] else f"{item['year']}"
+            print(f"\n--- Processando: {item['sensor']} {d_label} {item['band']} ---")
+            
+            assemble_country_mosaic(
+                year=item['year'],
+                month=item['month'],
+                period=item['period'],
+                sensor=item['sensor'],
+                mosaic_method=item['mosaic'],
+                bands=[item['band']],
+                logger=print
+            )
+        print("\n[SUCCESS] 🚀 Montagem concluída com sucesso!")
+    except Exception as e:
+        print(f"\n[ERROR] ❌ Erro na montagem: {e}")
+        traceback.print_exc()

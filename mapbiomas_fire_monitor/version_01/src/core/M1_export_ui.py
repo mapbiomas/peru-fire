@@ -146,11 +146,11 @@ class ExportDispatcherUI(PipelineStepUI):
                         exists_gee = m_name.lower() in assets_list
                         
                         # 3. Verifica se está rodando no GEE
-                        # A descrição contém _GCS_ ou _ASSET_
+                        # A descrição contém o nome da imagem (m_name)
                         m_name_lower = m_name.lower()
-                        # Procura a combinação exata de tipo + nome da imagem nas tarefas ativas
-                        search_term = f"_{row_type}_{m_name_lower}"
-                        is_active = any(search_term in t.lower() for t in active_tasks)
+                        # Busca apenas se o nome base da imagem está presente na descrição da tarefa
+                        # Isso funciona mesmo se o prefixo da tarefa for MONITOR_01 ou outro.
+                        is_active = any(m_name_lower in t.lower() for t in active_tasks)
                         
                         chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
                         chk._meta = {'sensor': sensor, 'period': period, 'mosaic': mosaic_method, 'year': y, 'month': m, 'band': b, 'type': row_type}
