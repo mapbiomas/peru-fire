@@ -156,13 +156,13 @@ def _gcs_mosaic_path(periodicity, temporal_id, mosaic=None):
     m = (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).lower()
     return f"{base}/{period}/{m}/{temporal_id}"
 
-def monthly_mosaic_path(year, month):
+def monthly_mosaic_path(year, month, mosaic=None):
     temporal_id = f"{year}_{month:02d}"
-    return _gcs_mosaic_path("monthly", temporal_id)
+    return _gcs_mosaic_path("monthly", temporal_id, mosaic=mosaic)
 
-def yearly_mosaic_path(year):
+def yearly_mosaic_path(year, mosaic=None):
     temporal_id = f"{year}"
-    return _gcs_mosaic_path("yearly", temporal_id)
+    return _gcs_mosaic_path("yearly", temporal_id, mosaic=mosaic)
 
 def monthly_chunk_path(year, month, mosaic='minnbr', sensor=None):
     """Caminho GCS para chunks mensais: {sensor}/{period}/{mosaic}/{date}/chunks/"""

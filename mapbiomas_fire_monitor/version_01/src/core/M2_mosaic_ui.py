@@ -114,7 +114,7 @@ class MosaicAssemblerUI(PipelineStepUI):
                     
                     # 1. Verifica se o COG final existe
                     cogs_list = self.state.get('cogs_monthly' if period=='monthly' else 'cogs_annually', [])
-                    exists_cog = m_name in cogs_list
+                    exists_cog = m_name.lower() in [c.lower() for c in cogs_list]
                     
                     # 2. Verifica se existem chunks para montar
                     # No CacheManager, a chave dos chunks é o nome base sem a banda

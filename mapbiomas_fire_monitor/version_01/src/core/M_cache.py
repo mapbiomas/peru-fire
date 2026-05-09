@@ -203,27 +203,23 @@ class CacheManager:
                     # Novo padrão: image_{country}_fire_{sensor}_{mosaic}_{band}_{date}
                     # Antigo padrão: {mosaic}_{sensor}_fire_{country}_{date}_{band}
                     
+                    # Tenta identificar a banda e a data de forma robusta
                     found_band = None
                     for band in sorted_bands:
-                        needle = f"_{band}_" # No novo padrão, a banda está cercada por underscores
-                        if needle in name_no_ext:
+                        if f"_{band}_" in name_no_ext or name_no_ext.endswith(f"_{band}"):
                             found_band = band
                             break
                     
                     if found_band:
-                        # Extrai a parte antes da banda e a data depois da banda
-                        parts = name_no_ext.split(f"_{found_band}_")
-                        prefix = parts[0]
-                        date_part = parts[1]
-                        
-                        # BUG FIX: date_part pode conter coordenadas de chunk
-                        # Ex: '2026_03_0000065536-0000131072' -> devemos usar apenas '2026_03'
+                        # Extrai a data (YYYY_MM ou YYYY) usando regex
                         import re as _re
-                        date_match = _re.search(r'(\d{4}_\d{2})', date_part)
-                        clean_date = date_match.group(1) if date_match else date_part.split('_0')[0]
+                        date_match = _re.search(r'(\d{4}_\d{2})|(\d{4})', name_no_ext)
+                        clean_date = date_match.group(0) if date_match else "unknown"
                         
-                        # A chave da UI: image_{country}_fire_{sensor}_{mosaic}_{date}
-                        # Normalizar para lowercase para garantir compatibilidade com a busca da UI
+                        # A chave da UI deve ser: image_{country}_fire_{sensor}_{mosaic}_{date}
+                        # Vamos isolar o prefixo (tudo antes da banda)
+                        prefix = name_no_ext.split(f"_{found_band}")[0]
+                        
                         mosaic_key = f"{prefix}_{clean_date}".lower()
                         
                         if mosaic_key not in gcs_chunks:

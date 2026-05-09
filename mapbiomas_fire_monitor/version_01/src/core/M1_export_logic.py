@@ -273,10 +273,11 @@ def clear_gcs_chunks(year, month=None, period='monthly'):
     from M0_auth_config import monthly_chunk_path, yearly_chunk_path, CONFIG
     import os
     
+    m_method = GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()
     if period == 'monthly':
-        folder = monthly_chunk_path(year, month)
+        folder = monthly_chunk_path(year, month, mosaic=m_method)
     else:
-        folder = yearly_chunk_path(year)
+        folder = yearly_chunk_path(year, mosaic=m_method)
         
     path = f"gs://{CONFIG['bucket']}/{folder}/"
     print(f"[GCS] Limpando chunks antigos para evitar mistura: {path}")
@@ -288,8 +289,9 @@ def delete_gcs_band(year, month, period, band):
     """Deleta os chunks de uma banda específica no GCS."""
     from M0_auth_config import monthly_chunk_path, yearly_chunk_path, CONFIG, mosaic_name
     import os
-    folder = monthly_chunk_path(year, month) if period == 'monthly' else yearly_chunk_path(year)
-    name = mosaic_name(year, month, period)
+    m_method = GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()
+    folder = monthly_chunk_path(year, month, mosaic=m_method) if period == 'monthly' else yearly_chunk_path(year, mosaic=m_method)
+    name = mosaic_name(year, month, period, mosaic=m_method)
     prefix = f"{folder}/{name}_{band}"
     path = f"gs://{CONFIG['bucket']}/{prefix}"
     print(f"[GCS] Removendo banda {band}: {path}*")
@@ -313,10 +315,11 @@ def export_to_gcs(mosaic, name, year, month=None, period='monthly', bands=None, 
     from M0_auth_config import CONFIG, GLOBAL_OPTS, monthly_chunk_path, yearly_chunk_path
     geometry = config_module.get_country_geometry() if config_module else mosaic.geometry()
     
+    m_method = GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()
     if period == 'monthly' and month is not None:
-        folder = monthly_chunk_path(year, month)
+        folder = monthly_chunk_path(year, month, mosaic=m_method)
     else:
-        folder = yearly_chunk_path(year)
+        folder = yearly_chunk_path(year, mosaic=m_method)
 
     if not bands:
         bands = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear']
