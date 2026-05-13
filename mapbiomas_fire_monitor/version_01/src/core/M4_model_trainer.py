@@ -560,37 +560,7 @@ class ModelTrainer:
 
 # ─── INTERFAZ PREMIUM ─────────────────────────────────────────────────────────
 
-def view_analytics(model_info, out_widget=None):
-    import gcsfs, tempfile, subprocess
-    import matplotlib.pyplot as plt
-    from IPython.display import display, HTML
-    
-    fs = _get_fs()
-    base_gs = f"gs://{model_info['path']}"
-    
-    if out_widget:
-        out_widget.clear_output(wait=True)
-        with out_widget:
-            print(f"Carregando Dashboard para: {model_info['training_id']}...")
-            
-    with tempfile.TemporaryDirectory() as tmpdir:
-        for fname in ['metadata.json', 'metrics.json']:
-            src = f"{base_gs}/{fname}"
-            dest = os.path.join(tmpdir, fname)
-            try:
-                subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except:
-                if out_widget:
-                    with out_widget: print(f"Error: No se encontró el archivo {fname}. Vuelve a entrenar el modelo.")
-                return
-                
-        with open(os.path.join(tmpdir, 'metadata.json')) as f:
-            hp = json.load(f)
-        with open(os.path.join(tmpdir, 'metrics.json')) as f:
-            metrics = json.load(f)
-            
-        cm = np.array(metrics['confusion_matrix'])
-        rep = metrics['classification_report']
+# --- VIEW_ANALYTICS UNIFICADA ---
         
 def render_model_card_html(hp, metrics):
     """Gera o HTML do header e KPIs do Model Card."""
@@ -663,28 +633,25 @@ def view_analytics(model_info, out_widget=None):
     fs = _get_fs()
     try:
         import urllib.parse
-        # Sanitização profunda do caminho
         m_path = model_info['path']
-        
-        # 1. Decodificar caracteres como %2F -> /
         m_path = urllib.parse.unquote(m_path)
         
-        # 2. Remover prefixos de protocolo e de API do Google
-        if m_path.startswith('gs://'): m_path = m_path.replace('gs://', '')
-        if 'b/' in m_path and '/o/' in m_path:
-            # Captura apenas o que vem depois do /o/
-            m_path = m_path.split('/o/')[-1]
+        # Limpar o caminho para ter apenas o que importa
+        clean_path = m_path.replace('gs://', '').replace('mapbiomas-fire/', '').lstrip('/')
+        if 'b/' in clean_path and '/o/' in clean_path:
+            clean_path = clean_path.split('/o/')[-1]
         
-        # 3. Garantir que não comece com barra
-        m_path = m_path.lstrip('/')
+        # Variantes absolutas com gs:// (mais seguras no Colab)
+        path_variants = [
+            f"gs://mapbiomas-fire/{clean_path}",
+            f"mapbiomas-fire/{clean_path}"
+        ]
         
-        # Tentar carregar os arquivos testando variantes de caminho
         hp, metrics = None, None
-        path_variants = [m_path, f"gs://{m_path}", m_path.replace('mapbiomas-fire/', '')]
-        
         last_err = ""
         for p in path_variants:
             try:
+                # Tenta ler via fsspec (gcsfs)
                 with fs.open(f"{p}/hyperparameters.json", 'r') as f:
                     hp = json.load(f)
                 with fs.open(f"{p}/metrics.json", 'r') as f:
@@ -695,7 +662,17 @@ def view_analytics(model_info, out_widget=None):
                 continue
         
         if not hp:
-            raise FileNotFoundError(f"No se pudieron cargar archivos en: {m_path}. Error: {last_err}")
+            # TENTATIVA FINAL: Usar gsutil cp se fs.open falhou (Fallback Robusto)
+            import tempfile, subprocess
+            with tempfile.TemporaryDirectory() as tmpdir:
+                try:
+                    p_final = f"gs://mapbiomas-fire/{clean_path}"
+                    subprocess.run(['gsutil', 'cp', f"{p_final}/hyperparameters.json", f"{tmpdir}/hp.json"], check=True, capture_output=True)
+                    subprocess.run(['gsutil', 'cp', f"{p_final}/metrics.json", f"{tmpdir}/met.json"], check=True, capture_output=True)
+                    with open(f"{tmpdir}/hp.json") as f: hp = json.load(f)
+                    with open(f"{tmpdir}/met.json") as f: metrics = json.load(f)
+                except Exception as e2:
+                    raise FileNotFoundError(f"Fallo crítico al cargar modelo. Errores: {last_err} | {e2}")
         
         cm = np.array(metrics.get('confusion_matrix', [[0,0],[0,0]]))
         history = hp.get('history', {})
