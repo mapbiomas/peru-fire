@@ -787,9 +787,6 @@ def view_analytics(model_info, out_widget=None):
         if out_widget:
             out_widget.clear_output(wait=True)
             with out_widget:
-        if out_widget:
-            out_widget.clear_output(wait=True)
-            with out_widget:
                 display(HTML(render_model_card_html(hp, metrics)))
                 
                 # USAR SNAPSHOT PRÉ-CALCULADO (CARGA INSTANTÂNEA)
