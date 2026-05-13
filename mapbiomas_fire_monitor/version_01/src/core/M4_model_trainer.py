@@ -1065,20 +1065,30 @@ class ModelTrainerUI(PipelineStepUI):
             def _make_callback(model_info):
                 return lambda _: view_analytics(model_info, out_widget=self.analytics_dashboard_output)
                 
-            def _make_del_callback(model_info):
+            def _make_del_callback(btn_ref, model_info):
                 def callback(_):
-                    if input(f"¿Eliminar modelo {model_info['training_id']}? (s/n): ").lower() == 's':
+                    if btn_ref.description == "🗑️":
+                        btn_ref.description = "¿Seguro?"
+                        btn_ref.button_style = 'warning'
+                        btn_ref.layout.width = '100px'
+                    else:
                         try:
                             # Tenta deletar usando a instância do trainer
                             trainer = self.trainer_instance or ModelTrainer(0)
+                            # Extrai o shortname do path para deletar corretamente
+                            path_parts = model_info['path'].split('/')
+                            # Geralmente o path termina em .../models/training_ID_SHORTNAME_SENSOR
+                            # Vamos extrair o shortname de forma mais robusta
+                            # Mas o delete_model só precisa do training_id se o path for reconstruído
                             trainer.delete_model(model_info['training_id'], model_info['path'].split('/')[-2])
-                            self._refresh_models_list()
+                            self._refresh_models_list(show_loader=True)
                         except Exception as e:
-                            print(f"❌ Erro ao excluir: {e}")
+                            with self.analytics_dashboard_output:
+                                print(f"❌ Erro ao excluir: {e}")
                 return callback
                 
             btn.on_click(_make_callback(m))
-            btn_del.on_click(_make_del_callback(m))
+            btn_del.on_click(_make_del_callback(btn_del, m))
 
             row = widgets.HBox([
                 widgets.HTML(f"<div style='width:250px;font-family:monospace;'>{m['training_id']}</div>"), 
