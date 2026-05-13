@@ -529,6 +529,7 @@ class ModelTrainer:
                 'sample_collections': getattr(self, '_sample_collections', []),
                 'sample_count': getattr(self, '_sample_count', {}),
                 'comment':      comment,
+                'rating':       0, # Inicializado com 0 estrelas
             }
             with open(os.path.join(tmpdir, 'metadata.json'), 'w') as f:
                 json.dump(hp, f, indent=2)
@@ -542,19 +543,25 @@ class ModelTrainer:
             if logger: logger("Generación y guardado de métricas de evaluación...", "info")
             cm, rep = self.evaluate()
             
+            # --- NOTA IA AUTOMÁTICA (Baseada em regras técnicas) ---
+            acc = rep.get('accuracy', 0)
+            f1_fire = rep.get('1', {}).get('f1-score', 0)
+            auto_rating = 1
+            if f1_fire > 0.90 and acc > 0.95: auto_rating = 5
+            elif f1_fire > 0.80 and acc > 0.90: auto_rating = 4
+            elif f1_fire > 0.70 and acc > 0.85: auto_rating = 3
+            elif f1_fire > 0.50: auto_rating = 2
+
             # --- SNAPSHOT DE DIAGNÓSTICO E t-SNE PARA CARGA INSTANTÂNEA ---
             try:
                 from sklearn.decomposition import PCA
                 idx_snap = np.random.choice(len(self._X_raw), min(800, len(self._X_raw)), replace=False)
                 emb_snap = self.get_embeddings(self._X_raw[idx_snap])
                 prd_snap = self.predict(self._X_raw[idx_snap])
-                
-                # PCA Snapshot (Rápido)
                 pca_snap = PCA(n_components=3); coords_pca = pca_snap.fit_transform(emb_snap)
-                
                 diag_snapshot = {
                     'pca_coords': coords_pca.tolist(),
-                    'tsne_coords': getattr(self, 'tsne_snapshot', None), # Coordenadas t-SNE pré-calculadas
+                    'tsne_coords': getattr(self, 'tsne_snapshot', None), 
                     'preds': prd_snap.flatten().tolist(),
                     'y_true': self._y_raw[idx_snap].flatten().tolist()
                 }
@@ -566,6 +573,7 @@ class ModelTrainer:
                 'confusion_matrix': cm.tolist(),
                 'classification_report': rep,
                 'diagnostic_snapshot': diag_snapshot,
+                'auto_rating': auto_rating, # Nova Nota IA
                 'generated_at': datetime.now().isoformat()
             }
             with open(os.path.join(tmpdir, 'metrics.json'), 'w') as f:
@@ -598,6 +606,33 @@ class ModelTrainer:
             subprocess.run(['gsutil', 'cp', src, dest], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         return hp
+
+    def update_model_metadata(self, training_id, shortname, updates):
+        """Atualiza campos específicos do metadata.json no GCS."""
+        import json, subprocess, tempfile
+        from M0_auth_config import gcs_path
+        base_path = model_path(training_id, shortname)
+        fs = _get_fs()
+        
+        try:
+            # 1. Download atual
+            path = f"{base_path}/metadata.json"
+            with fs.open(path, 'r') as f:
+                hp = json.load(f)
+            
+            # 2. Aplicar updates
+            hp.update(updates)
+            
+            # 3. Upload novo
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_file = os.path.join(tmpdir, 'metadata.json')
+                with open(tmp_file, 'w') as f:
+                    json.dump(hp, f, indent=2)
+                subprocess.run(['gsutil', 'cp', tmp_file, gcs_path(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except Exception as e:
+            print(f"❌ Erro ao atualizar metadados: {e}")
+            return False
 
 
 # ─── INTERFAZ PREMIUM ─────────────────────────────────────────────────────────
@@ -721,10 +756,22 @@ def render_model_card_html(hp, metrics):
     date_str = hp.get('training_date', 'Entrenando...')
     if date_str and 'T' in date_str: date_str = date_str[:16].replace('T', ' ')
     
+    # Estrelas (Humana e IA)
+    h_rating = hp.get('rating', 0)
+    a_rating = metrics.get('auto_rating', 0)
+    h_stars = "★" * h_rating + "☆" * (5 - h_rating)
+    a_stars = "★" * a_rating + "☆" * (5 - a_rating)
+
     html_content = f"""
     {style}
     <div class="dash-card">
-        <div class="dash-title">📄 Ficha del modelo: {hp.get('training_id')} / {hp.get('shortname')}</div>
+        <div class="dash-title" style="display:flex; justify-content:space-between; align-items:center;">
+            <span>📄 Ficha del modelo: {hp.get('training_id')} / {hp.get('shortname')}</span>
+            <div style="font-size:14px; display:flex; gap:15px;">
+                <span title="AI Rating" style="color:#ffc107;">🤖 {a_stars}</span>
+                <span title="Human Rating" style="color:#2c3e50;">👤 {h_stars}</span>
+            </div>
+        </div>
         <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 15px;">
             <div style="flex: 2; min-width: 300px;">
                 <p class="meta-text"><b>Estado/Fecha:</b> {date_str}</p>
@@ -901,7 +948,35 @@ def view_analytics(model_info, out_widget=None):
                 </div>
                 """))
 
-                # Rodapé com instruções para Projector (t-SNE/UMAP)
+                # SEÇÃO TENSORBOARD PROJECTOR (Elegante e Informativa) ---
+                # ... [CÓDIGO ANTERIOR DO PROJECTOR] ...
+                # (Vou manter o código do projector aqui, apenas adicionei o rating acima)
+                
+                # --- SISTEMA DE VOTACIÓN (STARS) ---
+                rating_slider = widgets.IntSlider(
+                    value=hp.get('rating', 0), min=0, max=5, step=1,
+                    description='Calificar:', style={'description_width': 'initial'},
+                    layout=widgets.Layout(width='250px')
+                )
+                btn_save_rating = widgets.Button(description="Guardar Nota", button_style='success', icon='star', layout=widgets.Layout(width='120px'))
+                
+                def _on_save_rating(_):
+                    btn_save_rating.description = "Guardando..."
+                    success = ModelTrainer().update_model_metadata(hp['training_id'], hp['shortname'], {'rating': rating_slider.value})
+                    if success:
+                        btn_save_rating.description = "¡Guardado!"
+                        btn_save_rating.button_style = ''
+                        # Forçar refresh do ranking se possível (precisa de acesso à instância UI)
+                        try:
+                            import __main__
+                            if hasattr(__main__, 'ui'): __main__.ui._refresh_models_list()
+                        except: pass
+                    else:
+                        btn_save_rating.description = "Erro"
+                
+                btn_save_rating.on_click(_on_save_rating)
+                rating_box = widgets.HBox([rating_slider, btn_save_rating], layout=widgets.Layout(align_items='center', margin='20px 0', padding='15px', background='#fff8e1', border_radius='8px', border='1px solid #ffe082'))
+                display(rating_box)
                 display(HTML(f"""
                 <div style="background:#f8f9fa; border:1px solid #dee2e6; padding:15px; border-radius:8px; margin-top:15px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -1158,70 +1233,175 @@ class ModelTrainerUI(PipelineStepUI):
         
 
     def _refresh_models_list(self, show_loader=False):
-        if show_loader: self.show_loader("Actualizando lista de modelos...")
+        if show_loader: self.show_loader("Actualizando Ranking...")
         models = list_trained_models()
-        if show_loader: self.hide_loader()
-        
-        items = []
-        # Header da lista com botão refresh
-        btn_refresh = widgets.Button(description=" 🔄 Actualizar Lista", layout=widgets.Layout(width='180px'), style={'button_color': '#f8f9fa'})
-        btn_refresh.on_click(lambda _: self._refresh_models_list(show_loader=True))
-        
-        header = widgets.HBox([
-            widgets.HTML("<b style='width:250px;'>ID de Entrenamiento</b>"),
-            widgets.HTML("<b style='width:100px;'>Estado</b>"),
-            btn_refresh
-        ], layout=widgets.Layout(margin='0 0 10px 0', padding='5px', border_bottom='2px solid #333'))
-        items.append(header)
-        
         fs = _get_fs()
+        
+        self.model_chk_map = {} # (training_id) -> checkbox widget
+        ranking_data = []
         for m in models:
-            has_metrics = fs.exists(f"{m['path']}/metrics.json")
-            status = "✅ Listo"
-            btn = widgets.Button(description="📈 Ver Dashboard", layout=widgets.Layout(width='140px'), button_style='primary')
-            btn_del = widgets.Button(description="🗑️", layout=widgets.Layout(width='40px'), button_style='danger')
+            try:
+                with fs.open(f"{m['path']}/metadata.json", 'r') as f: hp = json.load(f)
+                with fs.open(f"{m['path']}/metrics.json", 'r') as f: met = json.load(f)
+                
+                acc = met.get('classification_report', {}).get('accuracy', 0)
+                f1_fire = met.get('classification_report', {}).get('1', {}).get('f1-score', 0)
+                auto_rating = met.get('auto_rating', 0)
+                human_rating = hp.get('rating', 0)
+                
+                ranking_data.append({
+                    'id': m['training_id'],
+                    'short': hp.get('shortname', 'N/A'),
+                    'sensor': hp.get('sensor', 'N/A'),
+                    'date': hp.get('training_date', '').split('T')[0],
+                    'acc': acc,
+                    'f1': f1_fire,
+                    'auto_rating': auto_rating,
+                    'human_rating': human_rating,
+                    'path': m['path'],
+                    'info': m
+                })
+            except: continue
             
-            def _make_callback(model_info):
-                return lambda _: view_analytics(model_info, out_widget=self.analytics_dashboard_output)
-                
-            def _make_del_callback(btn_ref, model_info):
-                def callback(_):
-                    if btn_ref.description == "🗑️":
-                        btn_ref.description = "¿Seguro?"
-                        btn_ref.button_style = 'warning'
-                        btn_ref.layout.width = '100px'
-                    else:
-                        try:
-                            # Tenta deletar usando a instância do trainer
-                            trainer = self.trainer_instance or ModelTrainer(0)
-                            # Extrai o shortname do path para deletar corretamente
-                            path_parts = model_info['path'].split('/')
-                            # Geralmente o path termina em .../models/training_ID_SHORTNAME_SENSOR
-                            # Vamos extrair o shortname de forma mais robusta
-                            # Mas o delete_model só precisa do training_id se o path for reconstruído
-                            trainer.delete_model(model_info['training_id'], model_info['path'].split('/')[-2])
-                            self._refresh_models_list(show_loader=True)
-                        except Exception as e:
-                            with self.analytics_dashboard_output:
-                                print(f"❌ Erro ao excluir: {e}")
-                return callback
-                
-            btn.on_click(_make_callback(m))
-            btn_del.on_click(_make_del_callback(btn_del, m))
+        ranking_data.sort(key=lambda x: x['acc'], reverse=True)
+        if show_loader: self.hide_loader()
 
+        if not ranking_data:
+            self.analytics_area.children = [widgets.HTML("<i>Ningún modelo disponible para el Ranking.</i>")]
+            return
+
+        # Botões de Ação em Massa
+        btn_view_batch = widgets.Button(description="🔍 Visualizar Seleccionados", button_style='info', icon='search', layout=widgets.Layout(width='220px'))
+        btn_del_batch = widgets.Button(description="🗑️ Eliminar Seleccionados", button_style='danger', icon='trash', layout=widgets.Layout(width='220px'))
+        btn_refresh = widgets.Button(description="🔄 Actualizar Ranking", layout=widgets.Layout(width='180px'))
+        
+        def _on_view_batch(_):
+            selected = [r['info'] for r in ranking_data if self.model_chk_map[r['id']].value]
+            if not selected: return
+            self.analytics_dashboard_output.clear_output()
+            with self.analytics_dashboard_output:
+                display(HTML(f"<h3 style='color:#007bff; margin-bottom:20px;'>📂 Comparativa de {len(selected)} Modelos</h3>"))
+                for info in selected:
+                    view_analytics(info, out_widget=None, is_batch=True) # Versão que apenas faz display sem limpar
+
+        def _on_del_batch(_):
+            selected = [r for r in ranking_data if self.model_chk_map[r['id']].value]
+            if not selected: return
+            if btn_del_batch.description == "🗑️ Eliminar Seleccionados":
+                btn_del_batch.description = "¿Confirmar Borrado?"; btn_del_batch.button_style = 'warning'
+                return
+            
+            self.show_loader(f"Eliminando {len(selected)} modelos...")
+            trainer = ModelTrainer(0)
+            for r in selected:
+                try:
+                    trainer.delete_model(r['id'], r['path'].split('/')[-1].replace(f"training_{r['id']}_", "").replace("_sentinel2", "").replace("_landsat8", ""))
+                except: pass
+            self._refresh_models_list(show_loader=True)
+
+        btn_view_batch.on_click(_on_view_batch)
+        btn_del_batch.on_click(_on_del_batch)
+        btn_refresh.on_click(lambda _: self._refresh_models_list(show_loader=True))
+
+        batch_box = widgets.HBox([btn_refresh, widgets.Label("|", layout=widgets.Layout(margin='0 15px')), btn_view_batch, btn_del_batch], layout=widgets.Layout(margin='0 0 15px 0', align_items='center'))
+
+        # Tabela HTML
+        rows_html = ""
+        chk_widgets = []
+        for i, r in enumerate(ranking_data):
+            medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"<b>#{i+1}</b>"
+            ai_stars = "★" * r['auto_rating'] + "☆" * (5 - r['auto_rating'])
+            user_stars = "★" * r['human_rating'] + "☆" * (5 - r['human_rating'])
+            
+            # Criar checkbox widget
+            chk = widgets.Checkbox(value=False, indent=False, layout=widgets.Layout(width='30px'))
+            self.model_chk_map[r['id']] = chk
+            chk_widgets.append(chk)
+            
+            row_style = "background:#fff;" if i % 2 == 0 else "background:#f9f9f9;"
+            if i == 0: row_style = "background:#fffde7; font-weight:bold; border:1px solid #fbc02d;"
+            
+            rows_html += f"""
+            <tr style="{row_style} border-bottom:1px solid #eee;">
+                <td style="padding:5px; text-align:center;" id="chk_{i}"></td>
+                <td style="padding:12px; text-align:center; font-size:16px;">{medal}</td>
+                <td style="padding:12px;"><b>{r['id']}</b><br><span style="font-size:10px; color:#666;">{r['short']} | {r['date']}</span></td>
+                <td style="padding:12px; text-align:center; color:#28a745;"><b>{r['acc']:.1%}</b></td>
+                <td style="padding:12px; text-align:center; color:#ffc107; font-size:10px;">🤖 {ai_stars}</td>
+                <td style="padding:12px; text-align:center; color:#2c3e50; font-size:10px;">👤 {user_stars}</td>
+                <td style="padding:12px; text-align:center;"><button onclick="window.load_model_card('{r['id']}')" style="cursor:pointer; border:none; background:none; color:#007bff; text-decoration:underline; font-size:11px;">Detalles</button></td>
+            </tr>
+            """
+            
+        table_html = f"""
+        <div style="background:white; border-radius:12px; border:1px solid #dee2e6; overflow:hidden; box-shadow:0 4px 15px rgba(0,0,0,0.05); margin-bottom:10px;">
+            <table style="width:100%; border-collapse:collapse; font-family:sans-serif;">
+                <thead style="background:#2c3e50; color:white; text-align:center; font-size:11px; text-transform:uppercase;">
+                    <tr>
+                        <th style="padding:10px; width:40px;">Sel</th>
+                        <th style="padding:10px; width:60px;">Pos</th>
+                        <th style="padding:10px; text-align:left;">Modelo / Info</th>
+                        <th style="padding:10px;">Acc</th>
+                        <th style="padding:10px;">AI Rating</th>
+                        <th style="padding:10px;">User Rating</th>
+                        <th style="padding:10px;">Link</th>
+                    </tr>
+                </thead>
+                <tbody>{rows_html}</tbody>
+            </table>
+        </div>
+        """
+        
+        # Como o HTML acima não pode conter os checkboxes reais do ipywidgets de forma nativa e funcional,
+        # Vamos criar um VBox lateral ou uma estrutura de grid para alinhar os checkboxes com as linhas.
+        # Estratégia: Usar HBoxes para cada linha da tabela (mais robusto no Colab).
+        
+        table_header = widgets.HBox([
+            widgets.Label("Sel", layout=widgets.Layout(width='40px')),
+            widgets.Label("Pos", layout=widgets.Layout(width='60px')),
+            widgets.Label("Modelo / Info", layout=widgets.Layout(width='250px')),
+            widgets.Label("Acc", layout=widgets.Layout(width='60px')),
+            widgets.Label("AI Rating", layout=widgets.Layout(width='100px')),
+            widgets.Label("User Rating", layout=widgets.Layout(width='100px')),
+            widgets.Label("Acción", layout=widgets.Layout(width='120px')),
+        ], layout=widgets.Layout(background='#2c3e50', padding='10px', border_radius='8px 8px 0 0'))
+        # Nota: Aplicar cor branca no texto do header via CSS ou widgets.HTML individuais
+        
+        final_rows = []
+        for i, r in enumerate(ranking_data):
+            medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"#{i+1}"
+            ai_stars = "★" * r['auto_rating'] + "☆" * (5 - r['auto_rating'])
+            user_stars = "★" * r['human_rating'] + "☆" * (5 - r['human_rating'])
+            
+            btn_view = widgets.Button(description="Ver Card", button_style='info', layout=widgets.Layout(width='110px'))
+            btn_view.on_click(lambda _, info=r['info']: view_analytics(info, out_widget=self.analytics_dashboard_output))
+            
             row = widgets.HBox([
-                widgets.HTML(f"<div style='width:250px;font-family:monospace;'>{m['training_id']}</div>"), 
-                widgets.HTML(f"<div style='width:100px;'>{status}</div>"),
-                btn,
-                widgets.HTML('<div style="width:5px;"></div>'),
-                btn_del
-            ], layout=widgets.Layout(align_items='center', margin='2px 0', border_bottom='1px solid #eee'))
-            items.append(row)
-            
-        if not items or len(items) == 1:
-            items.append(widgets.HTML("<i>Ningún modelo disponible en GCS.</i>"))
-            
-        self.analytics_area.children = items
+                self.model_chk_map[r['id']],
+                widgets.HTML(f"<div style='width:60px; text-align:center;'>{medal}</div>"),
+                widgets.HTML(f"<div style='width:250px;'><b>{r['id']}</b><br><span style='font-size:10px;'>{r['short']} | {r['date']}</span></div>"),
+                widgets.HTML(f"<div style='width:60px; color:#28a745; font-weight:bold;'>{r['acc']:.1%}</div>"),
+                widgets.HTML(f"<div style='width:100px; color:#ffc107; font-size:10px;'>{ai_stars}</div>"),
+                widgets.HTML(f"<div style='width:100px; color:#2c3e50; font-size:10px;'>{user_stars}</div>"),
+                btn_view
+            ], layout=widgets.Layout(padding='8px', border_bottom='1px solid #eee', align_items='center', background='#fff' if i%2==0 else '#f9f9f9'))
+            final_rows.append(row)
+
+        self.analytics_area.children = [
+            batch_box,
+            widgets.VBox([
+                widgets.HTML(f"""<div style='background:#2c3e50; color:white; padding:12px; display:flex; border-radius:8px 8px 0 0; font-size:11px; font-weight:bold; text-transform:uppercase;'>
+                    <div style='width:40px; text-align:center;'>Sel</div>
+                    <div style='width:60px; text-align:center;'>Pos</div>
+                    <div style='width:250px;'>Modelo / Info</div>
+                    <div style='width:60px;'>Acc</div>
+                    <div style='width:100px; text-align:center;'>AI Rating</div>
+                    <div style='width:100px; text-align:center;'>User Rating</div>
+                    <div style='width:110px; text-align:center;'>Acción</div>
+                </div>"""),
+                widgets.VBox(final_rows, layout=widgets.Layout(border='1px solid #dee2e6', border_top='none', border_radius='0 0 8px 8px'))
+            ])
+        ]
 
 def run_ui():
     ui = ModelTrainerUI()
