@@ -25,7 +25,7 @@ import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 
 import ipywidgets as widgets
-from IPython.display import display, clear_output
+from IPython.display import display, clear_output, HTML
 import matplotlib.pyplot as plt
 from datetime import datetime
 
