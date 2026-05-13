@@ -678,17 +678,24 @@ def view_analytics(model_info, out_widget=None):
         # 3. Garantir que não comece com barra
         m_path = m_path.lstrip('/')
         
-        # Se o caminho não começar com o bucket (mapbiomas-fire), nós o adicionamos
-        # mas geralmente list_models já traz o bucket. Vamos garantir:
-        from M0_auth_config import GLOBAL_OPTS
-        bucket_name = "mapbiomas-fire"
-        if not m_path.startswith(bucket_name):
-            m_path = f"{bucket_name}/{m_path}"
-            
-        with fs.open(f"{m_path}/hyperparameters.json", 'r') as f:
-            hp = json.load(f)
-        with fs.open(f"{m_path}/metrics.json", 'r') as f:
-            metrics = json.load(f)
+        # Tentar carregar os arquivos testando variantes de caminho
+        hp, metrics = None, None
+        path_variants = [m_path, f"gs://{m_path}", m_path.replace('mapbiomas-fire/', '')]
+        
+        last_err = ""
+        for p in path_variants:
+            try:
+                with fs.open(f"{p}/hyperparameters.json", 'r') as f:
+                    hp = json.load(f)
+                with fs.open(f"{p}/metrics.json", 'r') as f:
+                    metrics = json.load(f)
+                if hp and metrics: break
+            except Exception as e:
+                last_err = str(e)
+                continue
+        
+        if not hp:
+            raise FileNotFoundError(f"No se pudieron cargar archivos en: {m_path}. Error: {last_err}")
         
         cm = np.array(metrics.get('confusion_matrix', [[0,0],[0,0]]))
         history = hp.get('history', {})
@@ -787,7 +794,7 @@ def view_analytics(model_info, out_widget=None):
                             margin=dict(l=0, r=0, b=0, t=30),
                             scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3')
                         )
-                        fig_plotly.show()
+                        fig_plotly.show(renderer="colab")
                 except:
                     display(HTML("<p style='color:#666;'><i>Gráfico interactivo disponible al cargar pesos del modelo.</i></p>"))
 
@@ -1297,9 +1304,11 @@ def start_training(ui):
             prd_v = ui.trainer_instance.predict(X_v_sub)
             
             # t-SNE 3D (max_iter compatível com sklearn 1.5+)
+            print("  - Calculando manifold t-SNE (esto puede tardar)...")
             tsne = TSNE(n_components=3, perplexity=30, random_state=42, max_iter=1000)
             coords_tsne = tsne.fit_transform(emb_v)
             
+            print("  - Generando figura interactiva...")
             fig_tsne = go.Figure(data=[go.Scatter3d(
                 x=coords_tsne[:,0], y=coords_tsne[:,1], z=coords_tsne[:,2],
                 mode='markers',
@@ -1310,7 +1319,8 @@ def start_training(ui):
                 margin=dict(l=0, r=0, b=0, t=30),
                 scene=dict(xaxis_title='t-SNE 1', yaxis_title='t-SNE 2', zaxis_title='t-SNE 3')
             )
-            fig_tsne.show()
+            fig_tsne.show(renderer="colab")
+            print("✅ Auditoría t-SNE lista.")
         except Exception as e:
             print(f"⚠️ No se pudo gerar t-SNE final: {e}")
 
