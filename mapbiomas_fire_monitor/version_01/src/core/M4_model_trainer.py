@@ -1033,72 +1033,39 @@ class ModelTrainerUI(PipelineStepUI):
         if show_loader: self.show_loader("Actualizando lista de modelos...")
         models = list_trained_models()
         if show_loader: self.hide_loader()
-        fs = _get_fs()
         
         items = []
+        # Header da lista com botão refresh
+        btn_refresh = widgets.Button(description=" 🔄 Actualizar Lista", layout=widgets.Layout(width='180px'), style={'button_color': '#f8f9fa'})
+        btn_refresh.on_click(lambda _: self._refresh_models_list(show_loader=True))
+        
+        header = widgets.HBox([
+            widgets.HTML("<b style='width:250px;'>ID de Entrenamiento</b>"),
+            widgets.HTML("<b style='width:100px;'>Estado</b>"),
+            btn_refresh
+        ], layout=widgets.Layout(margin='0 0 10px 0', padding='5px', border_bottom='2px solid #333'))
+        items.append(header)
+        
+        fs = _get_fs()
         for m in models:
             has_metrics = fs.exists(f"{m['path']}/metrics.json")
-            status = "✅ Completo" if has_metrics else "⚠️ Sin Métricas"
-            btn = widgets.Button(
-                description="Ver Model Card", 
-                button_style='success' if has_metrics else 'warning', 
-                icon='bar-chart',
-                layout=widgets.Layout(width='150px')
-            )
-            
-            btn_del = widgets.Button(
-                description="", 
-                button_style='danger', 
-                icon='trash',
-                layout=widgets.Layout(width='40px'),
-                tooltip="Eliminar el Modelo permanentemente do GCS"
-            )
-            
-            btn_proj = widgets.Button(
-                description="Exportar Projector", 
-                button_style='info', 
-                icon='external-link',
-                layout=widgets.Layout(width='160px'),
-                tooltip="Gerar arquivos .tsv para o TensorBoard Projector"
-            )
+            status = "✅ Listo"
+            btn = widgets.Button(description="📈 Ver Dashboard", layout=widgets.Layout(width='140px'), button_style='primary')
+            btn_del = widgets.Button(description="🗑️", layout=widgets.Layout(width='40px'), button_style='danger')
             
             def _make_callback(model_info):
-                def callback(b):
-                    view_analytics(model_info, out_widget=self.analytics_dashboard_output)
-                return callback
-
-            def _make_proj_callback(model_info):
-                def callback(b):
-                    self.show_loader("Generando archivos para Projector...")
-                    try:
-                        # Carregar o modelo e os dados
-                        import tempfile, subprocess
-                        fs = _get_fs()
-                        with tempfile.TemporaryDirectory() as tmpdir:
-                            # Precisamos de uma amostra de dados para gerar os embeddings
-                            # Vamos baixar os píxeis que foram salvos com o modelo
-                            X_file = os.path.join(tmpdir, 'X_data.npy')
-                            y_file = os.path.join(tmpdir, 'y_data.npy')
-                            src_x = f"gs://{model_info['path']}/extracted_pixels/X_data.npy"
-                            src_y = f"gs://{model_info['path']}/extracted_pixels/y_data.npy"
-                            
-                            subprocess.run(['gsutil', 'cp', src_x, X_file], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                            subprocess.run(['gsutil', 'cp', src_y, y_file], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                            
-                            X_data = np.load(X_file)
-                            y_data = np.load(y_file)
-                            
-                            # Carregar o modelo
                 return lambda _: view_analytics(model_info, out_widget=self.analytics_dashboard_output)
                 
             def _make_del_callback(model_info):
                 def callback(_):
-                    # Sanitize paths
-                    try:
-                        self.trainer_instance.delete_model(model_info['training_id'], model_info['path'].split('/')[-2])
-                        self._refresh_models_list()
-                    except Exception as e:
-                        print(f"Erro: {e}")
+                    if input(f"¿Eliminar modelo {model_info['training_id']}? (s/n): ").lower() == 's':
+                        try:
+                            # Tenta deletar usando a instância do trainer
+                            trainer = self.trainer_instance or ModelTrainer(0)
+                            trainer.delete_model(model_info['training_id'], model_info['path'].split('/')[-2])
+                            self._refresh_models_list()
+                        except Exception as e:
+                            print(f"❌ Erro ao excluir: {e}")
                 return callback
                 
             btn.on_click(_make_callback(m))
@@ -1113,8 +1080,8 @@ class ModelTrainerUI(PipelineStepUI):
             ], layout=widgets.Layout(align_items='center', margin='2px 0', border_bottom='1px solid #eee'))
             items.append(row)
             
-        if not items:
-            items = [widgets.HTML("<i>Ningún modelo disponible en GCS.</i>")]
+        if not items or len(items) == 1:
+            items.append(widgets.HTML("<i>Ningún modelo disponible en GCS.</i>"))
             
         self.analytics_area.children = items
 
