@@ -907,7 +907,7 @@ class ModelTrainerUI(PipelineStepUI):
         self.w_training_id = widgets.Text(value='42', description='Training ID:', style={'description_width': '80px'})
         self.w_shortname = widgets.Text(value='peru_r1', description='Nombre Corto:', style={'description_width': '100px'})
         self.w_comment = widgets.Textarea(
-            placeholder='Describa aqui os detalhes de este treinamento...',
+            placeholder='Descreva aqui os detalhes de este treinamento...',
             description='Comentário:',
             style={'description_width': '100px'},
             layout=L(width='98%', height='80px')
@@ -923,31 +923,37 @@ class ModelTrainerUI(PipelineStepUI):
             self.w_comment
         ], layout=L(padding='15px'))
         
-        # --- TAB 2: Analytics & Monitoramento ---
+        # --- TAB 2: Monitorización en Vivo (Live) ---
         self.training_chart_output = widgets.Output(layout=L(border='1px solid #dee2e6', border_radius='4px', padding='10px', min_height='250px', margin='10px 0'))
-        self.analytics_dashboard_output = widgets.Output(layout=L(border='1px solid #dee2e6', border_radius='4px', padding='10px', min_height='300px', margin='10px 0', background_color='#fafafa'))
         
+        tab_live = widgets.VBox([
+            widgets.HTML("<b>📈 Entrenamiento Actual (En vivo)</b>"),
+            widgets.HTML("<p style='font-size:11px;color:#666;'>Esta guia se atualizará automaticamente durante o processo de treinamento.</p>"),
+            self.training_chart_output,
+        ], layout=L(padding='15px'))
+
+        # --- TAB 3: Historial & Analytics ---
+        self.analytics_dashboard_output = widgets.Output(layout=L(border='1px solid #dee2e6', border_radius='4px', padding='10px', min_height='300px', margin='10px 0', background_color='#fafafa'))
         self.analytics_area = widgets.VBox()
         self._refresh_models_list()
         
-        tab_monitor = widgets.VBox([
-            widgets.HTML("<b>📈 Entrenamiento Actual (En vivo)</b>"),
-            self.training_chart_output,
-            widgets.HTML("<hr style='margin:15px 0'>"),
+        tab_history = widgets.VBox([
             widgets.HTML("<b>📊 Ficha del modelo y panel de análisis</b>"),
             self.analytics_dashboard_output,
             widgets.HTML("<hr style='margin:15px 0'>"),
             widgets.HTML("<b>📂 Historial de Modelos</b>"),
-            widgets.HTML("<p style='font-size:11px;color:#666;'>Consulte los Model Cards de entrenamientos anteriores.</p>"),
+            widgets.HTML("<p style='font-size:11px;color:#666;'>Consulte os Model Cards de treinamentos anteriores ou exporte para o TensorBoard Projector.</p>"),
             self.analytics_area
         ], layout=L(padding='15px'))
         
-        self.tabs = widgets.Tab(children=[tab_config, tab_monitor])
-        self.tabs.set_title(0, '⚙️ Configuración & Entrenamiento')
-        self.tabs.set_title(1, '📊 Monitorización & Análisis')
+        self.tabs = widgets.Tab(children=[tab_config, tab_live, tab_history])
+        self.tabs.set_title(0, '⚙️ Configuración')
+        self.tabs.set_title(1, '📈 Monitorización Live')
+        self.tabs.set_title(2, '📂 Historial & Analytics')
         
         self.clear_main()
         self.main_area.children = [css_tags, self.tabs]
+        
 
     def _refresh_models_list(self, show_loader=False):
         if show_loader: self.show_loader("Actualizando lista de modelos...")
@@ -1071,7 +1077,7 @@ def start_training(ui):
         print("Error: Ninguna muestra seleccionada.")
         return
         
-    ui.tabs.selected_index = 1 
+    ui.tabs.selected_index = 1 # Muda para a aba "Monitorización Live"
     ui.training_chart_output.clear_output()
     ui.analytics_dashboard_output.clear_output()
     
