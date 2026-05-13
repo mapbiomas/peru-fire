@@ -28,7 +28,7 @@ class ExportDispatcherUI(PipelineStepUI):
         try:
             self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
         except Exception as e:
-            print(f"ERRO CRITICO NA INTERFACE: {e}")
+            print(f"ERROR CRÍTICO EN LA INTERFAZ: {e}")
             traceback.print_exc()
 
     def _init_data(self):
@@ -378,7 +378,7 @@ def start_export(ui_obj, mode=None):
                 selected.append(meta)
     
     if not selected:
-        print("⚠️ Nenhuma opção selecionada para exportação.")
+        print("⚠️ Ninguna opción seleccionada para exportación.")
         return
 
     from M1_export_logic import export_to_asset, export_to_gcs
@@ -388,7 +388,7 @@ def start_export(ui_obj, mode=None):
     asset_count = len([m for m in selected if m['type'] == 'ASSET'])
     gcs_count = len([m for m in selected if m['type'] == 'GCS'])
     
-    print(f"🚀 Iniciando {len(selected)} exportações ({asset_count} Assets, {gcs_count} GCS)...")
+    print(f"🚀 Iniciando {len(selected)} exportaciones ({asset_count} Assets, {gcs_count} GCS)...")
 
     import M1_export_logic as logic
     from M0_auth_config import CONFIG, mosaic_name
@@ -423,4 +423,4 @@ def start_export(ui_obj, mode=None):
             # GCS usa o nome base, pois a função logic.export_to_gcs monta o nome final
             logic.export_to_gcs(mosaic_obj, name_base, y, m, p, bands=[band])
             
-    print(f"\n✅ Concluído! {len(selected)} tarefas enviadas.")
+    print(f"\n✅ Completado! {len(selected)} tareas enviadas.")
