@@ -67,7 +67,7 @@ def authenticate(project='mapbiomas-peru'):
     # Detecção de ambiente Colab para autenticação GCS
     try:
         import google.colab
-        print("[COLAB] Detectado ambiente Google Colab. Autenticando usuário...")
+        print("[COLAB] Detectado entorno Google Colab. Autenticando usuario......")
         from google.colab import auth
         auth.authenticate_user()
     except ImportError:
@@ -82,7 +82,7 @@ def authenticate(project='mapbiomas-peru'):
         ee.Initialize(project=project)
         print("[GEE] Autenticado com sucesso.")
     
-    print("[GCS] Autenticação GCS/ADC configurada.")
+    print("[GCS] Autenticación GCS/ADC configurada.")
 
 
 # ─── VARIÁVEIS GLOBAIS (serão configuradas) ─────────────────────────────────
@@ -122,7 +122,7 @@ def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='
     GLOBAL_OPTS['PERIODICITY'] = periodicity
     GLOBAL_OPTS['PERSONAL_TASK_FLAG'] = personal_task_flag
     
-    print(f"✅ Opções Globais: {sensor.upper()} | {periodicity.upper()} | Task Flag: {personal_task_flag}")
+    print(f"✅ Opciones globales: {sensor.upper()} | {periodicity.upper()} | Task Flag: {personal_task_flag}")
 
     if clean_cache:
         try:
@@ -436,5 +436,5 @@ def print_config():
     """Imprime um resumo da configuração atual."""
     print(f"🌍 País: {CONFIG['country'].upper()}")
     print(f"📦 Bucket: {CONFIG['bucket']}")
-    print(f"🏷️  Versão: {CONFIG['version']}")
+    print(f"🏷️  Versión: {CONFIG['version']}")
     print(f"📡 Sensor: {GLOBAL_OPTS['SENSOR']} (Task Prefix: {GLOBAL_OPTS['PERSONAL_TASK_FLAG']})")
