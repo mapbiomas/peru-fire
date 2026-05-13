@@ -662,12 +662,29 @@ def view_analytics(model_info, out_widget=None):
     """Visualiza as métricas e o card de um modelo salvo no GCS."""
     fs = _get_fs()
     try:
-        # Sanitização do caminho para evitar erros b/bucket/o/...
+        import urllib.parse
+        # Sanitização profunda do caminho
         m_path = model_info['path']
-        if m_path.startswith('gs://'): m_path = m_path.replace('gs://', '')
-        # Remove prefixos estranhos se existirem
-        if '/o/' in m_path: m_path = m_path.split('/o/')[-1]
         
+        # 1. Decodificar caracteres como %2F -> /
+        m_path = urllib.parse.unquote(m_path)
+        
+        # 2. Remover prefixos de protocolo e de API do Google
+        if m_path.startswith('gs://'): m_path = m_path.replace('gs://', '')
+        if 'b/' in m_path and '/o/' in m_path:
+            # Captura apenas o que vem depois do /o/
+            m_path = m_path.split('/o/')[-1]
+        
+        # 3. Garantir que não comece com barra
+        m_path = m_path.lstrip('/')
+        
+        # Se o caminho não começar com o bucket (mapbiomas-fire), nós o adicionamos
+        # mas geralmente list_models já traz o bucket. Vamos garantir:
+        from M0_auth_config import GLOBAL_OPTS
+        bucket_name = "mapbiomas-fire"
+        if not m_path.startswith(bucket_name):
+            m_path = f"{bucket_name}/{m_path}"
+            
         with fs.open(f"{m_path}/hyperparameters.json", 'r') as f:
             hp = json.load(f)
         with fs.open(f"{m_path}/metrics.json", 'r') as f:
