@@ -771,7 +771,8 @@ def view_analytics(model_info, out_widget=None):
                             margin=dict(l=0, r=0, b=0, t=30),
                             scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3')
                         )
-                        fig_plotly.show(renderer="colab")
+                        # Forçar exibição via HTML para evitar falhas de renderização no Colab
+                        display(HTML(fig_plotly.to_html(include_plotlyjs='cdn', full_html=False)))
                 except:
                     display(HTML("<p style='color:#666;'><i>Gráfico interactivo disponible al cargar pesos del modelo.</i></p>"))
 
@@ -1296,7 +1297,8 @@ def start_training(ui):
                 margin=dict(l=0, r=0, b=0, t=30),
                 scene=dict(xaxis_title='t-SNE 1', yaxis_title='t-SNE 2', zaxis_title='t-SNE 3')
             )
-            fig_tsne.show(renderer="colab")
+            # Forçar exibição via HTML para evitar falhas de renderização no Colab
+            display(HTML(fig_tsne.to_html(include_plotlyjs='cdn', full_html=False)))
             print("✅ Auditoría t-SNE lista.")
         except Exception as e:
             print(f"⚠️ No se pudo gerar t-SNE final: {e}")
