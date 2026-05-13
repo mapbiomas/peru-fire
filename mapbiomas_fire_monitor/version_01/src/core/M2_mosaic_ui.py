@@ -15,7 +15,7 @@ class MosaicAssemblerUI(PipelineStepUI):
     def __init__(self, years=None):
         super().__init__(
             title="M2 - Montador de Mosaicos (COG)", 
-            description="Interface para converter chunks GCS em mosaicos COG nacionais."
+            description="Interfaz para convertir chunks GCS en mosaicos COG nacionales."
         )
         self.chk_dict = {}
         self.requested_years = years
@@ -174,7 +174,7 @@ class MosaicAssemblerUI(PipelineStepUI):
         <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 5px 10px; background: #fff; border-bottom: 2px solid #333; margin-bottom: 5px;">
             <div style="display: flex; align-items: center; gap: 15px;">
                 <span style="font-weight: bold; font-size: 16px; color: #333;">M2 - Montador</span>
-                <span style="color: #888; font-size: 11px; font-style: italic;">Interface para montagem de mosaicos nacionais (COG)</span>
+                <span style="color: #888; font-size: 11px; font-style: italic;">Interfaz para montaje de mosaicos nacionales (COG)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; padding: 3px 12px; background: #fff1f0; border: 1px solid #ffa39e; border-radius: 4px;">
                 <span style="color: #cf1322; font-size: 10px; font-weight: bold; text-transform: uppercase;">Project</span>
@@ -329,14 +329,14 @@ def start_mosaic_assembly(ui_obj):
         print("[WARNING] Ningún mosaico selecionado.")
         return
     
-    print(f"[INFO] Iniciando montagem de {len(selected)} bandas COG...")
+    print(f"[INFO] Iniciando montaje de {len(selected)} bandas COG...")
     
     from M2_mosaic_logic import assemble_country_mosaic
     
     try:
         for item in selected:
             d_label = f"{item['year']}_{item['month']:02d}" if item['month'] else f"{item['year']}"
-            print(f"\n--- Processando: {item['sensor']} {d_label} {item['band']} ---")
+            print(f"\n--- Procesando: {item['sensor']} {d_label} {item['band']} ---")
             
             assemble_country_mosaic(
                 year=item['year'],
@@ -347,7 +347,7 @@ def start_mosaic_assembly(ui_obj):
                 bands=[item['band']],
                 logger=print
             )
-        print("\n[SUCCESS] 🚀 Montagem concluída com sucesso!")
+        print("\n[SUCCESS] 🚀 Montaje concluida com éxito!")
     except Exception as e:
-        print(f"\n[ERROR] ❌ Erro na montagem: {e}")
+        print(f"\n[ERROR] ❌ Erroe en el montaje: {e}")
         traceback.print_exc()
