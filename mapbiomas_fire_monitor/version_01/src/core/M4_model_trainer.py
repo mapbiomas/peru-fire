@@ -563,67 +563,73 @@ def view_analytics(model_info, out_widget=None):
         cm = np.array(metrics['confusion_matrix'])
         rep = metrics['classification_report']
         
-        # Cores para o header
-        style = """
-        <style>
-        .dash-card { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .dash-title { font-size: 18px; font-weight: bold; color: #343a40; margin-bottom: 10px; border-bottom: 2px solid #007bff; padding-bottom: 5px; }
-        .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
-        .kpi-box { background: #fff; padding: 10px; border-left: 4px solid #007bff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .kpi-title { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
-        .kpi-value { font-size: 20px; font-weight: bold; color: #212529; }
-        .meta-text { font-size: 13px; color: #495057; margin: 2px 0; }
-        </style>
-        """
-        
-        # Preparando métricas
-        acc = rep.get('accuracy', 0)
-        f1_fire = rep.get('1', {}).get('f1-score', 0)
-        prec_fire = rep.get('1', {}).get('precision', 0)
-        rec_fire = rep.get('1', {}).get('recall', 0)
-        
-        # Formatando data
-        date_str = hp.get('training_date', '')
-        if date_str: date_str = date_str[:16].replace('T', ' ')
-        
-        html_content = f"""
-        {style}
-        <div class="dash-card">
-            <div class="dash-title">📄 Ficha del modelo: {hp.get('training_id')} / {hp.get('shortname')}</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 15px;">
-                <div style="flex: 2; min-width: 300px;">
-                    <p class="meta-text"><b>Fecha de creación:</b> {date_str}</p>
-                    <p class="meta-text"><b>Muestras utilizadas:</b> {', '.join(hp.get('sample_collections', []))}</p>
-                    <p class="meta-text"><b>Bandas espectrales:</b> {', '.join(hp.get('bands_input', []))}</p>
-                    <p class="meta-text"><b>Arquitectura (Capas):</b> {hp.get('layers')} | <b>LR:</b> {hp.get('lr')}</p>
-                    <p class="meta-text"><b>Total Píxeles (Fuego):</b> {hp.get('sample_count', {}).get('burned', 0)} | <b>No-Fuego:</b> {hp.get('sample_count', {}).get('not_burned', 0)}</p>
-                </div>
-                <div style="flex: 1; min-width: 250px; background:#fff3cd; padding:10px; border-radius:4px; border:1px solid #ffeeba;">
-                    <p class="meta-text" style="color:#856404; font-weight:bold; margin-bottom:5px;">📝 Comentario sobre el entrenamiento:</p>
-                    <p class="meta-text" style="color:#856404; font-style:italic;">{hp.get('comment', 'Sin comentarios.')}</p>
-                </div>
+def render_model_card_html(hp, metrics):
+    """Gera o HTML do header e KPIs do Model Card."""
+    # Cores e estilos
+    style = """
+    <style>
+    .dash-card { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .dash-title { font-size: 18px; font-weight: bold; color: #343a40; margin-bottom: 10px; border-bottom: 2px solid #007bff; padding-bottom: 5px; }
+    .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+    .kpi-box { background: #fff; padding: 10px; border-left: 4px solid #007bff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .kpi-title { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kpi-value { font-size: 20px; font-weight: bold; color: #212529; }
+    .meta-text { font-size: 13px; color: #495057; margin: 2px 0; }
+    </style>
+    """
+    
+    # Preparando métricas
+    rep = metrics.get('classification_report', {})
+    acc = rep.get('accuracy', 0)
+    f1_fire = rep.get('1', {}).get('f1-score', 0)
+    prec_fire = rep.get('1', {}).get('precision', 0)
+    rec_fire = rep.get('1', {}).get('recall', 0)
+    
+    # Formatando data
+    date_str = hp.get('training_date', 'Entrenando...')
+    if date_str and 'T' in date_str: date_str = date_str[:16].replace('T', ' ')
+    
+    html_content = f"""
+    {style}
+    <div class="dash-card">
+        <div class="dash-title">📄 Ficha del modelo: {hp.get('training_id')} / {hp.get('shortname')}</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 15px;">
+            <div style="flex: 2; min-width: 300px;">
+                <p class="meta-text"><b>Estado/Fecha:</b> {date_str}</p>
+                <p class="meta-text"><b>Muestras:</b> {', '.join(hp.get('sample_collections', []))}</p>
+                <p class="meta-text"><b>Bandas:</b> {', '.join(hp.get('bands_input', []))}</p>
+                <p class="meta-text"><b>Capas:</b> {hp.get('layers')} | <b>LR:</b> {hp.get('lr')}</p>
+                <p class="meta-text"><b>Píxeles:</b> {hp.get('sample_count', {}).get('burned', 0)} (F) | {hp.get('sample_count', {}).get('not_burned', 0)} (NF)</p>
             </div>
-            
-            <div class="dash-grid">
-                <div class="kpi-box" style="border-left-color: #28a745;">
-                    <div class="kpi-title">Precisión global</div>
-                    <div class="kpi-value">{acc:.1%}</div>
-                </div>
-                <div class="kpi-box" style="border-left-color: #dc3545;">
-                    <div class="kpi-title">Precisión (Fuego)</div>
-                    <div class="kpi-value">{prec_fire:.1%}</div>
-                </div>
-                <div class="kpi-box" style="border-left-color: #ffc107;">
-                    <div class="kpi-title">Recall (Fuego)</div>
-                    <div class="kpi-value">{rec_fire:.1%}</div>
-                </div>
-                <div class="kpi-box" style="border-left-color: #17a2b8;">
-                    <div class="kpi-title">F1-Score (Fuego)</div>
-                    <div class="kpi-value">{f1_fire:.1%}</div>
-                </div>
+            <div style="flex: 1; min-width: 250px; background:#fff3cd; padding:10px; border-radius:4px; border:1px solid #ffeeba;">
+                <p class="meta-text" style="color:#856404; font-weight:bold; margin-bottom:5px;">📝 Comentario:</p>
+                <p class="meta-text" style="color:#856404; font-style:italic;">{hp.get('comment', 'Sin comentarios.')}</p>
             </div>
         </div>
-        """
+        
+        <div class="dash-grid">
+            <div class="kpi-box" style="border-left-color: #28a745;">
+                <div class="kpi-title">Acurácia Global</div>
+                <div class="kpi-value">{acc:.1%}</div>
+            </div>
+            <div class="kpi-box" style="border-left-color: #dc3545;">
+                <div class="kpi-title">Precisión (Fuego)</div>
+                <div class="kpi-value">{prec_fire:.1%}</div>
+            </div>
+            <div class="kpi-box" style="border-left-color: #ffc107;">
+                <div class="kpi-title">Recall (Fuego)</div>
+                <div class="kpi-value">{rec_fire:.1%}</div>
+            </div>
+            <div class="kpi-box" style="border-left-color: #17a2b8;">
+                <div class="kpi-title">F1-Score (Fuego)</div>
+                <div class="kpi-value">{f1_fire:.1%}</div>
+            </div>
+        </div>
+    </div>
+    """
+    return html_content
+
+def view_analytics(model_info, out_widget=None):
         
         if out_widget:
             out_widget.clear_output(wait=True)
@@ -1125,23 +1131,55 @@ def start_training(ui):
     def update_chart(history, embeds=None, preds=None, y_true=None):
         with ui.training_chart_output:
             clear_output(wait=True)
-            fig = plt.figure(figsize=(15, 4))
             
-            # 1. Loss
+            # --- PARTE 1: Model Card (Header e KPIs) ---
+            # Geramos métricas parciais baseadas no y_true e preds
+            from sklearn.metrics import classification_report, confusion_matrix
+            try:
+                cm = confusion_matrix(y_true, (preds > 0.5).astype(int))
+                rep = classification_report(y_true, (preds > 0.5).astype(int), output_dict=True, zero_division=0)
+            except:
+                cm = np.zeros((2,2))
+                rep = {}
+
+            hp_live = {
+                'training_id': ui.w_training_id.value,
+                'shortname': ui.w_shortname.value,
+                'sample_collections': selected_samples,
+                'bands_input': sorted(bands_config.keys()),
+                'layers': ui.w_layers.value,
+                'lr': ui.w_lr.value,
+                'sample_count': ui.trainer_instance._sample_count,
+                'comment': ui.w_comment.value,
+                'training_date': 'En progreso...'
+            }
+            metrics_live = {'classification_report': rep}
+            
+            display(HTML(render_model_card_html(hp_live, metrics_live)))
+
+            # --- PARTE 2: Gráficos ---
+            fig = plt.figure(figsize=(16, 4.5))
+            
+            # 1. Confusion Matrix (Live)
             ax1 = fig.add_subplot(1, 3, 1)
-            ax1.plot(history['steps'], history['loss'], color='#d9534f', linewidth=2)
-            ax1.set_title('Función de Costo (Loss)', fontsize=10, weight='bold')
-            ax1.set_xlabel('Iteración', fontsize=9)
-            ax1.grid(True, linestyle='--', alpha=0.5)
+            cax = ax1.matshow(cm, cmap='Blues', alpha=0.8)
+            for (i, j), z in np.ndenumerate(cm):
+                ax1.text(j, i, f"{z:,}", ha='center', va='center', weight='bold', color='black' if z < cm.max()/2 else 'white')
+            ax1.set_title('Matriz de confusión (Live)', pad=15, weight='bold')
+            ax1.set_xticks([0, 1]); ax1.set_yticks([0, 1])
+            ax1.set_xticklabels(['No-fuego', 'Fuego']); ax1.set_yticklabels(['No-fuego', 'Fuego'])
             
-            # 2. Accuracy
+            # 2. Loss & Acc (Live)
             ax2 = fig.add_subplot(1, 3, 2)
-            ax2.plot(history['steps'], history['acc'], color='#0275d8', label='Entrenamiento', linewidth=2)
-            ax2.plot(history['steps'], history['val_acc'], color='#5cb85c', label='Validación', linestyle='--', linewidth=2)
-            ax2.set_title('Precisión', fontsize=10, weight='bold')
-            ax2.set_xlabel('Iteración', fontsize=9)
-            ax2.legend(fontsize=9)
-            ax2.grid(True, linestyle='--', alpha=0.5)
+            ax2.plot(history['steps'], history['acc'], color='#28a745', label='Acc Treino', linewidth=2)
+            ax2.plot(history['steps'], history['val_acc'], color='#28a745', label='Acc Validação', linestyle='--', alpha=0.6)
+            ax2.set_ylabel('Acurácia', color='#28a745', weight='bold')
+            
+            ax2b = ax2.twinx()
+            ax2b.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
+            ax2b.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
+            ax2.set_title('Evolución (Loss vs Acc)', weight='bold')
+            ax2.grid(True, linestyle='--', alpha=0.3)
 
             # 3. Live Playground (Latent Space 3D)
             if embeds is not None:
@@ -1149,25 +1187,13 @@ def start_training(ui):
                 try:
                     pca = PCA(n_components=3)
                     coords = pca.fit_transform(embeds)
-                    
                     ax3 = fig.add_subplot(1, 3, 3, projection='3d')
-                    # Colorimos pelo gradiente da predição (Playground Style)
-                    # Azul (0) -> Vermelho (1)
                     sc = ax3.scatter(coords[:, 0], coords[:, 1], coords[:, 2], 
                                      c=preds, cmap='RdBu_r', s=20, alpha=0.7, 
                                      edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
-                    
-                    # Adicionamos contorno extra para os que o modelo está errando feio?
-                    # Por enquanto apenas o scatter básico já é muito visual
-                    
-                    ax3.set_title('Playground: Espaço Latente (Live)', fontsize=10, weight='bold')
+                    ax3.set_title('Espaço Latente (Playground)', fontsize=10, weight='bold')
                     ax3.set_xticks([]); ax3.set_yticks([]); ax3.set_zticks([])
-                    
-                    # Colorbar pequena para confiança
-                    cb = plt.colorbar(sc, ax=ax3, pad=0.1, shrink=0.7)
-                    cb.set_label('Confianza (Predicción)', fontsize=8)
-                except:
-                    pass
+                except: pass
             
             plt.tight_layout()
             plt.show()
