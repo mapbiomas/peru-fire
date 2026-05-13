@@ -306,23 +306,32 @@ class ModelTrainer:
         self.train_op = tf.train.AdamOptimizer(self.lr).minimize(self.loss)
         self.saver    = tf.train.Saver()
 
-    def train(self, X, y, batch_size=None, n_iters=None, split=None, keep_prob=0.8, logger=None, update_chart_fn=None):
-        self._X_raw = X
-        self._y_raw = y
+    def train(self, X_train, y_train, X_val=None, y_val=None, batch_size=None, n_iters=None, keep_prob=0.8, logger=None, update_chart_fn=None):
+        self._X_raw = X_train
+        self._y_raw = y_train
         
         batch_size = batch_size or CONFIG.get('model_batch', 1000)
         n_iters    = n_iters    or CONFIG.get('model_iters', 5000)
-        split      = split      or CONFIG.get('model_split', 0.8)
 
-        self.norm_stats = compute_normalizer(X)
-        X_norm = normalize(X, self.norm_stats)
+        # Normalização baseada SEMPRE no conjunto de treino para evitar data leakage
+        self.norm_stats = compute_normalizer(X_train)
+        X_tr = normalize(X_train, self.norm_stats)
+        y_tr = y_train.reshape(-1, 1)
 
-        n = len(X_norm)
-        idx = np.random.permutation(n)
-        n_train = int(n * split)
-        
-        X_tr, y_tr = X_norm[idx[:n_train]], y[idx[:n_train]].reshape(-1, 1)
-        X_te, y_te = X_norm[idx[n_train:]], y[idx[n_train:]].reshape(-1, 1)
+        if X_val is not None and y_val is not None:
+            X_te = normalize(X_val, self.norm_stats)
+            y_te = y_val.reshape(-1, 1)
+        else:
+            # Fallback para split interno se não for provido
+            n = len(X_tr)
+            idx = np.random.permutation(n)
+            n_split = int(n * 0.8)
+            X_te = X_tr[idx[n_split:]]
+            y_te = y_tr[idx[n_split:]]
+            X_tr = X_tr[idx[:n_split]]
+            y_tr = y_tr[idx[:n_split]]
+
+        n_train = len(X_tr)
 
         # Amostra fixa para visualização ao vivo (Playground Style)
         viz_idx = np.random.choice(len(X_te), min(500, len(X_te)), replace=False)
@@ -1173,6 +1182,9 @@ def start_training(ui):
         
     print(f"Éxito: {len(X)} píxeles extraídos (Fuego: {y.sum()} | No-fuego: {(y==0).sum()}).")
     
+    from sklearn.model_selection import train_test_split
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+    
     ui.trainer_instance = ModelTrainer(num_input=len(bands_config), layers=layers, lr=lr)
     ui.trainer_instance._bands_input = sorted(bands_config.keys()) # Salva a ordem das bandas
     ui.trainer_instance._bands_config = bands_config # Salva a configuração completa
@@ -1288,7 +1300,9 @@ def start_training(ui):
             plt.tight_layout()
             plt.show()
             
-    ui.trainer_instance.train(X, y, batch_size=batch, n_iters=iters, logger=_logger, update_chart_fn=update_chart)
+    # Iniciar Treino
+    ui.trainer_instance.train(X_train, y_train, X_val=X_val, y_val=y_val, 
+                              batch_size=batch, n_iters=iters, logger=_logger, update_chart_fn=update_chart)
     
     # --- AUDITORIA FINAL COM t-SNE (INTERATIVO) ---
     print("\n🏁 Entrenamiento completado. Generando auditoría t-SNE final de alta resolución...")
