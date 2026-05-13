@@ -108,7 +108,7 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
         gcs_files = list_gcs_files(chunk_prefix, logger=logger)
         
         if not gcs_files:
-            if logger: logger(f"Nenhum shard encontrado no GCS para {label}.", "warning")
+            if logger: logger(f"Ningún shard encontrado en GCS para {label}.", "warning")
             return []
             
         found_bands = {}
@@ -132,7 +132,7 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
         bands_to_process = {b: found_bands[b] for b in target_bands if b in found_bands}
         
         if not bands_to_process:
-            if logger: logger(f"Bandas alvo {target_bands} não detectadas no GCS para {base_name}.", "warning")
+            if logger: logger(f"Bandas objetivo {target_bands} no detectadas en GCS para {base_name}.", "warning")
             return []
 
         current_step = progress_idx
@@ -141,7 +141,7 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
             clean_b_name = "dayOfYear" if b_name.lower() == "dayofyear" else b_name
             current_step += 1
             
-            if logger: logger(f"Processando [{b_name}] ({len(remote_shards)} shards)...", "info")
+            if logger: logger(f"Procesando [{b_name}] ({len(remote_shards)} shards)...", "info")
             
             band_tmp = os.path.join(tmp_path, b_name)
             os.makedirs(band_tmp, exist_ok=True)
@@ -169,7 +169,7 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
                 dest = f"gs://{CONFIG['bucket']}/{mosaic_prefix}/{cog_remote_name}"
                 run_cmd([gsutil_cmd, 'cp', cog_local_path, dest], label=f"Upload ({b_name})")
                 
-                if logger: logger(f"✅ Sucesso: {cog_remote_name}", "success")
+                if logger: logger(f"✅ Éxito: {cog_remote_name}", "success")
                 results.append(dest)
             finally:
                 if os.path.exists(band_tmp): shutil.rmtree(band_tmp)
