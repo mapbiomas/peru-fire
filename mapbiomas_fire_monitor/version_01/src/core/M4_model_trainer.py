@@ -641,38 +641,44 @@ def view_analytics(model_info, out_widget=None):
         if 'b/' in clean_path and '/o/' in clean_path:
             clean_path = clean_path.split('/o/')[-1]
         
-        # Variantes absolutas com gs:// (mais seguras no Colab)
+        # Tentar carregar os arquivos testando variantes de caminho e NOMES
+        hp, metrics = None, None
         path_variants = [
             f"gs://mapbiomas-fire/{clean_path}",
             f"mapbiomas-fire/{clean_path}"
         ]
         
-        hp, metrics = None, None
+        # Nomes possíveis para o arquivo de metadados (para compatibilidade)
+        meta_filenames = ['metadata.json', 'hyperparameters.json']
+        
         last_err = ""
         for p in path_variants:
-            try:
-                # Tenta ler via fsspec (gcsfs)
-                with fs.open(f"{p}/hyperparameters.json", 'r') as f:
-                    hp = json.load(f)
-                with fs.open(f"{p}/metrics.json", 'r') as f:
-                    metrics = json.load(f)
-                if hp and metrics: break
-            except Exception as e:
-                last_err = str(e)
-                continue
+            for m_name in meta_filenames:
+                try:
+                    with fs.open(f"{p}/{m_name}", 'r') as f:
+                        hp = json.load(f)
+                    with fs.open(f"{p}/metrics.json", 'r') as f:
+                        metrics = json.load(f)
+                    if hp and metrics: break
+                except Exception as e:
+                    last_err = str(e)
+                    continue
+            if hp: break
         
         if not hp:
-            # TENTATIVA FINAL: Usar gsutil cp se fs.open falhou (Fallback Robusto)
+            # Fallback Robusto com gsutil
             import tempfile, subprocess
             with tempfile.TemporaryDirectory() as tmpdir:
-                try:
-                    p_final = f"gs://mapbiomas-fire/{clean_path}"
-                    subprocess.run(['gsutil', 'cp', f"{p_final}/hyperparameters.json", f"{tmpdir}/hp.json"], check=True, capture_output=True)
-                    subprocess.run(['gsutil', 'cp', f"{p_final}/metrics.json", f"{tmpdir}/met.json"], check=True, capture_output=True)
-                    with open(f"{tmpdir}/hp.json") as f: hp = json.load(f)
-                    with open(f"{tmpdir}/met.json") as f: metrics = json.load(f)
-                except Exception as e2:
-                    raise FileNotFoundError(f"Fallo crítico al cargar modelo. Errores: {last_err} | {e2}")
+                for m_name in meta_filenames:
+                    try:
+                        p_final = f"gs://mapbiomas-fire/{clean_path}"
+                        subprocess.run(['gsutil', 'cp', f"{p_final}/{m_name}", f"{tmpdir}/hp.json"], check=True, capture_output=True)
+                        subprocess.run(['gsutil', 'cp', f"{p_final}/metrics.json", f"{tmpdir}/met.json"], check=True, capture_output=True)
+                        with open(f"{tmpdir}/hp.json") as f: hp = json.load(f)
+                        with open(f"{tmpdir}/met.json") as f: metrics = json.load(f)
+                        if hp: break
+                    except Exception as e2:
+                        last_err = f"gsutil failed for {m_name}: {e2}"
         
         cm = np.array(metrics.get('confusion_matrix', [[0,0],[0,0]]))
         history = hp.get('history', {})
