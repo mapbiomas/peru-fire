@@ -393,7 +393,8 @@ class ModelTrainer:
         W_out = self._saved_vars['output/kernel:0']
         b_out = self._saved_vars['output/bias:0']
         logits = np.dot(layer, W_out) + b_out
-        preds = (1 / (1 + np.exp(-logits))).flatten() > 0.5
+        # Sigmoid robusta para evitar overflow
+        preds = (1 / (1 + np.exp(-np.clip(logits, -20, 20)))).flatten() > 0.5
         
         cm = confusion_matrix(self._y_raw, preds)
         rep = classification_report(self._y_raw, preds, output_dict=True)
@@ -1278,8 +1279,8 @@ def start_training(ui):
             emb_v = ui.trainer_instance.get_embeddings(X_v_sub)
             prd_v = ui.trainer_instance.predict(X_v_sub)
             
-            # t-SNE 3D
-            tsne = TSNE(n_components=3, perplexity=30, random_state=42, n_iter=1000)
+            # t-SNE 3D (max_iter compatível com sklearn 1.5+)
+            tsne = TSNE(n_components=3, perplexity=30, random_state=42, max_iter=1000)
             coords_tsne = tsne.fit_transform(emb_v)
             
             fig_tsne = go.Figure(data=[go.Scatter3d(
