@@ -1302,6 +1302,20 @@ def start_training(ui):
             tsne = TSNE(n_components=3, perplexity=30, random_state=42, max_iter=1000)
             coords_tsne = tsne.fit_transform(emb_v)
             
+            # --- 1. VERSÃO ESTÁTICA (Matplotlib) - GARANTIA TOTAL ---
+            import matplotlib.pyplot as plt
+            from mpl_toolkits.mplot3d import Axes3D
+            
+            fig_static = plt.figure(figsize=(10, 7))
+            ax_s = fig_static.add_subplot(111, projection='3d')
+            p_s = ax_s.scatter(coords_tsne[:,0], coords_tsne[:,1], coords_tsne[:,2], 
+                               c=prd_v.flatten(), cmap='RdBu_r', s=20, alpha=0.6)
+            ax_s.set_title("Auditoría t-SNE (Versión Estática)", weight='bold')
+            ax_s.set_xlabel("t-SNE 1"); ax_s.set_ylabel("t-SNE 2"); ax_s.set_zlabel("t-SNE 3")
+            plt.colorbar(p_s, label="Predicción (Fuego)")
+            plt.show()
+            
+            # --- 2. VERSÃO INTERATIVA (Plotly) ---
             print("  - Generando figura interactiva...")
             fig_tsne = go.Figure(data=[go.Scatter3d(
                 x=coords_tsne[:,0], y=coords_tsne[:,1], z=coords_tsne[:,2],
@@ -1313,8 +1327,8 @@ def start_training(ui):
                 margin=dict(l=0, r=0, b=0, t=30),
                 scene=dict(xaxis_title='t-SNE 1', yaxis_title='t-SNE 2', zaxis_title='t-SNE 3')
             )
-            # Forçar exibição via HTML para evitar falhas de renderização no Colab
-            display(HTML(fig_tsne.to_html(include_plotlyjs='cdn', full_html=False)))
+            # Injeção pesada (include_plotlyjs=True) para máxima compatibilidade
+            display(HTML(fig_tsne.to_html(include_plotlyjs=True, full_html=False)))
             print("✅ Auditoría t-SNE lista.")
         except Exception as e:
             print(f"⚠️ No se pudo gerar t-SNE final: {e}")
