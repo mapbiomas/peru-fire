@@ -422,7 +422,7 @@ class ModelTrainer:
             
             self._saved_vars = dict(np.load(os.path.join(tmpdir, 'weights.npz')))
             
-    def predict_array(self, X_raw):
+    def predict(self, X_raw):
         """Aplica a inferência (forward pass manual usando os pesos numpy)."""
         if not hasattr(self, '_saved_vars'):
             raise RuntimeError("Modelo não treinado/carregado.")
@@ -436,8 +436,10 @@ class ModelTrainer:
         W_out = self._saved_vars['output/kernel:0']
         b_out = self._saved_vars['output/bias:0']
         logits = np.dot(layer, W_out) + b_out
-        preds = (1 / (1 + np.exp(-logits))).flatten() > 0.5
-        return preds.astype(np.uint8)
+        
+        # Sigmoid robusta para evitar overflow
+        preds = 1 / (1 + np.exp(-np.clip(logits, -20, 20)))
+        return preds.flatten()
 
     def get_embeddings(self, X_raw):
         """Extrai os embeddings (penúltima camada) usando os pesos numpy."""
@@ -659,14 +661,18 @@ def view_analytics(model_info, out_widget=None):
     """Visualiza as métricas e o card de um modelo salvo no GCS."""
     fs = _get_fs()
     try:
-        # 1. Carregar dados do GCS
-        with fs.open(f"{model_info['path']}/hyperparameters.json", 'r') as f:
+        # Sanitização do caminho para evitar erros b/bucket/o/...
+        m_path = model_info['path']
+        if m_path.startswith('gs://'): m_path = m_path.replace('gs://', '')
+        # Remove prefixos estranhos se existirem
+        if '/o/' in m_path: m_path = m_path.split('/o/')[-1]
+        
+        with fs.open(f"{m_path}/hyperparameters.json", 'r') as f:
             hp = json.load(f)
-        with fs.open(f"{model_info['path']}/metrics.json", 'r') as f:
+        with fs.open(f"{m_path}/metrics.json", 'r') as f:
             metrics = json.load(f)
         
         cm = np.array(metrics.get('confusion_matrix', [[0,0],[0,0]]))
-        rep = metrics.get('classification_report', {})
         history = hp.get('history', {})
 
         if out_widget:
@@ -1083,41 +1089,25 @@ class ModelTrainerUI(PipelineStepUI):
                             y_data = np.load(y_file)
                             
                             # Carregar o modelo
-                            trainer = ModelTrainer(num_input=X_data.shape[1])
-                            trainer.load(model_info['training_id'].split('_')[1], model_info['training_id'].split('_')[2])
-                            
-                            # Gerar e salvar os arquivos
-                            trainer.save_projector_files(
-                                model_info['training_id'].split('_')[1], 
-                                model_info['training_id'].split('_')[2], 
-                                X_data, y_data, 
-                                logger=print
-                            )
-                    except Exception as e:
-                        print(f"❌ Erro ao exportar: {e}")
-                    self.hide_loader()
-                return callback
-
+                return lambda _: view_analytics(model_info, out_widget=self.analytics_dashboard_output)
+                
             def _make_del_callback(model_info):
-                def callback(b):
-                    print(f"⚠️ Excluindo modelo: {model_info['training_id']}...")
+                def callback(_):
+                    # Sanitize paths
                     try:
-                        fs.rm(model_info['path'], recursive=True)
-                        self._refresh_models_list(show_loader=True)
+                        self.trainer_instance.delete_model(model_info['training_id'], model_info['path'].split('/')[-2])
+                        self._refresh_models_list()
                     except Exception as e:
-                        print(f"❌ Erro ao excluir: {e}")
+                        print(f"Erro: {e}")
                 return callback
                 
             btn.on_click(_make_callback(m))
-            btn_proj.on_click(_make_proj_callback(m))
             btn_del.on_click(_make_del_callback(m))
 
             row = widgets.HBox([
                 widgets.HTML(f"<div style='width:250px;font-family:monospace;'>{m['training_id']}</div>"), 
                 widgets.HTML(f"<div style='width:100px;'>{status}</div>"),
                 btn,
-                widgets.HTML('<div style="width:5px;"></div>'),
-                btn_proj,
                 widgets.HTML('<div style="width:5px;"></div>'),
                 btn_del
             ], layout=widgets.Layout(align_items='center', margin='2px 0', border_bottom='1px solid #eee'))
@@ -1253,7 +1243,7 @@ def start_training(ui):
             ax2b = ax2.twinx()
             ax2b.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
             ax2b.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
-            ax2.set_title('Evolución (Loss vs Acc)', weight='bold')
+            ax2.set_title('Evolución Histórica\nLoss debe bajar | Acc debe subir', weight='bold', fontsize=10)
             ax2.grid(True, linestyle='--', alpha=0.3)
 
             # (1,3) PCA 2D (Playground Style)
@@ -1262,8 +1252,8 @@ def start_training(ui):
                     pca2 = PCA(n_components=2)
                     coords2 = pca2.fit_transform(embeds)
                     ax3 = fig.add_subplot(2, 3, 3)
-                    ax3.scatter(coords2[:, 0], coords2[:, 1], c=preds, cmap='RdBu_r', s=25, alpha=0.7, edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
-                    ax3.set_title('Proyección Latente 2D', weight='bold')
+                    ax3.scatter(coords2[:, 0], coords2[:, 1], c=preds_f, cmap='RdBu_r', s=25, alpha=0.7, edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
+                    ax3.set_title('Proyección Latente 2D\nCercanía = Similitud Espectral', weight='bold', fontsize=10)
                     ax3.set_xticks([]); ax3.set_yticks([])
                 except: pass
 
@@ -1272,7 +1262,7 @@ def start_training(ui):
             # Usar os arrays achatados aqui
             ax4.hist(preds_f[y_true_f==0], bins=30, alpha=0.5, color='#007bff', label='No-Fuego', density=True)
             ax4.hist(preds_f[y_true_f==1], bins=30, alpha=0.5, color='#ff4d4d', label='Fuego', density=True)
-            ax4.set_title('Distribución de Probabilidades', weight='bold')
+            ax4.set_title('Distribución de Seguridad\nIdeal: Picos en los extremos (0 y 1)', weight='bold', fontsize=10)
             ax4.set_xlabel('Confianza (Predicción)'); ax4.legend(fontsize=8); ax4.grid(True, alpha=0.2)
 
             # (2,2) Curva Precision-Recall
@@ -1282,7 +1272,7 @@ def start_training(ui):
                 ax5 = fig.add_subplot(2, 3, 5)
                 ax5.plot(recall, precision, color='#17a2b8', linewidth=2, label=f'AP={ap_score:.3f}')
                 ax5.fill_between(recall, precision, alpha=0.2, color='#17a2b8')
-                ax5.set_title('Curva Precision-Recall', weight='bold')
+                ax5.set_title('Calidad de Detección (PR)\nBalance entre omisión y falsa alarma', weight='bold', fontsize=10)
                 ax5.set_xlabel('Recall'); ax5.set_ylabel('Precision'); ax5.legend(loc='lower left', fontsize=8); ax5.grid(True, alpha=0.3)
             except: pass
 
@@ -1292,8 +1282,8 @@ def start_training(ui):
                     pca3 = PCA(n_components=3)
                     coords3 = pca3.fit_transform(embeds)
                     ax6 = fig.add_subplot(2, 3, 6, projection='3d')
-                    ax6.scatter(coords3[:, 0], coords3[:, 1], coords3[:, 2], c=preds, cmap='RdBu_r', s=15, alpha=0.6, edgecolors='white', linewidth=0.2, vmin=0, vmax=1)
-                    ax6.set_title('Espacio Latente 3D', weight='bold')
+                    ax6.scatter(coords3[:, 0], coords3[:, 1], coords3[:, 2], c=preds_f, cmap='RdBu_r', s=15, alpha=0.6, edgecolors='white', linewidth=0.2, vmin=0, vmax=1)
+                    ax6.set_title('Espacio Latente 3D\nVisión global de la separación', weight='bold', fontsize=10)
                     ax6.set_xticks([]); ax6.set_yticks([]); ax6.set_zticks([])
                 except: pass
             
