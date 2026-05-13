@@ -202,7 +202,7 @@ class ExportDispatcherUI(PipelineStepUI):
         <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 5px 10px; background: #fff; border-bottom: 2px solid #333; margin-bottom: 10px;">
             <div style="display: flex; align-items: center; gap: 15px;">
                 <span style="font-weight: bold; font-size: 16px; color: #333;">M1 - Despachador</span>
-                <span style="color: #888; font-size: 11px; font-style: italic;">Interface multi-sensor para exportação</span>
+                <span style="color: #888; font-size: 11px; font-style: italic;">Interfaz multisensor para exportación</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; padding: 3px 12px; background: #fff1f0; border: 1px solid #ffa39e; border-radius: 4px;">
                 <span style="color: #cf1322; font-size: 10px; font-weight: bold; text-transform: uppercase;">Project</span>
