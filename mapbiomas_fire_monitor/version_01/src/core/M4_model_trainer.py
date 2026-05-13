@@ -528,9 +528,31 @@ class ModelTrainer:
             # 2.5 Metrics
             if logger: logger("Generación y guardado de métricas de evaluación...", "info")
             cm, rep = self.evaluate()
+            
+            # --- SNAPSHOT DE DIAGNÓSTICO E t-SNE PARA CARGA INSTANTÂNEA ---
+            try:
+                from sklearn.decomposition import PCA
+                idx_snap = np.random.choice(len(self._X_raw), min(800, len(self._X_raw)), replace=False)
+                emb_snap = self.get_embeddings(self._X_raw[idx_snap])
+                prd_snap = self.predict(self._X_raw[idx_snap])
+                
+                # PCA Snapshot (Rápido)
+                pca_snap = PCA(n_components=3); coords_pca = pca_snap.fit_transform(emb_snap)
+                
+                diag_snapshot = {
+                    'pca_coords': coords_pca.tolist(),
+                    'tsne_coords': getattr(self, 'tsne_snapshot', None), # Coordenadas t-SNE pré-calculadas
+                    'preds': prd_snap.flatten().tolist(),
+                    'y_true': self._y_raw[idx_snap].flatten().tolist()
+                }
+            except Exception as e_snap:
+                if logger: logger(f"⚠️ No se pudo generar snapshot: {e_snap}", "info")
+                diag_snapshot = None
+
             metrics = {
                 'confusion_matrix': cm.tolist(),
                 'classification_report': rep,
+                'diagnostic_snapshot': diag_snapshot,
                 'generated_at': datetime.now().isoformat()
             }
             with open(os.path.join(tmpdir, 'metrics.json'), 'w') as f:
@@ -562,6 +584,97 @@ class ModelTrainer:
 
 # --- VIEW_ANALYTICS UNIFICADA ---
         
+def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=None):
+    """Motor gráfico unificado para o grid 2x3 (Treino e Histórico)."""
+    from sklearn.metrics import confusion_matrix, precision_recall_curve, average_precision_score
+    from sklearn.decomposition import PCA
+    import matplotlib.pyplot as plt
+
+    try:
+        y_true_f = y_true.flatten() if len(y_true) > 0 else np.array([])
+        preds_f = preds.flatten() if len(preds) > 0 else np.array([])
+        if len(y_true_f) > 0:
+            cm = confusion_matrix(y_true_f, (preds_f > 0.5).astype(int))
+            cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        else:
+            cm = np.zeros((2,2)); cm_norm = np.zeros((2,2))
+    except:
+        cm = np.zeros((2,2)); cm_norm = np.zeros((2,2))
+
+    fig = plt.figure(figsize=(18, 9))
+    
+    # 1. Matriz de Confusión (%)
+    ax1 = fig.add_subplot(2, 3, 1)
+    ax1.matshow(cm_norm, cmap='Blues', alpha=0.8, vmin=0, vmax=1)
+    for (i, j), z in np.ndenumerate(cm):
+        ax1.text(j, i, f"{z:,}\n({cm_norm[i,j]:.1%})", ha='center', va='center', 
+                 weight='bold', color='black' if cm_norm[i,j] < 0.5 else 'white')
+    ax1.set_title('Matriz de Confusión (%)', pad=15, weight='bold')
+    ax1.set_xticks([0, 1]); ax1.set_yticks([0, 1])
+    ax1.set_xticklabels(['No-fuego', 'Fuego']); ax1.set_yticklabels(['No-fuego', 'Fuego'])
+
+    # 2. Historial de Entrenamiento
+    if history and 'steps' in history and len(history['steps']) > 0:
+        ax2 = fig.add_subplot(2, 3, 2)
+        ax2.plot(history['steps'], history['acc'], color='#28a745', label='Acc', linewidth=2)
+        if 'val_acc' in history: ax2.plot(history['steps'], history['val_acc'], color='#28a745', label='Val', linestyle='--', alpha=0.6)
+        ax2.set_ylabel('Acurácia', color='#28a745', weight='bold')
+        ax2b = ax2.twinx()
+        ax2b.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
+        ax2b.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
+        ax2.set_title('Evolución Histórica', weight='bold')
+        ax2.grid(True, linestyle='--', alpha=0.3)
+
+    # 3. PCA 2D (ou Snapshot)
+    coords2, coords3 = None, None
+    if coords_override is not None:
+        coords2 = coords_override[:, :2]
+        coords3 = coords_override
+    elif embeds is not None:
+        try:
+            pca_tmp = PCA(n_components=3)
+            coords3 = pca_tmp.fit_transform(embeds)
+            coords2 = coords3[:, :2]
+        except: pass
+
+    if coords2 is not None:
+        ax3 = fig.add_subplot(2, 3, 3)
+        ax3.scatter(coords2[:, 0], coords2[:, 1], c=preds_f, cmap='RdBu_r', s=25, alpha=0.7, edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
+        ax3.set_title('Proyección Latente 2D', weight='bold', fontsize=10)
+        ax3.set_xticks([]); ax3.set_yticks([])
+
+    # 4. Histograma
+    ax4 = fig.add_subplot(2, 3, 4)
+    if len(preds_f) > 0 and len(y_true_f) > 0:
+        ax4.hist(preds_f[y_true_f==0], bins=30, alpha=0.5, color='#007bff', label='No-Fuego', density=True)
+        ax4.hist(preds_f[y_true_f==1], bins=30, alpha=0.5, color='#ff4d4d', label='Fuego', density=True)
+    ax4.set_title('Distribución de Probabilidades', weight='bold', fontsize=10)
+    ax4.set_xlabel('Confianza'); ax4.legend(fontsize=8); ax4.grid(True, alpha=0.2)
+
+    # 5. Curva Precision-Recall
+    if len(preds_f) > 0 and len(y_true_f) > 0:
+        try:
+            precision, recall, _ = precision_recall_curve(y_true_f, preds_f)
+            ap_score = average_precision_score(y_true_f, preds_f)
+            ax5 = fig.add_subplot(2, 3, 5)
+            ax5.plot(recall, precision, color='#17a2b8', linewidth=2, label=f'AP={ap_score:.3f}')
+            ax5.fill_between(recall, precision, alpha=0.2, color='#17a2b8')
+            ax5.set_title('Curva Precision-Recall', weight='bold', fontsize=10)
+            ax5.set_xlabel('Recall'); ax5.legend(loc='lower left', fontsize=8); ax5.grid(True, alpha=0.3)
+        except: pass
+
+    # 6. PCA 3D (ou Snapshot)
+    if coords3 is not None:
+        try:
+            ax6 = fig.add_subplot(2, 3, 6, projection='3d')
+            ax6.scatter(coords3[:, 0], coords3[:, 1], coords3[:, 2], c=preds_f, cmap='RdBu_r', s=15, alpha=0.6, edgecolors='white', linewidth=0.2, vmin=0, vmax=1)
+            ax6.set_title('Espacio Latente 3D', weight='bold', fontsize=10)
+            ax6.set_xticks([]); ax6.set_yticks([]); ax6.set_zticks([])
+        except: pass
+
+    plt.tight_layout()
+    plt.show()
+
 def render_model_card_html(hp, metrics):
     """Gera o HTML do header e KPIs do Model Card."""
     # Cores e estilos
@@ -643,26 +756,18 @@ def view_analytics(model_info, out_widget=None):
         
         # Tentar carregar os arquivos testando variantes de caminho e NOMES
         hp, metrics = None, None
-        path_variants = [
-            f"gs://mapbiomas-fire/{clean_path}",
-            f"mapbiomas-fire/{clean_path}"
-        ]
-        
-        # Nomes possíveis para o arquivo de metadados (para compatibilidade)
+        path_variants = [f"gs://mapbiomas-fire/{clean_path}", f"mapbiomas-fire/{clean_path}"]
         meta_filenames = ['metadata.json', 'hyperparameters.json']
         
         last_err = ""
         for p in path_variants:
             for m_name in meta_filenames:
                 try:
-                    with fs.open(f"{p}/{m_name}", 'r') as f:
-                        hp = json.load(f)
-                    with fs.open(f"{p}/metrics.json", 'r') as f:
-                        metrics = json.load(f)
+                    with fs.open(f"{p}/{m_name}", 'r') as f: hp = json.load(f)
+                    with fs.open(f"{p}/metrics.json", 'r') as f: metrics = json.load(f)
                     if hp and metrics: break
                 except Exception as e:
-                    last_err = str(e)
-                    continue
+                    last_err = str(e); continue
             if hp: break
         
         if not hp:
@@ -677,110 +782,61 @@ def view_analytics(model_info, out_widget=None):
                         with open(f"{tmpdir}/hp.json") as f: hp = json.load(f)
                         with open(f"{tmpdir}/met.json") as f: metrics = json.load(f)
                         if hp: break
-                    except Exception as e2:
-                        last_err = f"gsutil failed for {m_name}: {e2}"
-        
-        cm = np.array(metrics.get('confusion_matrix', [[0,0],[0,0]]))
-        history = hp.get('history', {})
+                    except Exception as e2: last_err = f"gsutil failed: {e2}"
 
         if out_widget:
             out_widget.clear_output(wait=True)
             with out_widget:
-                # Renderizar Header HTML
+        if out_widget:
+            out_widget.clear_output(wait=True)
+            with out_widget:
                 display(HTML(render_model_card_html(hp, metrics)))
                 
-                # --- DASHBOARD DE DIAGNÓSTICO (2x3 Grid) ---
-                fig = plt.figure(figsize=(18, 9))
+                # USAR SNAPSHOT PRÉ-CALCULADO (CARGA INSTANTÂNEA)
+                snap = metrics.get('diagnostic_snapshot')
+                X_sub, y_sub, embeds, preds = None, None, None, None
                 
-                # 1. Matriz de Confusión (Normalizada %)
-                ax1 = fig.add_subplot(2, 3, 1)
-                cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-                ax1.matshow(cm_norm, cmap='Blues', alpha=0.8, vmin=0, vmax=1)
-                for (i, j), z in np.ndenumerate(cm):
-                    ax1.text(j, i, f"{z:,}\n({cm_norm[i,j]:.1%})", ha='center', va='center', 
-                             weight='bold', color='black' if cm_norm[i,j] < 0.5 else 'white')
-                ax1.set_title('Matriz de Confusión (%)', pad=15, weight='bold')
-                ax1.set_xticks([0, 1]); ax1.set_yticks([0, 1])
-                ax1.set_xticklabels(['No-fuego', 'Fuego']); ax1.set_yticklabels(['No-fuego', 'Fuego'])
-
-                # 2. Historial de Entrenamiento (Loss & Acc)
-                if history and 'steps' in history:
-                    ax2 = fig.add_subplot(2, 3, 2)
-                    ax2.plot(history['steps'], history['acc'], color='#28a745', label='Acc Treino', linewidth=2)
-                    ax2.plot(history['steps'], history['val_acc'], color='#28a745', label='Acc Validação', linestyle='--', alpha=0.6)
-                    ax2.set_ylabel('Acurácia', color='#28a745', weight='bold')
-                    ax2b = ax2.twinx()
-                    ax2b.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
-                    ax2b.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
-                    ax2.set_title('Evolución Histórica', weight='bold')
-                    ax2.grid(True, linestyle='--', alpha=0.3)
-
-                # 3. Placeholder PCA 2D
-                ax3 = fig.add_subplot(2, 3, 3)
-                ax3.text(0.5, 0.5, "PCA 2D disponible en Live", ha='center', va='center', color='#999')
-                ax3.set_title('Proyección Latente 2D', weight='bold')
-
-                # 4. Placeholder Distribución
-                ax4 = fig.add_subplot(2, 3, 4)
-                ax4.text(0.5, 0.5, "Histograma disponible en Live", ha='center', va='center', color='#999')
-                ax4.set_title('Distribución de Probabilidades', weight='bold')
-
-                # 5. Placeholder Precision-Recall
-                ax5 = fig.add_subplot(2, 3, 5)
-                ax5.text(0.5, 0.5, "Curva PR disponible en Live", ha='center', va='center', color='#999')
-                ax5.set_title('Curva Precision-Recall', weight='bold')
-
-                # 6. Placeholder PCA 3D
-                ax6 = fig.add_subplot(2, 3, 6, projection='3d')
-                ax6.text(0.5, 0.5, 0.5, "PCA 3D en Projector", ha='center', va='center', color='#999')
-                ax6.set_title('Espacio Latente 3D', weight='bold')
-
-                plt.tight_layout()
-                plt.show()
-
-                # --- AUDITORIA INTERATIVA (PLOTLY 3D) ---
-                display(HTML("<h4 style='margin-top:20px; color:#2c3e50; font-weight:bold;'>🔍 Auditoría del Espacio Latente (Interactivo)</h4>"))
-                
-                import plotly.graph_objects as go
-                from sklearn.decomposition import PCA
-                
-                # Para o histórico, tentamos carregar os pesos e gerar o espaço latente de uma amostra
-                try:
-                    # Buscamos se existem pesos salvos para gerar o plot
-                    weights_path = f"{model_info['path']}/weights.npz"
-                    if fs.exists(weights_path):
-                        with fs.open(weights_path, 'rb') as f:
-                            weights = dict(np.load(f))
-                        
-                        # Criamos um trainer temporário para o forward pass
-                        trainer_tmp = ModelTrainer(num_input=len(hp['bands_input']), layers=hp['layers'])
+                if snap:
+                    # Se temos snapshot, usamos as coordenadas PCA/t-SNE prontas
+                    pca_coords = np.array(snap.get('pca_coords', []))
+                    tsne_coords = np.array(snap.get('tsne_coords', []))
+                    preds = np.array(snap['preds'])
+                    y_sub = np.array(snap['y_true'])
+                else:
+                    # MODO LEGACY: Tentar carregar pesos para gerar na hora (lento)
+                    try:
+                        p_final = f"gs://mapbiomas-fire/{clean_path}"
+                        print("📡 Modelo antiguo: Generando diagnóstico dinâmico...")
+                        with fs.open(f"{p_final}/weights.npz", 'rb') as f: weights = dict(np.load(f))
+                        trainer_tmp = ModelTrainer(num_input=hp['num_input'], layers=hp['layers'])
                         trainer_tmp._saved_vars = weights
                         trainer_tmp.norm_stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
-                        
-                        # Pegamos uma amostra sintética ou real para o plot (simplificado aqui com dados aleatórios se não houver X_data)
-                        # No fluxo real, o ideal é ter o X_data salvo
-                        X_sub = np.random.randn(500, len(hp['bands_input'])) 
-                        embeds = trainer_tmp.get_embeddings(X_sub)
-                        preds = trainer_tmp.predict(X_sub)
-                        
-                        pca = PCA(n_components=3)
-                        coords = pca.fit_transform(embeds)
-                        
-                        fig_plotly = go.Figure(data=[go.Scatter3d(
-                            x=coords[:,0], y=coords[:,1], z=coords[:,2],
-                            mode='markers',
-                            marker=dict(size=4, color=preds.flatten(), colorscale='RdBu_r', opacity=0.8, showscale=True),
-                            text=[f"Confianza: {p:.2%}" for p in preds.flatten()]
+                        X_sub = np.random.randn(300, hp['num_input']); y_sub = np.zeros(300)
+                        embeds = trainer_tmp.get_embeddings(X_sub); preds = trainer_tmp.predict(X_sub)
+                    except: pass
+
+                # RENDERIZAR GRID 2x3 UNIFICADO
+                if snap:
+                    # Versão instantânea usando os dados do snapshot
+                    render_diagnostic_dashboard(hp.get('history', {}), None, preds, y_sub, coords_override=pca_coords)
+                    
+                    # PLOTLY INTERATIVO (t-SNE se existir, senão PCA)
+                    import plotly.graph_objects as go
+                    use_tsne = tsne_coords is not None and len(tsne_coords) > 0
+                    coords_p = tsne_coords if use_tsne else pca_coords
+                    title_p = "Auditoría t-SNE 3D (Instantánea)" if use_tsne else "Exploración PCA 3D (Instantánea)"
+                    
+                    if len(coords_p) > 0:
+                        fig_p = go.Figure(data=[go.Scatter3d(
+                            x=coords_p[:,0], y=coords_p[:,1], z=coords_p[:,2], mode='markers',
+                            marker=dict(size=4, color=preds, colorscale='RdBu_r', opacity=0.8, showscale=True),
+                            text=[f"Clase: {'F' if l==1 else 'NF'}<br>Pred: {p:.2%}" for l, p in zip(y_sub, preds)]
                         )])
-                        fig_plotly.update_layout(
-                            title="Exploración 3D Navegable (PCA)",
-                            margin=dict(l=0, r=0, b=0, t=30),
-                            scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3')
-                        )
-                        # Forçar exibição via HTML para evitar falhas de renderização no Colab
-                        display(HTML(fig_plotly.to_html(include_plotlyjs='cdn', full_html=False)))
-                except:
-                    display(HTML("<p style='color:#666;'><i>Gráfico interactivo disponible al cargar pesos del modelo.</i></p>"))
+                        fig_p.update_layout(title=title_p, margin=dict(l=0, r=0, b=0, t=30), scene=dict(xaxis_title='V1', yaxis_title='V2', zaxis_title='V3'))
+                        display(HTML(fig_p.to_html(include_plotlyjs=True, full_html=False)))
+                else:
+                    # Modo Legacy ou Live
+                    render_diagnostic_dashboard(hp.get('history', {}), embeds, preds, y_sub if y_sub is not None else np.array([]))
 
                 # Rodapé com instruções para Projector (t-SNE/UMAP)
                 display(HTML(f"""
@@ -1174,7 +1230,6 @@ def start_training(ui):
         with ui.training_header_output:
             from sklearn.metrics import classification_report
             try:
-                # Filtrar preds/y_true para evitar erros de tamanho se houver atraso
                 rep = classification_report(y_true, (preds > 0.5).astype(int), output_dict=True, zero_division=0)
             except:
                 rep = {}
@@ -1193,88 +1248,13 @@ def start_training(ui):
             clear_output(wait=True)
             display(HTML(render_model_card_html(hp_live, {'classification_report': rep})))
 
-        # 2. Atualizar Dashboard de Gráficos (2x3 Grid - Matplotlib Rápido)
+        # 2. RENDERIZAR GRID 2x3 UNIFICADO
         with ui.training_chart_output:
-            from sklearn.metrics import confusion_matrix, precision_recall_curve, average_precision_score
-            from sklearn.decomposition import PCA
-            
-            try:
-                # Forçar arrays unidimensionais para evitar IndexError
-                y_true_f = y_true.flatten()
-                preds_f = preds.flatten()
-                
-                cm = confusion_matrix(y_true_f, (preds_f > 0.5).astype(int))
-                cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-            except:
-                cm = np.zeros((2,2)); cm_norm = np.zeros((2,2))
-
             clear_output(wait=True)
-            fig = plt.figure(figsize=(18, 9))
-            
-            # (1,1) Matriz de Confusión (%)
-            ax1 = fig.add_subplot(2, 3, 1)
-            ax1.matshow(cm_norm, cmap='Blues', alpha=0.8, vmin=0, vmax=1)
-            for (i, j), z in np.ndenumerate(cm):
-                ax1.text(j, i, f"{z:,}\n({cm_norm[i,j]:.1%})", ha='center', va='center', 
-                         weight='bold', color='black' if cm_norm[i,j] < 0.5 else 'white')
-            ax1.set_title('Matriz de Confusión (%)', pad=15, weight='bold')
-            ax1.set_xticks([0, 1]); ax1.set_yticks([0, 1])
-            ax1.set_xticklabels(['No-fuego', 'Fuego']); ax1.set_yticklabels(['No-fuego', 'Fuego'])
-            
-            # (1,2) Evolución (Loss & Acc)
-            ax2 = fig.add_subplot(2, 3, 2)
-            ax2.plot(history['steps'], history['acc'], color='#28a745', label='Acc Treino', linewidth=2)
-            ax2.plot(history['steps'], history['val_acc'], color='#28a745', label='Acc Validação', linestyle='--', alpha=0.6)
-            ax2.set_ylabel('Acurácia', color='#28a745', weight='bold')
-            ax2b = ax2.twinx()
-            ax2b.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
-            ax2b.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
-            ax2.set_title('Evolución Histórica\nLoss debe bajar | Acc debe subir', weight='bold', fontsize=10)
-            ax2.grid(True, linestyle='--', alpha=0.3)
-
-            # (1,3) PCA 2D (Playground Style)
-            if embeds is not None:
-                try:
-                    pca2 = PCA(n_components=2)
-                    coords2 = pca2.fit_transform(embeds)
-                    ax3 = fig.add_subplot(2, 3, 3)
-                    ax3.scatter(coords2[:, 0], coords2[:, 1], c=preds_f, cmap='RdBu_r', s=25, alpha=0.7, edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
-                    ax3.set_title('Proyección Latente 2D\nCercanía = Similitud Espectral', weight='bold', fontsize=10)
-                    ax3.set_xticks([]); ax3.set_yticks([])
-                except: pass
-
-            # (2,1) Histograma de Confianza (Probabilidades)
-            ax4 = fig.add_subplot(2, 3, 4)
-            # Usar os arrays achatados aqui
-            ax4.hist(preds_f[y_true_f==0], bins=30, alpha=0.5, color='#007bff', label='No-Fuego', density=True)
-            ax4.hist(preds_f[y_true_f==1], bins=30, alpha=0.5, color='#ff4d4d', label='Fuego', density=True)
-            ax4.set_title('Distribución de Seguridad\nIdeal: Picos en los extremos (0 y 1)', weight='bold', fontsize=10)
-            ax4.set_xlabel('Confianza (Predicción)'); ax4.legend(fontsize=8); ax4.grid(True, alpha=0.2)
-
-            # (2,2) Curva Precision-Recall
-            try:
-                precision, recall, _ = precision_recall_curve(y_true_f, preds_f)
-                ap_score = average_precision_score(y_true_f, preds_f)
-                ax5 = fig.add_subplot(2, 3, 5)
-                ax5.plot(recall, precision, color='#17a2b8', linewidth=2, label=f'AP={ap_score:.3f}')
-                ax5.fill_between(recall, precision, alpha=0.2, color='#17a2b8')
-                ax5.set_title('Calidad de Detección (PR)\nBalance entre omisión y falsa alarma', weight='bold', fontsize=10)
-                ax5.set_xlabel('Recall'); ax5.set_ylabel('Precision'); ax5.legend(loc='lower left', fontsize=8); ax5.grid(True, alpha=0.3)
-            except: pass
-
-            # (2,3) PCA 3D Projection
-            if embeds is not None:
-                try:
-                    pca3 = PCA(n_components=3)
-                    coords3 = pca3.fit_transform(embeds)
-                    ax6 = fig.add_subplot(2, 3, 6, projection='3d')
-                    ax6.scatter(coords3[:, 0], coords3[:, 1], coords3[:, 2], c=preds_f, cmap='RdBu_r', s=15, alpha=0.6, edgecolors='white', linewidth=0.2, vmin=0, vmax=1)
-                    ax6.set_title('Espacio Latente 3D\nVisión global de la separación', weight='bold', fontsize=10)
-                    ax6.set_xticks([]); ax6.set_yticks([]); ax6.set_zticks([])
-                except: pass
-            
-            plt.tight_layout()
-            plt.show()
+            if hasattr(ui.trainer_instance, 'diagnostic_snapshot'):
+                render_diagnostic_dashboard(ui.trainer_instance.diagnostic_snapshot)
+            else:
+                render_diagnostic_dashboard(history, embeds, preds, y_true)
             
     # Iniciar Treino
     ui.trainer_instance.train(X_train, y_train, X_val=X_val, y_val=y_val, 
@@ -1289,7 +1269,6 @@ def start_training(ui):
             display(HTML("<h4 style='color:#2c3e50; margin-top:20px; font-weight:bold;'>🚀 Auditoría t-SNE (Espacio Latente Final)</h4>"))
             display(HTML("<p style='font-size:11px; color:#666;'>Calculando proyección no-lineal para mejor visualización de clústeres...</p>"))
             
-            # Pegamos uma amostra da validação para o t-SNE (ex: 600 pontos para ser rápido)
             idx_v = np.random.choice(len(X_val), min(600, len(X_val)), replace=False)
             X_v_sub = X_val[idx_v]
             y_v_sub = y_val[idx_v]
@@ -1297,25 +1276,13 @@ def start_training(ui):
             emb_v = ui.trainer_instance.get_embeddings(X_v_sub)
             prd_v = ui.trainer_instance.predict(X_v_sub)
             
-            # t-SNE 3D (max_iter compatível com sklearn 1.5+)
             print("  - Calculando manifold t-SNE (esto puede tardar)...")
             tsne = TSNE(n_components=3, perplexity=30, random_state=42, max_iter=1000)
             coords_tsne = tsne.fit_transform(emb_v)
             
-            # --- 1. VERSÃO ESTÁTICA (Matplotlib) - GARANTIA TOTAL ---
-            import matplotlib.pyplot as plt
-            from mpl_toolkits.mplot3d import Axes3D
+            # SALVAR SNAPSHOT NO TRAINER PARA O SAVE()
+            ui.trainer_instance.tsne_snapshot = coords_tsne.tolist()
             
-            fig_static = plt.figure(figsize=(10, 7))
-            ax_s = fig_static.add_subplot(111, projection='3d')
-            p_s = ax_s.scatter(coords_tsne[:,0], coords_tsne[:,1], coords_tsne[:,2], 
-                               c=prd_v.flatten(), cmap='RdBu_r', s=20, alpha=0.6)
-            ax_s.set_title("Auditoría t-SNE (Versión Estática)", weight='bold')
-            ax_s.set_xlabel("t-SNE 1"); ax_s.set_ylabel("t-SNE 2"); ax_s.set_zlabel("t-SNE 3")
-            plt.colorbar(p_s, label="Predicción (Fuego)")
-            plt.show()
-            
-            # --- 2. VERSÃO INTERATIVA (Plotly) ---
             print("  - Generando figura interactiva...")
             fig_tsne = go.Figure(data=[go.Scatter3d(
                 x=coords_tsne[:,0], y=coords_tsne[:,1], z=coords_tsne[:,2],
