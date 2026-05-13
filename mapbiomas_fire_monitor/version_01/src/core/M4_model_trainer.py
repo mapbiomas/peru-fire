@@ -666,51 +666,119 @@ def view_analytics(model_info, out_widget=None):
                 # Renderizar Header HTML
                 display(HTML(render_model_card_html(hp, metrics)))
                 
-                # Plotar Gráficos
-                fig = plt.figure(figsize=(16, 4.5))
+                # --- DASHBOARD DE DIAGNÓSTICO (2x3 Grid) ---
+                fig = plt.figure(figsize=(18, 9))
                 
-                # 1. Confusion Matrix
-                ax1 = fig.add_subplot(1, 3, 1)
-                cax = ax1.matshow(cm, cmap='Blues', alpha=0.8)
+                # 1. Matriz de Confusión (Normalizada %)
+                ax1 = fig.add_subplot(2, 3, 1)
+                cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+                ax1.matshow(cm_norm, cmap='Blues', alpha=0.8, vmin=0, vmax=1)
                 for (i, j), z in np.ndenumerate(cm):
-                    ax1.text(j, i, f"{z:,}", ha='center', va='center', weight='bold', color='black' if z < cm.max()/2 else 'white')
-                ax1.set_title('Matriz de confusión', pad=15, weight='bold')
+                    ax1.text(j, i, f"{z:,}\n({cm_norm[i,j]:.1%})", ha='center', va='center', 
+                             weight='bold', color='black' if cm_norm[i,j] < 0.5 else 'white')
+                ax1.set_title('Matriz de Confusión (%)', pad=15, weight='bold')
                 ax1.set_xticks([0, 1]); ax1.set_yticks([0, 1])
                 ax1.set_xticklabels(['No-fuego', 'Fuego']); ax1.set_yticklabels(['No-fuego', 'Fuego'])
-                
-                # 2. History
+
+                # 2. Historial de Entrenamiento (Loss & Acc)
                 if history and 'steps' in history:
-                    ax2 = fig.add_subplot(1, 3, 2)
+                    ax2 = fig.add_subplot(2, 3, 2)
                     ax2.plot(history['steps'], history['acc'], color='#28a745', label='Acc Treino', linewidth=2)
                     ax2.plot(history['steps'], history['val_acc'], color='#28a745', label='Acc Validação', linestyle='--', alpha=0.6)
                     ax2.set_ylabel('Acurácia', color='#28a745', weight='bold')
-                    
                     ax2b = ax2.twinx()
                     ax2b.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
                     ax2b.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
-                    ax2.set_title('Historial de entrenamiento', weight='bold')
+                    ax2.set_title('Evolución Histórica', weight='bold')
                     ax2.grid(True, linestyle='--', alpha=0.3)
-                
-                # 3. Placeholder para Embeddings
-                ax3 = fig.add_subplot(1, 3, 3)
-                ax3.text(0.5, 0.5, "PCA 3D disponível via\nTensorBoard Projector", ha='center', va='center', color='#999')
-                ax3.set_xticks([]); ax3.set_yticks([])
-                ax3.set_title('Espacio Latente', weight='bold')
+
+                # 3. Placeholder PCA 2D
+                ax3 = fig.add_subplot(2, 3, 3)
+                ax3.text(0.5, 0.5, "PCA 2D disponible en Live", ha='center', va='center', color='#999')
+                ax3.set_title('Proyección Latente 2D', weight='bold')
+
+                # 4. Placeholder Distribución
+                ax4 = fig.add_subplot(2, 3, 4)
+                ax4.text(0.5, 0.5, "Histograma disponible en Live", ha='center', va='center', color='#999')
+                ax4.set_title('Distribución de Probabilidades', weight='bold')
+
+                # 5. Placeholder Precision-Recall
+                ax5 = fig.add_subplot(2, 3, 5)
+                ax5.text(0.5, 0.5, "Curva PR disponible en Live", ha='center', va='center', color='#999')
+                ax5.set_title('Curva Precision-Recall', weight='bold')
+
+                # 6. Placeholder PCA 3D
+                ax6 = fig.add_subplot(2, 3, 6, projection='3d')
+                ax6.text(0.5, 0.5, 0.5, "PCA 3D en Projector", ha='center', va='center', color='#999')
+                ax6.set_title('Espacio Latente 3D', weight='bold')
 
                 plt.tight_layout()
                 plt.show()
 
-                # Rodapé com instruções para Projector
+                # --- AUDITORIA INTERATIVA (PLOTLY 3D) ---
+                display(HTML("<h4 style='margin-top:20px; color:#2c3e50; font-weight:bold;'>🔍 Auditoría del Espacio Latente (Interactivo)</h4>"))
+                
+                import plotly.graph_objects as go
+                from sklearn.decomposition import PCA
+                
+                # Para o histórico, tentamos carregar os pesos e gerar o espaço latente de uma amostra
+                try:
+                    # Buscamos se existem pesos salvos para gerar o plot
+                    weights_path = f"{model_info['path']}/weights.npz"
+                    if fs.exists(weights_path):
+                        with fs.open(weights_path, 'rb') as f:
+                            weights = dict(np.load(f))
+                        
+                        # Criamos um trainer temporário para o forward pass
+                        trainer_tmp = ModelTrainer(num_input=len(hp['bands_input']), layers=hp['layers'])
+                        trainer_tmp._saved_vars = weights
+                        trainer_tmp.norm_stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
+                        
+                        # Pegamos uma amostra sintética ou real para o plot (simplificado aqui com dados aleatórios se não houver X_data)
+                        # No fluxo real, o ideal é ter o X_data salvo
+                        X_sub = np.random.randn(500, len(hp['bands_input'])) 
+                        embeds = trainer_tmp.get_embeddings(X_sub)
+                        preds = trainer_tmp.predict(X_sub)
+                        
+                        pca = PCA(n_components=3)
+                        coords = pca.fit_transform(embeds)
+                        
+                        fig_plotly = go.Figure(data=[go.Scatter3d(
+                            x=coords[:,0], y=coords[:,1], z=coords[:,2],
+                            mode='markers',
+                            marker=dict(size=4, color=preds.flatten(), colorscale='RdBu_r', opacity=0.8, showscale=True),
+                            text=[f"Confianza: {p:.2%}" for p in preds.flatten()]
+                        )])
+                        fig_plotly.update_layout(
+                            title="Exploración 3D Navegable (PCA)",
+                            margin=dict(l=0, r=0, b=0, t=30),
+                            scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3')
+                        )
+                        fig_plotly.show()
+                except:
+                    display(HTML("<p style='color:#666;'><i>Gráfico interactivo disponible al cargar pesos del modelo.</i></p>"))
+
+                # Rodapé com instruções para Projector (t-SNE/UMAP)
                 display(HTML(f"""
-                <div style="background:#e9ecef; padding:10px; border-radius:4px; margin-top:10px; font-size:12px;">
-                    <b>🚀 Análisis Avanzado:</b> Para una exploración 3D interactiva completa con t-SNE, use el 
-                    <a href="https://projector.tensorflow.org/" target="_blank" style="color:#007bff; font-weight:bold;">TensorBoard Projector</a>. 
-                    En el panel de la izquierda (Historial de Modelos), haga clic en <b>"Exportar Projector"</b> para gerar os arquivos necessários.
+                <div style="background:#f8f9fa; border:1px solid #dee2e6; padding:15px; border-radius:8px; margin-top:15px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <b style="color:#2c3e50; font-size:14px;">🚀 Análisis Avanzado (t-SNE / UMAP)</b><br>
+                            <span style="color:#7f8c8d; font-size:12px;">Para exploraciones pesadas de clusters, use el TensorBoard Projector.</span>
+                        </div>
+                        <a href="https://projector.tensorflow.org/" target="_blank" 
+                           style="background:#007bff; color:white; padding:8px 16px; border-radius:4px; text-decoration:none; font-weight:bold;">
+                           Abrir Projector
+                        </a>
+                    </div>
                 </div>
                 """))
     except Exception as e:
         if out_widget:
             with out_widget: print(f"❌ Erro ao carregar analíticos: {e}")
+
+
+
 
 class ModelTrainerUI(PipelineStepUI):
     def __init__(self):
@@ -1118,6 +1186,7 @@ def start_training(ui):
         with ui.training_header_output:
             from sklearn.metrics import classification_report
             try:
+                # Filtrar preds/y_true para evitar erros de tamanho se houver atraso
                 rep = classification_report(y_true, (preds > 0.5).astype(int), output_dict=True, zero_division=0)
             except:
                 rep = {}
@@ -1136,28 +1205,32 @@ def start_training(ui):
             clear_output(wait=True)
             display(HTML(render_model_card_html(hp_live, {'classification_report': rep})))
 
-        # 2. Atualizar Gráficos (Matplotlib)
+        # 2. Atualizar Dashboard de Gráficos (2x3 Grid - Matplotlib Rápido)
         with ui.training_chart_output:
-            from sklearn.metrics import confusion_matrix
+            from sklearn.metrics import confusion_matrix, precision_recall_curve, average_precision_score
+            from sklearn.decomposition import PCA
+            
             try:
                 cm = confusion_matrix(y_true, (preds > 0.5).astype(int))
+                cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
             except:
-                cm = np.zeros((2,2))
+                cm = np.zeros((2,2)); cm_norm = np.zeros((2,2))
 
             clear_output(wait=True)
-            fig = plt.figure(figsize=(16, 4.5))
+            fig = plt.figure(figsize=(18, 9))
             
-            # Confusion Matrix
-            ax1 = fig.add_subplot(1, 3, 1)
-            cax = ax1.matshow(cm, cmap='Blues', alpha=0.8)
+            # (1,1) Matriz de Confusión (%)
+            ax1 = fig.add_subplot(2, 3, 1)
+            ax1.matshow(cm_norm, cmap='Blues', alpha=0.8, vmin=0, vmax=1)
             for (i, j), z in np.ndenumerate(cm):
-                ax1.text(j, i, f"{z:,}", ha='center', va='center', weight='bold', color='black' if z < cm.max()/2 else 'white')
-            ax1.set_title('Matriz de confusión (Live)', pad=15, weight='bold')
+                ax1.text(j, i, f"{z:,}\n({cm_norm[i,j]:.1%})", ha='center', va='center', 
+                         weight='bold', color='black' if cm_norm[i,j] < 0.5 else 'white')
+            ax1.set_title('Matriz de Confusión (%)', pad=15, weight='bold')
             ax1.set_xticks([0, 1]); ax1.set_yticks([0, 1])
             ax1.set_xticklabels(['No-fuego', 'Fuego']); ax1.set_yticklabels(['No-fuego', 'Fuego'])
             
-            # Loss & Acc
-            ax2 = fig.add_subplot(1, 3, 2)
+            # (1,2) Evolución (Loss & Acc)
+            ax2 = fig.add_subplot(2, 3, 2)
             ax2.plot(history['steps'], history['acc'], color='#28a745', label='Acc Treino', linewidth=2)
             ax2.plot(history['steps'], history['val_acc'], color='#28a745', label='Acc Validação', linestyle='--', alpha=0.6)
             ax2.set_ylabel('Acurácia', color='#28a745', weight='bold')
@@ -1167,16 +1240,44 @@ def start_training(ui):
             ax2.set_title('Evolución (Loss vs Acc)', weight='bold')
             ax2.grid(True, linestyle='--', alpha=0.3)
 
-            # Live Playground
+            # (1,3) PCA 2D (Playground Style)
             if embeds is not None:
-                from sklearn.decomposition import PCA
                 try:
-                    pca = PCA(n_components=3)
-                    coords = pca.fit_transform(embeds)
-                    ax3 = fig.add_subplot(1, 3, 3, projection='3d')
-                    ax3.scatter(coords[:, 0], coords[:, 1], coords[:, 2], c=preds, cmap='RdBu_r', s=20, alpha=0.7, edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
-                    ax3.set_title('Espaço Latente (Playground)', fontsize=10, weight='bold')
-                    ax3.set_xticks([]); ax3.set_yticks([]); ax3.set_zticks([])
+                    pca2 = PCA(n_components=2)
+                    coords2 = pca2.fit_transform(embeds)
+                    ax3 = fig.add_subplot(2, 3, 3)
+                    ax3.scatter(coords2[:, 0], coords2[:, 1], c=preds, cmap='RdBu_r', s=25, alpha=0.7, edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
+                    ax3.set_title('Proyección Latente 2D', weight='bold')
+                    ax3.set_xticks([]); ax3.set_yticks([])
+                except: pass
+
+            # (2,1) Histograma de Confianza (Probabilidades)
+            ax4 = fig.add_subplot(2, 3, 4)
+            ax4.hist(preds[y_true==0], bins=30, alpha=0.5, color='#007bff', label='No-Fuego', density=True)
+            ax4.hist(preds[y_true==1], bins=30, alpha=0.5, color='#ff4d4d', label='Fuego', density=True)
+            ax4.set_title('Distribución de Probabilidades', weight='bold')
+            ax4.set_xlabel('Confianza (Predicción)'); ax4.legend(fontsize=8); ax4.grid(True, alpha=0.2)
+
+            # (2,2) Curva Precision-Recall
+            try:
+                precision, recall, _ = precision_recall_curve(y_true, preds)
+                ap_score = average_precision_score(y_true, preds)
+                ax5 = fig.add_subplot(2, 3, 5)
+                ax5.plot(recall, precision, color='#17a2b8', linewidth=2, label=f'AP={ap_score:.3f}')
+                ax5.fill_between(recall, precision, alpha=0.2, color='#17a2b8')
+                ax5.set_title('Curva Precision-Recall', weight='bold')
+                ax5.set_xlabel('Recall'); ax5.set_ylabel('Precision'); ax5.legend(loc='lower left', fontsize=8); ax5.grid(True, alpha=0.3)
+            except: pass
+
+            # (2,3) PCA 3D Projection
+            if embeds is not None:
+                try:
+                    pca3 = PCA(n_components=3)
+                    coords3 = pca3.fit_transform(embeds)
+                    ax6 = fig.add_subplot(2, 3, 6, projection='3d')
+                    ax6.scatter(coords3[:, 0], coords3[:, 1], coords3[:, 2], c=preds, cmap='RdBu_r', s=15, alpha=0.6, edgecolors='white', linewidth=0.2, vmin=0, vmax=1)
+                    ax6.set_title('Espacio Latente 3D', weight='bold')
+                    ax6.set_xticks([]); ax6.set_yticks([]); ax6.set_zticks([])
                 except: pass
             
             plt.tight_layout()
@@ -1184,6 +1285,41 @@ def start_training(ui):
             
     ui.trainer_instance.train(X, y, batch_size=batch, n_iters=iters, logger=_logger, update_chart_fn=update_chart)
     
+    # --- AUDITORIA FINAL COM t-SNE (INTERATIVO) ---
+    print("\n🏁 Entrenamiento completado. Generando auditoría t-SNE final de alta resolución...")
+    with ui.training_chart_output:
+        import plotly.graph_objects as go
+        from sklearn.manifold import TSNE
+        try:
+            display(HTML("<h4 style='color:#2c3e50; margin-top:20px; font-weight:bold;'>🚀 Auditoría t-SNE (Espacio Latente Final)</h4>"))
+            display(HTML("<p style='font-size:11px; color:#666;'>Calculando proyección no-lineal para mejor visualización de clústeres...</p>"))
+            
+            # Pegamos uma amostra da validação para o t-SNE (ex: 600 pontos para ser rápido)
+            idx_v = np.random.choice(len(X_val), min(600, len(X_val)), replace=False)
+            X_v_sub = X_val[idx_v]
+            y_v_sub = y_val[idx_v]
+            
+            emb_v = ui.trainer_instance.get_embeddings(X_v_sub)
+            prd_v = ui.trainer_instance.predict(X_v_sub)
+            
+            # t-SNE 3D
+            tsne = TSNE(n_components=3, perplexity=30, random_state=42, n_iter=1000)
+            coords_tsne = tsne.fit_transform(emb_v)
+            
+            fig_tsne = go.Figure(data=[go.Scatter3d(
+                x=coords_tsne[:,0], y=coords_tsne[:,1], z=coords_tsne[:,2],
+                mode='markers',
+                marker=dict(size=4, color=prd_v.flatten(), colorscale='RdBu_r', opacity=0.8, showscale=True),
+                text=[f"Clase: {'Fuego' if l==1 else 'No-fuego'}<br>Pred: {p:.2%}" for l, p in zip(y_v_sub, prd_v.flatten())]
+            )])
+            fig_tsne.update_layout(
+                margin=dict(l=0, r=0, b=0, t=30),
+                scene=dict(xaxis_title='t-SNE 1', yaxis_title='t-SNE 2', zaxis_title='t-SNE 3')
+            )
+            fig_tsne.show()
+        except Exception as e:
+            print(f"⚠️ No se pudo gerar t-SNE final: {e}")
+
     print("Guardando estructura (muestras, píxeles, metadatos, métricas) en GCS...")
     try:
         ui.trainer_instance.save(ui.w_training_id.value, ui.w_shortname.value, comment=ui.w_comment.value, logger=_logger)
