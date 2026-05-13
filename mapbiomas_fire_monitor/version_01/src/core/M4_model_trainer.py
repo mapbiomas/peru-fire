@@ -691,7 +691,7 @@ def view_analytics(model_info, out_widget=None):
                     ax2.set_title('Historial de entrenamiento', weight='bold')
                     ax2.grid(True, linestyle='--', alpha=0.3)
                 
-                # 3. Placeholder para Embeddings (em modelos antigos apenas se houver o npy)
+                # 3. Placeholder para Embeddings
                 ax3 = fig.add_subplot(1, 3, 3)
                 ax3.text(0.5, 0.5, "PCA 3D disponível via\nTensorBoard Projector", ha='center', va='center', color='#999')
                 ax3.set_xticks([]); ax3.set_yticks([])
@@ -699,68 +699,7 @@ def view_analytics(model_info, out_widget=None):
 
                 plt.tight_layout()
                 plt.show()
-    except Exception as e:
-        if out_widget:
-            with out_widget: print(f"❌ Erro ao carregar analíticos: {e}")
-                    
-                    ax2b = ax2.twinx()
-                    ax2b.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
-                    ax2b.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
-                    ax2b.tick_params(axis='y', labelcolor='#dc3545')
-                    
-                    ax2.set_title('Evolución (Loss vs Acc)', weight='bold')
-                    ax2.set_xlabel('Iteración')
-                    ax2.grid(True, linestyle='--', alpha=0.3)
-                
-                # 3. Latent Space (3D PCA Projection)
-                try:
-                    # Carregamos uma amostra dos píxeis para visualização se existirem
-                    X_file = os.path.join(tmpdir, 'X_data.npy')
-                    y_file = os.path.join(tmpdir, 'y_data.npy')
-                    src_x = f"{base_gs}/extracted_pixels/X_data.npy"
-                    src_y = f"{base_gs}/extracted_pixels/y_data.npy"
-                    
-                    subprocess.run(['gsutil', 'cp', src_x, X_file], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    subprocess.run(['gsutil', 'cp', src_y, y_file], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    
-                    X_data = np.load(X_file)
-                    y_data = np.load(y_file)
-                    
-                    # Pegamos apenas uma amostra para o plot não ficar pesado (max 1000 pontos)
-                    idx_sample = np.random.choice(len(X_data), min(1000, len(X_data)), replace=False)
-                    X_sub = X_data[idx_sample]
-                    y_sub = y_data[idx_sample]
-                    
-                    # Rodamos o forward pass para pegar os embeddings
-                    trainer_tmp = ModelTrainer(num_input=X_sub.shape[1], layers=hp['layers'])
-                    trainer_tmp._saved_vars = dict(np.load(os.path.join(tmpdir, 'weights.npz')))
-                    trainer_tmp.norm_stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
-                    
-                    embeddings = trainer_tmp.get_embeddings(X_sub)
-                    
-                    # PCA 3D
-                    from sklearn.decomposition import PCA
-                    pca = PCA(n_components=3)
-                    coords = pca.fit_transform(embeddings)
-                    
-                    ax3 = plt.subplot(1, 3, 3, projection='3d')
-                    colors = ['#007bff' if v == 0 else '#ff4d4d' for v in y_sub]
-                    ax3.scatter(coords[:, 0], coords[:, 1], coords[:, 2], c=colors, s=15, alpha=0.6, edgecolors='white', linewidth=0.2)
-                    ax3.set_title('Espaço Latente (PCA 3D)', weight='bold')
-                    ax3.set_xticks([]); ax3.set_yticks([]); ax3.set_zticks([])
-                    # Legenda manual
-                    from matplotlib.lines import Line2D
-                    legend_elements = [Line2D([0], [0], marker='o', color='w', label='No-Fuego', markerfacecolor='#007bff', markersize=8),
-                                       Line2D([0], [0], marker='o', color='w', label='Fuego', markerfacecolor='#ff4d4d', markersize=8)]
-                    ax3.legend(handles=legend_elements, loc='upper right', fontsize=8)
-                except Exception as e:
-                    ax3 = plt.subplot(1, 3, 3)
-                    ax3.text(0.5, 0.5, f"No se pudo generar el Espacio Latente:\n{e}", ha='center', va='center', color='gray')
-                    ax3.axis('off')
-                
-                plt.tight_layout()
-                plt.show()
-                
+
                 # Rodapé com instruções para Projector
                 display(HTML(f"""
                 <div style="background:#e9ecef; padding:10px; border-radius:4px; margin-top:10px; font-size:12px;">
@@ -769,6 +708,9 @@ def view_analytics(model_info, out_widget=None):
                     En el panel de la izquierda (Historial de Modelos), haga clic en <b>"Exportar Projector"</b> para gerar os arquivos necessários.
                 </div>
                 """))
+    except Exception as e:
+        if out_widget:
+            with out_widget: print(f"❌ Erro ao carregar analíticos: {e}")
 
 class ModelTrainerUI(PipelineStepUI):
     def __init__(self):
