@@ -55,7 +55,7 @@ def get_config(country='peru'):
             'bands_all': ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'],
         }
     else:
-        raise ValueError(f"País {country} não configurado.")
+        raise ValueError(f"País {country} no configurado.")
 
 
 # ─── AUTENTICAÇÃO ─────────────────────────────────────────────────────────────
@@ -131,11 +131,11 @@ def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='
             gcs_path = f"gs://{CONFIG['bucket']}/{CONFIG['gcs_cache']}/{cache_file}"
             if fs.exists(gcs_path):
                 fs.rm(gcs_path)
-                print(f"🧹 Cache removido: {gcs_path}")
+                print(f"🧹 Caché eliminado: {gcs_path}")
             else:
-                print("ℹ️ Cache não encontrado (nada para limpar).")
+                print("ℹ️ Cache no encontrado (nada para limpar).")
         except Exception as e:
-            print(f"⚠️ Aviso ao limpar cache: {e}")
+            print(f"⚠️ Aviso al limpiar caché: {e}")
     
     return GLOBAL_OPTS
 
@@ -436,5 +436,5 @@ def print_config():
     """Imprime um resumo da configuração atual."""
     print(f"🌍 País: {CONFIG['country'].upper()}")
     print(f"📦 Bucket: {CONFIG['bucket']}")
-    print(f"🏷️  Versión: {CONFIG['version']}")
+    print(f"🏷️ Versión: {CONFIG['version']}")
     print(f"📡 Sensor: {GLOBAL_OPTS['SENSOR']} (Task Prefix: {GLOBAL_OPTS['PERSONAL_TASK_FLAG']})")
