@@ -89,7 +89,7 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
     dfs = []
     for group in sample_groups:
         sample_path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{group}.csv"
-        if logger: logger(f"Lendo amostras: {group}.csv", "info")
+        if logger: logger(f"Leyendo muestras: {group}.csv", "info")
         try:
             with fs.open(sample_path, 'r') as f:
                 temp_df = pd.read_csv(f)
@@ -110,14 +110,14 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
                     # Se encontrarmos uma data absurda (como 2026_04) mas o arquivo diz outra coisa,
                     # forçamos a data do arquivo para que a extração funcione.
                     if file_date and any(int(p.split('_')[0]) > 2025 for p in p_found):
-                        if logger: logger(f"  ⚠️ Detectada data futura {p_found} no CSV. Corrigindo para {file_date}...", "warning")
+                        if logger: logger(f"  ⚠️ Se ha detectado una fecha futura {p_found} no CSV. Corrigiendo para {file_date}...", "warning")
                         temp_df['period'] = file_date
                         p_found = [file_date]
                     
-                    if logger: logger(f"  🔍 Conteúdo: {len(temp_df)} pontos | Períodos: {p_found}", "info")
+                    if logger: logger(f"  🔍 Contenido: {len(temp_df)} puntos | Períodos: {p_found}", "info")
                 dfs.append(temp_df)
         except Exception as e:
-            if logger: logger(f"Erro ao ler {group}: {e}", "error")
+            if logger: logger(f"Error al leer {group}: {e}", "error")
             
     if not dfs: return np.array([]), np.array([])
         
@@ -171,11 +171,11 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
             band_paths[b] = f"gs://{CONFIG['bucket']}/{rel_folder}/{m_file_name}"
 
         if missing_bands:
-            if logger: logger(f"⚠️ Pulo período {p}: Faltam {len(missing_bands)} bandas ({', '.join(missing_bands)})", "warning")
+            if logger: logger(f"⚠️ Saltar período {p}: Faltan {len(missing_bands)} bandas ({', '.join(missing_bands)})", "warning")
             continue
 
-        if logger: logger(f"✅ Mosaicos OK para {p}: {len(band_paths)} bandas prontas para extração.", "info")
-        if logger: logger(f"📡 Extraindo {len(geometries)} amostras de {p}...", "info")
+        if logger: logger(f"✅ Mosaicos OK para {p}: {len(band_paths)} bandas listas para la extracción.", "info")
+        if logger: logger(f"📡 Extrayendo {len(geometries)} muestras de {p}...", "info")
         
         # --- LEITURA REAL DAS BANDAS ---
         band_data_list = []
@@ -195,14 +195,14 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
                     from M0_auth_config import get_temp_dir
                     local_file = os.path.join(get_temp_dir(), os.path.basename(cog_path))
                     
-                    if logger: logger(f"  📥 Baixando banda {b}...", "info")
+                    if logger: logger(f"  📥 Bajando de banda {b}...", "info")
                     try:
                         fs.get(cog_path, local_file)
                         if not os.path.exists(local_file) or os.path.getsize(local_file) < 1000:
-                            raise Exception("Download falhou ou arquivo vazio.")
+                            raise Exception("La descarga ha fallado o el archivo está vacío.")
                         src_path = local_file
                     except Exception as e:
-                        if logger: logger(f"  ❌ Erro no download {cog_path}: {e}", "error")
+                        if logger: logger(f"  ❌ Error al descargar {cog_path}: {e}", "error")
                         valid_period = False; break
                 
                 with rasterio.open(src_path) as src:
@@ -438,7 +438,7 @@ class ModelTrainer:
                 subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             # 2.5 Metrics
-            if logger: logger("Gerando e salvando métricas de avaliação...", "info")
+            if logger: logger("Generación y guardado de métricas de evaluación...", "info")
             cm, rep = self.evaluate()
             metrics = {
                 'confusion_matrix': cm.tolist(),
@@ -450,7 +450,7 @@ class ModelTrainer:
             subprocess.run(['gsutil', 'cp', os.path.join(tmpdir, 'metrics.json'), gcs_path(f"{base_path}/metrics.json")], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             # 3. Extracted Pixels
-            if logger: logger("Salvando matriz de píxeis no GCS...", "info")
+            if logger: logger("Guardar una matriz de píxeles en GCS...", "info")
             np.save(os.path.join(tmpdir, 'X_data.npy'), self._X_raw)
             np.save(os.path.join(tmpdir, 'y_data.npy'), self._y_raw)
             
@@ -460,7 +460,7 @@ class ModelTrainer:
                 subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 
         # 4. Copy samples
-        if logger: logger("Copiando arquivos CSV das amostras para persistência...", "info")
+        if logger: logger("Copiar archivos CSV de las muestras para su almacenamiento...", "info")
         collections = getattr(self, '_sample_collections', [])
         for coll in collections:
             src = gcs_path(f"{CONFIG['gcs_library_samples']}/{coll}.csv")
@@ -493,7 +493,7 @@ def view_analytics(model_info, out_widget=None):
                 subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except:
                 if out_widget:
-                    with out_widget: print(f"Error: Arquivo {fname} não encontrado. Treine o modelo novamente.")
+                    with out_widget: print(f"Error: No se encontró el archivo {fname}. Vuelve a entrenar el modelo.")
                 return
                 
         with open(os.path.join(tmpdir, 'metadata.json')) as f:
@@ -530,36 +530,36 @@ def view_analytics(model_info, out_widget=None):
         html_content = f"""
         {style}
         <div class="dash-card">
-            <div class="dash-title">📄 Model Card: {hp.get('training_id')} / {hp.get('shortname')}</div>
+            <div class="dash-title">📄 Ficha del modelo: {hp.get('training_id')} / {hp.get('shortname')}</div>
             <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 15px;">
                 <div style="flex: 2; min-width: 300px;">
-                    <p class="meta-text"><b>Data de Criação:</b> {date_str}</p>
-                    <p class="meta-text"><b>Amostras Usadas:</b> {', '.join(hp.get('sample_collections', []))}</p>
-                    <p class="meta-text"><b>Bandas Espectrais:</b> {', '.join(hp.get('bands_input', []))}</p>
-                    <p class="meta-text"><b>Arquitetura (Camadas):</b> {hp.get('layers')} | <b>LR:</b> {hp.get('lr')}</p>
-                    <p class="meta-text"><b>Total Píxeis (Fogo):</b> {hp.get('sample_count', {}).get('burned', 0)} | <b>Não-Fogo:</b> {hp.get('sample_count', {}).get('not_burned', 0)}</p>
+                    <p class="meta-text"><b>Fecha de creación:</b> {date_str}</p>
+                    <p class="meta-text"><b>Muestras utilizadas:</b> {', '.join(hp.get('sample_collections', []))}</p>
+                    <p class="meta-text"><b>Bandas espectrales:</b> {', '.join(hp.get('bands_input', []))}</p>
+                    <p class="meta-text"><b>Arquitectura (Capas):</b> {hp.get('layers')} | <b>LR:</b> {hp.get('lr')}</p>
+                    <p class="meta-text"><b>Total Píxeles (Fuego):</b> {hp.get('sample_count', {}).get('burned', 0)} | <b>No-Fuego:</b> {hp.get('sample_count', {}).get('not_burned', 0)}</p>
                 </div>
                 <div style="flex: 1; min-width: 250px; background:#fff3cd; padding:10px; border-radius:4px; border:1px solid #ffeeba;">
-                    <p class="meta-text" style="color:#856404; font-weight:bold; margin-bottom:5px;">📝 Comentário do Treinamento:</p>
-                    <p class="meta-text" style="color:#856404; font-style:italic;">{hp.get('comment', 'Sem comentário.')}</p>
+                    <p class="meta-text" style="color:#856404; font-weight:bold; margin-bottom:5px;">📝 Comentario sobre el entrenamiento:</p>
+                    <p class="meta-text" style="color:#856404; font-style:italic;">{hp.get('comment', 'Sin comentarios.')}</p>
                 </div>
             </div>
             
             <div class="dash-grid">
                 <div class="kpi-box" style="border-left-color: #28a745;">
-                    <div class="kpi-title">Acurácia Global</div>
+                    <div class="kpi-title">Precisión global</div>
                     <div class="kpi-value">{acc:.1%}</div>
                 </div>
                 <div class="kpi-box" style="border-left-color: #dc3545;">
-                    <div class="kpi-title">Precisão (Fogo)</div>
+                    <div class="kpi-title">Precisión (Fuego)</div>
                     <div class="kpi-value">{prec_fire:.1%}</div>
                 </div>
                 <div class="kpi-box" style="border-left-color: #ffc107;">
-                    <div class="kpi-title">Recall (Fogo)</div>
+                    <div class="kpi-title">Recall (Fuego)</div>
                     <div class="kpi-value">{rec_fire:.1%}</div>
                 </div>
                 <div class="kpi-box" style="border-left-color: #17a2b8;">
-                    <div class="kpi-title">F1-Score (Fogo)</div>
+                    <div class="kpi-title">F1-Score (Fuego)</div>
                     <div class="kpi-value">{f1_fire:.1%}</div>
                 </div>
             </div>
@@ -580,7 +580,7 @@ def view_analytics(model_info, out_widget=None):
                 fig.colorbar(cax, ax=ax1)
                 for (i, j), z in np.ndenumerate(cm):
                     ax1.text(j, i, f"{z:,}", ha='center', va='center', weight='bold', color='black' if z < cm.max()/2 else 'white')
-                ax1.set_title('Matriz de Confusão', pad=15, weight='bold')
+                ax1.set_title('Matriz de confusión', pad=15, weight='bold')
                 ax1.set_ylabel('Real')
                 ax1.set_xlabel('Predito')
                 ax1.set_xticks([0, 1])
@@ -594,8 +594,8 @@ def view_analytics(model_info, out_widget=None):
                     ax2 = plt.subplot(1, 2, 2)
                     ax2.plot(history['steps'], history['acc'], color='#0275d8', label='Treino', linewidth=2)
                     ax2.plot(history['steps'], history['val_acc'], color='#5cb85c', label='Validação', linestyle='--', linewidth=2)
-                    ax2.set_title('Evolução da Acurácia', weight='bold')
-                    ax2.set_xlabel('Iteração')
+                    ax2.set_title('Evolución de la precisión', weight='bold')
+                    ax2.set_xlabel('Iteración')
                     ax2.legend()
                     ax2.grid(True, linestyle='--', alpha=0.5)
                 
@@ -656,7 +656,7 @@ class ModelTrainerUI(PipelineStepUI):
             matrix_rows.append(row)
             
         if not matrix_rows:
-            return widgets.HTML('<div style="padding:10px; color:#999;"><i>Nenhuma amostra encontrada com este filtro.</i></div>')
+            return widgets.HTML('<div style="padding:10px; color:#999;"><i>No se han encontrado resultados con este filtro.</i></div>')
             
         return widgets.VBox(matrix_rows)
 
@@ -667,13 +667,13 @@ class ModelTrainerUI(PipelineStepUI):
         # BARRA DE BUSCA
         self.txt_search_samples = widgets.Text(
             value=self.search_query_samples,
-            placeholder='Buscar amostras (ex: r10)...',
+            placeholder='Buscar muestras (ex: r10)...',
             layout=L(width='300px')
         )
         self.txt_search_samples.observe(self._on_search_samples_change, names='value')
 
-        btn_all = widgets.Button(description="Selecionar Filtradas", button_style='info', icon='check-square', layout=L(width='180px'))
-        btn_none = widgets.Button(description="Limpar Filtradas", button_style='warning', icon='square-o', layout=L(width='180px'))
+        btn_all = widgets.Button(description="Seleccionar filtradas", button_style='info', icon='check-square', layout=L(width='180px'))
+        btn_none = widgets.Button(description="Borrar filtrados", button_style='warning', icon='square-o', layout=L(width='180px'))
         btn_refresh = widgets.Button(description="", button_style='success', icon='refresh', layout=L(width='40px'))
         
         btn_all.on_click(self._on_select_all_samples)
@@ -793,9 +793,9 @@ class ModelTrainerUI(PipelineStepUI):
         )
         
         tab_config = widgets.VBox([
-            widgets.HTML("<b>1. Seleção de Amostras (Matriz GCS)</b>"), matrix_ui,
-            widgets.HTML("<br><b>2. Matriz de Extração (Bandas por Sensor+Mosaico)</b>"), extraction_matrix,
-            widgets.HTML("<b>3. Hiperparâmetros (DNN)</b>"), hp_box,
+            widgets.HTML("<b>1. Selección de muestras (matriz GCS)</b>"), matrix_ui,
+            widgets.HTML("<br><b>2. Matriz de extracción (bandas por sensor + mosaico)</b>"), extraction_matrix,
+            widgets.HTML("<b>3. Hiperparámetros (DNN)</b>"), hp_box,
             widgets.HTML("<hr style='margin:10px 0'>"),
             widgets.HTML("<b>4. Destino Final no GCS</b>"),
             widgets.HBox([self.w_training_id, self.w_shortname], layout=L(margin='10px 0')),
@@ -813,7 +813,7 @@ class ModelTrainerUI(PipelineStepUI):
             widgets.HTML("<b>📈 Entrenamiento Actual (En vivo)</b>"),
             self.training_chart_output,
             widgets.HTML("<hr style='margin:15px 0'>"),
-            widgets.HTML("<b>📊 Model Card & Analytics Dashboard</b>"),
+            widgets.HTML("<b>📊 Ficha del modelo y panel de análisis</b>"),
             self.analytics_dashboard_output,
             widgets.HTML("<hr style='margin:15px 0'>"),
             widgets.HTML("<b>📂 Historial de Modelos</b>"),
@@ -850,7 +850,7 @@ class ModelTrainerUI(PipelineStepUI):
                 button_style='danger', 
                 icon='trash',
                 layout=widgets.Layout(width='40px'),
-                tooltip="Excluir Modelo permanentemente do GCS"
+                tooltip="Eliminar el Modelo permanentemente do GCS"
             )
             
             def _make_callback(model_info):
