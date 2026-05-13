@@ -178,60 +178,77 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
         if logger: logger(f"📡 Extrayendo {len(geometries)} muestras de {p}...", "info")
         
         # --- LEITURA REAL DAS BANDAS ---
-        band_data_list = []
-        valid_period = True
-        period_y = np.array([])
+        if logger: logger(f"✅ Mosaicos OK para {p}: {len(band_paths)} bandas listas para la extracción.", "info")
+        if logger: logger(f"📡 Extrayendo {len(geometries)} muestras de {p}...", "info")
         
-        for b in bands_sorted:
-            cog_path = band_paths[b]
-            try:
-                # Tenta leitura via /vsigs/ (Linux/Colab) ou local (Windows)
+        sources = {}
+        local_files = []
+        
+        try:
+            # 1. Abrir todos os datasets para o período
+            for b in bands_sorted:
+                cog_path = band_paths[b]
                 is_colab = 'COLAB_RELEASE_TAG' in os.environ
                 src_path = f"/vsigs/{cog_path.replace('gs://', '')}" if is_colab else None
                 
-                # Para Windows, fazemos download temporário
-                local_file = None
                 if not is_colab:
                     from M0_auth_config import get_temp_dir
                     local_file = os.path.join(get_temp_dir(), os.path.basename(cog_path))
-                    
-                    if logger: logger(f"  📥 Bajando de banda {b}...", "info")
-                    try:
-                        fs.get(cog_path, local_file)
-                        if not os.path.exists(local_file) or os.path.getsize(local_file) < 1000:
-                            raise Exception("La descarga ha fallado o el archivo está vacío.")
-                        src_path = local_file
-                    except Exception as e:
-                        if logger: logger(f"  ❌ Error al descargar {cog_path}: {e}", "error")
-                        valid_period = False; break
+                    if logger: logger(f"  📥 Bajando banda {b}...", "info")
+                    fs.get(cog_path, local_file)
+                    src_path = local_file
+                    local_files.append(local_file)
                 
-                with rasterio.open(src_path) as src:
-                    band_pixels, valid_labels = [], []
-                    for geom, label in zip(geometries, labels):
-                        try:
-                            out_image, _ = mask(src, [geom], crop=True, filled=False)
-                            if not out_image.mask.all():
-                                v_px = out_image.data[~out_image.mask]
-                                band_pixels.extend(v_px)
-                                if len(period_y) == 0: valid_labels.extend([label] * len(v_px))
-                        except: pass
-                    
-                    if not band_pixels:
-                        valid_period = False; break
-                    band_data_list.append(np.array(band_pixels))
-                    if len(period_y) == 0: period_y = np.array(valid_labels)
-                    
-                if local_file and os.path.exists(local_file): os.remove(local_file)
-                
-            except Exception as e:
-                if logger: logger(f"Erro crítico ao ler {b} em {p}: {e}", "error")
-                valid_period = False; break
-                
-        if valid_period and len(band_data_list) == len(bands_sorted):
-            X_period = np.column_stack(band_data_list)
-            X_all.append(X_period)
-            y_all.append(period_y)
+                sources[b] = rasterio.open(src_path)
+
+            # 2. Extração Síncrona (Garante que cada pixel tenha todas as bandas)
+            band_pixels_acc = [[] for _ in bands_sorted]
+            labels_acc = []
             
+            for geom, label in zip(geometries, labels):
+                try:
+                    temp_data = {}
+                    combined_mask = None
+                    
+                    # Lemos todas as bandas para esta geometria
+                    valid_geom = True
+                    for b in bands_sorted:
+                        out_image, _ = mask(sources[b], [geom], crop=True, filled=False)
+                        if out_image.mask.all():
+                            valid_geom = False; break
+                        
+                        # Acumulamos a máscara (OR lógico nos bits de NoData)
+                        if combined_mask is None:
+                            combined_mask = out_image.mask[0]
+                        else:
+                            combined_mask = combined_mask | out_image.mask[0]
+                        
+                        temp_data[b] = out_image.data[0]
+                    
+                    if valid_geom and combined_mask is not None:
+                        final_valid_mask = ~combined_mask
+                        num_valid = np.sum(final_valid_mask)
+                        
+                        if num_valid > 0:
+                            for i, b in enumerate(bands_sorted):
+                                band_pixels_acc[i].extend(temp_data[b][final_valid_mask])
+                            labels_acc.extend([label] * num_valid)
+                except:
+                    continue
+            
+            # 3. Empilhar dados do período
+            if labels_acc:
+                X_period = np.column_stack([np.array(b_px) for b_px in band_pixels_acc])
+                X_all.append(X_period)
+                y_all.append(np.array(labels_acc))
+                
+        except Exception as e:
+            if logger: logger(f"❌ Error crítico en período {p}: {e}", "error")
+        finally:
+            for s in sources.values(): s.close()
+            for f in local_files:
+                if os.path.exists(f): os.remove(f)
+
     if not X_all: return np.array([]), np.array([])
     return np.concatenate(X_all, axis=0), np.concatenate(y_all, axis=0)
 
