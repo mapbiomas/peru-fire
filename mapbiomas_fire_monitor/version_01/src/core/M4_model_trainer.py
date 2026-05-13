@@ -456,6 +456,19 @@ class ModelTrainer:
             
         return layer
 
+    def delete_model(self, training_id, shortname):
+        """Deleta recursivamente a pasta do modelo no GCS."""
+        import subprocess
+        from M0_auth_config import gcs_path
+        base_uri = model_path(training_id, shortname)
+        full_gcs_uri = gcs_path(base_uri)
+        try:
+            # -m para remover em paralelo (rápido) e -r para recursivo
+            subprocess.run(['gsutil', '-m', 'rm', '-r', full_gcs_uri], check=True, capture_output=True)
+            return True
+        except Exception as e:
+            raise RuntimeError(f"No se pudo eliminar de GCS: {e}")
+
     def save_projector_files(self, training_id, shortname, X, y, logger=None):
         """Gera e salva arquivos .tsv para o TensorBoard Projector no GCS."""
         import tempfile, subprocess
@@ -559,6 +572,13 @@ class ModelTrainer:
                 json.dump(metrics, f, indent=2)
             subprocess.run(['gsutil', 'cp', os.path.join(tmpdir, 'metrics.json'), gcs_path(f"{base_path}/metrics.json")], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
+            # --- 2.7 TensorBoard Projector Files (Auto-Snapshot) ---
+            try:
+                # Gerar arquivos do Projector usando a última amostra de treino (X_raw)
+                self.save_projector_files(training_id, shortname, self._X_raw, self._y_raw, logger=logger)
+            except Exception as e_proj:
+                if logger: logger(f"⚠️ Nota: No se pudo gerar archivos del Projector: {e_proj}", "info")
+
             # 3. Extracted Pixels
             if logger: logger("Guardar una matriz de píxeles en GCS...", "info")
             np.save(os.path.join(tmpdir, 'X_data.npy'), self._X_raw)
@@ -834,6 +854,52 @@ def view_analytics(model_info, out_widget=None):
                 else:
                     # Modo Legacy ou Live
                     render_diagnostic_dashboard(hp.get('history', {}), embeds, preds, y_sub if y_sub is not None else np.array([]))
+
+                # --- SEÇÃO TENSORBOARD PROJECTOR (Elegante e Informativa) ---
+                p_final = f"gs://mapbiomas-fire/{clean_path}"
+                vec_url = f"https://storage.googleapis.com/mapbiomas-fire/{clean_path}/projector/vectors.tsv"
+                meta_url = f"https://storage.googleapis.com/mapbiomas-fire/{clean_path}/projector/metadata.tsv"
+                
+                display(HTML(f"""
+                <div style="background:#f0f7ff; border-radius:12px; padding:25px; margin-top:30px; border:1px solid #cce5ff; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                    <div style="display:flex; align-items:center; margin-bottom:15px;">
+                        <span style="font-size:32px; margin-right:15px;">🚀</span>
+                        <h3 style="margin:0; color:#004085; font-weight:700;">Auditoría de Clusters con TensorBoard</h3>
+                    </div>
+                    
+                    <p style="color:#004085; font-size:14px; margin-bottom:20px;">
+                        Para una exploración profesional del espacio latente en 3D, utilice el motor de Google. 
+                        Este modelo tiene sus embeddings listos para ser visualizados sin sobrecargar su navegador.
+                    </p>
+
+                    <div style="background:#fff; border-radius:8px; padding:15px; border:1px solid #b8daff; margin-bottom:20px;">
+                        <b style="color:#004085; display:block; margin-bottom:10px;">📋 Instrucciones de uso:</b>
+                        <ol style="color:#333; font-size:13px; line-height:1.6;">
+                            <li>Descargue los archivos <b>Vectors</b> e <b>Metadata</b> usando os botões abaixo.</li>
+                            <li>Abra o site <a href="https://projector.tensorflow.org/" target="_blank" style="color:#007bff; font-weight:bold;">projector.tensorflow.org</a>.</li>
+                            <li>Clique em <b>"Load"</b> no menu lateral esquerdo.</li>
+                            <li>Suba o arquivo <code>vectors.tsv</code> no primeiro botão (Step 1).</li>
+                            <li>Suba o arquivo <code>metadata.tsv</code> no segundo botão (Step 2).</li>
+                            <li><i>Dica:</i> Selecione "T-SNE" ou "UMAP" no Projector para ver as nuvens de pontos!</li>
+                        </ol>
+                    </div>
+
+                    <div style="display:flex; gap:15px;">
+                        <a href="{vec_url}" target="_blank" download
+                           style="flex:1; text-align:center; background:#007bff; color:white; padding:12px; border-radius:6px; text-decoration:none; font-weight:bold; transition:0.3s; box-shadow:0 4px 6px rgba(0,123,255,0.2);">
+                           📥 Descargar Vectors (.tsv)
+                        </a>
+                        <a href="{meta_url}" target="_blank" download
+                           style="flex:1; text-align:center; background:#17a2b8; color:white; padding:12px; border-radius:6px; text-decoration:none; font-weight:bold; transition:0.3s; box-shadow:0 4px 6px rgba(23,162,184,0.2);">
+                           📥 Descargar Metadata (.tsv)
+                        </a>
+                    </div>
+                    
+                    <div style="margin-top:15px; font-size:11px; color:#6c757d; text-align:center;">
+                        📍 Ubicación en GCS: <code style="background:#eee; padding:2px 4px; border-radius:3px;">{clean_path}/projector/</code>
+                    </div>
+                </div>
+                """))
 
                 # Rodapé com instruções para Projector (t-SNE/UMAP)
                 display(HTML(f"""
