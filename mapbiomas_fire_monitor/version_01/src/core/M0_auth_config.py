@@ -36,7 +36,7 @@ def get_config(country='peru'):
             'asset_classification_old': 'projects/mapbiomas-peru/assets/FIRE/MONITOR_01/CLASSIFICATIONS',
             'asset_filtered_old': 'projects/mapbiomas-peru/assets/FIRE/MONITOR_01/FILTERED',
             
-            # --- NOVOS CAMINHOS GCS (Arquitetura Singleband) ---
+            # NOVOS CAMINHOS GCS (Arquitetura Singleband)
             'gcs_library_images': 'sudamerica/peru/monitor/version_01/library_images',
             'gcs_library_samples': 'sudamerica/peru/monitor/version_01/library_samples',
             'gcs_cache': 'sudamerica/peru/monitor/version_01/.cache',
@@ -147,6 +147,10 @@ def _gcs_library_base():
     sensor = GLOBAL_OPTS['SENSOR'].lower()
     return f"{CONFIG['gcs_library_images']}/{sensor}"
 
+def _gcs_models_base():
+    """Base folder for trained models in GCS (centralizado)."""
+    return f"{CONFIG['gcs_library_images']}/models"
+
 def _gcs_mosaic_path(periodicity, temporal_id, mosaic=None):
     """
     Padrão GCS: .../library_images/{sensor}/{periodicity}/{mosaic}/{temporal_id}/
@@ -186,12 +190,12 @@ def yearly_cog_path(year, mosaic='minnbr', sensor=None):
 
 def model_path(training_id, shortname, region=None):
     """
-    GCS: GCS/{country}/.../monitor/version_01/library_images/{sensor}/models/{asset_name}
+    GCS: GCS/{country}/.../monitor/version_01/library_images/models/{asset_name}
     Asset: training_{training_id}_{shortname}_{sensor}
     """
     sensor = GLOBAL_OPTS['SENSOR'].lower()
     asset_name = f"training_{training_id}_{shortname}_{sensor}"
-    base = f"{_gcs_library_base()}/models/{asset_name}"
+    base = f"{_gcs_models_base()}/{asset_name}"
     if region:
         return f"{base}/{region}"
     return base

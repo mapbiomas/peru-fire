@@ -29,7 +29,7 @@ from IPython.display import display, clear_output
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-from M0_auth_config import CONFIG, gcs_path, model_path
+from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
 from M_ui_components import PipelineStepUI
 
@@ -59,10 +59,10 @@ def list_sample_collections_gcs():
 
 def list_trained_models():
     """Lista modelos já treinados no GCS."""
-    from M0_auth_config import _gcs_library_base
+    from M0_auth_config import _gcs_models_base
     try:
         fs = _get_fs()
-        path = f"{CONFIG['bucket']}/{_gcs_library_base()}/models"
+        path = f"{CONFIG['bucket']}/{_gcs_models_base()}"
         models = []
         if fs.exists(path):
             trainings = fs.ls(path)
@@ -278,7 +278,8 @@ class ModelTrainer:
                 name=f'fc_{i}'
             )(layer)
             layer = tf.nn.dropout(layer, rate=1 - self.keep_prob)
-
+        
+        self.latent_tensor = layer # Captura para visualização ao vivo
         self.logits = tf.keras.layers.Dense(1, name='output')(layer)
         self.pred   = tf.nn.sigmoid(self.logits)
 
@@ -306,6 +307,10 @@ class ModelTrainer:
         X_tr, y_tr = X_norm[idx[:n_train]], y[idx[:n_train]].reshape(-1, 1)
         X_te, y_te = X_norm[idx[n_train:]], y[idx[n_train:]].reshape(-1, 1)
 
+        # Amostra fixa para visualização ao vivo (Playground Style)
+        viz_idx = np.random.choice(len(X_te), min(500, len(X_te)), replace=False)
+        X_viz, y_viz = X_te[viz_idx], y_te[viz_idx]
+
         self._build_graph()
         history = {'loss': [], 'acc': [], 'val_acc': [], 'steps': []}
 
@@ -332,11 +337,17 @@ class ModelTrainer:
                     history['acc'].append(float(acc_tr))
                     history['val_acc'].append(float(acc_te))
 
+                    # Extração de dados para o Playground Live
+                    embeds, preds_viz = sess.run(
+                        [self.latent_tensor, self.pred], 
+                        feed_dict={self.x: X_viz, self.keep_prob: 1.0}
+                    )
+
                     if logger:
                         logger(f"Iter {i:5d}/{n_iters} | Loss: {loss_val:.4f} | Acc Treino: {acc_tr:.3f} | Validação: {acc_te:.3f}", "info")
                     
                     if update_chart_fn:
-                        update_chart_fn(history)
+                        update_chart_fn(history, embeds, preds_viz.flatten(), y_viz)
 
             self._saved_vars = {v.name: sess.run(v) for v in tf.global_variables()}
             self._history = history
@@ -401,6 +412,54 @@ class ModelTrainer:
         logits = np.dot(layer, W_out) + b_out
         preds = (1 / (1 + np.exp(-logits))).flatten() > 0.5
         return preds.astype(np.uint8)
+
+    def get_embeddings(self, X_raw):
+        """Extrai os embeddings (penúltima camada) usando os pesos numpy."""
+        if not hasattr(self, '_saved_vars'):
+            raise RuntimeError("Modelo não treinado/carregado.")
+            
+        layer = normalize(X_raw, self.norm_stats)
+        # Passa por todas as camadas ocultas
+        for i in range(len(self.layers)):
+            W = self._saved_vars[f'fc_{i}/kernel:0']
+            b = self._saved_vars[f'fc_{i}/bias:0']
+            layer = np.maximum(0, np.dot(layer, W) + b)
+            
+        return layer
+
+    def save_projector_files(self, training_id, shortname, X, y, logger=None):
+        """Gera e salva arquivos .tsv para o TensorBoard Projector no GCS."""
+        import tempfile, subprocess
+        from M0_auth_config import GLOBAL_OPTS
+        base_path = model_path(training_id, shortname)
+        
+        if logger: logger("Generando embeddings para visualización (Projector)...", "info")
+        embeddings = self.get_embeddings(X)
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # 1. Vectors file (.tsv)
+            vec_file = os.path.join(tmpdir, 'vectors.tsv')
+            np.savetxt(vec_file, embeddings, delimiter='\t', fmt='%.6f')
+            
+            # 2. Metadata file (.tsv)
+            meta_file = os.path.join(tmpdir, 'metadata.tsv')
+            with open(meta_file, 'w', encoding='utf-8') as f:
+                f.write("Index\tClass\tLabel\n")
+                for i, val in enumerate(y):
+                    label = "Fuego" if val == 1 else "No-Fuego"
+                    f.write(f"{i}\t{val}\t{label}\n")
+            
+            # Upload to GCS
+            dest_dir = f"{base_path}/projector"
+            for fname in ['vectors.tsv', 'metadata.tsv']:
+                src = os.path.join(tmpdir, fname)
+                dest = gcs_path(f"{dest_dir}/{fname}")
+                if logger: logger(f"  📤 Subiendo {fname} a GCS...", "info")
+                subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            if logger: 
+                logger(f"✅ Arquivos do Projector salvos em: {dest_dir}", "info")
+                logger(f"💡 Dica: Baixe-os e suba em https://projector.tensorflow.org/", "info")
 
     def save(self, training_id, shortname, comment="", logger=None):
         import subprocess, tempfile
@@ -571,11 +630,11 @@ def view_analytics(model_info, out_widget=None):
             with out_widget:
                 display(HTML(html_content))
                 
-                # Plot Confusion Matrix and Training History if available
-                fig = plt.figure(figsize=(12, 4))
+                # Plot Confusion Matrix and Training History
+                fig = plt.figure(figsize=(16, 4.5))
                 
-                # Confusion Matrix
-                ax1 = plt.subplot(1, 2, 1)
+                # 1. Confusion Matrix
+                ax1 = plt.subplot(1, 3, 1)
                 cax = ax1.matshow(cm, cmap='Blues', alpha=0.8)
                 fig.colorbar(cax, ax=ax1)
                 for (i, j), z in np.ndenumerate(cm):
@@ -588,19 +647,81 @@ def view_analytics(model_info, out_widget=None):
                 ax1.set_xticklabels(['No-fuego', 'Fuego'])
                 ax1.set_yticklabels(['No-fuego', 'Fuego'])
                 
-                # Training History
+                # 2. Training History (Accuracy & Loss)
                 history = hp.get('history', {})
                 if history and 'steps' in history:
-                    ax2 = plt.subplot(1, 2, 2)
-                    ax2.plot(history['steps'], history['acc'], color='#0275d8', label='Treino', linewidth=2)
-                    ax2.plot(history['steps'], history['val_acc'], color='#5cb85c', label='Validação', linestyle='--', linewidth=2)
-                    ax2.set_title('Evolución de la precisión', weight='bold')
+                    ax2 = plt.subplot(1, 3, 2)
+                    ax2.plot(history['steps'], history['acc'], color='#28a745', label='Acc Treino', linewidth=2)
+                    ax2.plot(history['steps'], history['val_acc'], color='#28a745', label='Acc Validação', linestyle='--', alpha=0.6)
+                    ax2.set_ylabel('Acurácia', color='#28a745', weight='bold')
+                    ax2.tick_params(axis='y', labelcolor='#28a745')
+                    
+                    ax2b = ax2.twinx()
+                    ax2b.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
+                    ax2b.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
+                    ax2b.tick_params(axis='y', labelcolor='#dc3545')
+                    
+                    ax2.set_title('Evolución (Loss vs Acc)', weight='bold')
                     ax2.set_xlabel('Iteración')
-                    ax2.legend()
-                    ax2.grid(True, linestyle='--', alpha=0.5)
+                    ax2.grid(True, linestyle='--', alpha=0.3)
+                
+                # 3. Latent Space (3D PCA Projection)
+                try:
+                    # Carregamos uma amostra dos píxeis para visualização se existirem
+                    X_file = os.path.join(tmpdir, 'X_data.npy')
+                    y_file = os.path.join(tmpdir, 'y_data.npy')
+                    src_x = f"{base_gs}/extracted_pixels/X_data.npy"
+                    src_y = f"{base_gs}/extracted_pixels/y_data.npy"
+                    
+                    subprocess.run(['gsutil', 'cp', src_x, X_file], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    subprocess.run(['gsutil', 'cp', src_y, y_file], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    
+                    X_data = np.load(X_file)
+                    y_data = np.load(y_file)
+                    
+                    # Pegamos apenas uma amostra para o plot não ficar pesado (max 1000 pontos)
+                    idx_sample = np.random.choice(len(X_data), min(1000, len(X_data)), replace=False)
+                    X_sub = X_data[idx_sample]
+                    y_sub = y_data[idx_sample]
+                    
+                    # Rodamos o forward pass para pegar os embeddings
+                    trainer_tmp = ModelTrainer(num_input=X_sub.shape[1], layers=hp['layers'])
+                    trainer_tmp._saved_vars = dict(np.load(os.path.join(tmpdir, 'weights.npz')))
+                    trainer_tmp.norm_stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
+                    
+                    embeddings = trainer_tmp.get_embeddings(X_sub)
+                    
+                    # PCA 3D
+                    from sklearn.decomposition import PCA
+                    pca = PCA(n_components=3)
+                    coords = pca.fit_transform(embeddings)
+                    
+                    ax3 = plt.subplot(1, 3, 3, projection='3d')
+                    colors = ['#007bff' if v == 0 else '#ff4d4d' for v in y_sub]
+                    ax3.scatter(coords[:, 0], coords[:, 1], coords[:, 2], c=colors, s=15, alpha=0.6, edgecolors='white', linewidth=0.2)
+                    ax3.set_title('Espaço Latente (PCA 3D)', weight='bold')
+                    ax3.set_xticks([]); ax3.set_yticks([]); ax3.set_zticks([])
+                    # Legenda manual
+                    from matplotlib.lines import Line2D
+                    legend_elements = [Line2D([0], [0], marker='o', color='w', label='No-Fuego', markerfacecolor='#007bff', markersize=8),
+                                       Line2D([0], [0], marker='o', color='w', label='Fuego', markerfacecolor='#ff4d4d', markersize=8)]
+                    ax3.legend(handles=legend_elements, loc='upper right', fontsize=8)
+                except Exception as e:
+                    ax3 = plt.subplot(1, 3, 3)
+                    ax3.text(0.5, 0.5, f"No se pudo generar el Espacio Latente:\n{e}", ha='center', va='center', color='gray')
+                    ax3.axis('off')
                 
                 plt.tight_layout()
                 plt.show()
+                
+                # Rodapé com instruções para Projector
+                display(HTML(f"""
+                <div style="background:#e9ecef; padding:10px; border-radius:4px; margin-top:10px; font-size:12px;">
+                    <b>🚀 Análisis Avanzado:</b> Para una exploración 3D interactiva completa con t-SNE, use el 
+                    <a href="https://projector.tensorflow.org/" target="_blank" style="color:#007bff; font-weight:bold;">TensorBoard Projector</a>. 
+                    En el panel de la izquierda (Historial de Modelos), haga clic en <b>"Exportar Projector"</b> para gerar os arquivos necessários.
+                </div>
+                """))
 
 class ModelTrainerUI(PipelineStepUI):
     def __init__(self):
@@ -853,28 +974,76 @@ class ModelTrainerUI(PipelineStepUI):
                 tooltip="Eliminar el Modelo permanentemente do GCS"
             )
             
+            btn_proj = widgets.Button(
+                description="Exportar Projector", 
+                button_style='info', 
+                icon='external-link',
+                layout=widgets.Layout(width='160px'),
+                tooltip="Gerar arquivos .tsv para o TensorBoard Projector"
+            )
+            
             def _make_callback(model_info):
                 def callback(b):
                     view_analytics(model_info, out_widget=self.analytics_dashboard_output)
                 return callback
 
+            def _make_proj_callback(model_info):
+                def callback(b):
+                    self.show_loader("Generando archivos para Projector...")
+                    try:
+                        # Carregar o modelo e os dados
+                        import tempfile, subprocess
+                        fs = _get_fs()
+                        with tempfile.TemporaryDirectory() as tmpdir:
+                            # Precisamos de uma amostra de dados para gerar os embeddings
+                            # Vamos baixar os píxeis que foram salvos com o modelo
+                            X_file = os.path.join(tmpdir, 'X_data.npy')
+                            y_file = os.path.join(tmpdir, 'y_data.npy')
+                            src_x = f"gs://{model_info['path']}/extracted_pixels/X_data.npy"
+                            src_y = f"gs://{model_info['path']}/extracted_pixels/y_data.npy"
+                            
+                            subprocess.run(['gsutil', 'cp', src_x, X_file], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            subprocess.run(['gsutil', 'cp', src_y, y_file], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            
+                            X_data = np.load(X_file)
+                            y_data = np.load(y_file)
+                            
+                            # Carregar o modelo
+                            trainer = ModelTrainer(num_input=X_data.shape[1])
+                            trainer.load(model_info['training_id'].split('_')[1], model_info['training_id'].split('_')[2])
+                            
+                            # Gerar e salvar os arquivos
+                            trainer.save_projector_files(
+                                model_info['training_id'].split('_')[1], 
+                                model_info['training_id'].split('_')[2], 
+                                X_data, y_data, 
+                                logger=print
+                            )
+                    except Exception as e:
+                        print(f"❌ Erro ao exportar: {e}")
+                    self.hide_loader()
+                return callback
+
             def _make_del_callback(model_info):
                 def callback(b):
-                    if logger: logger(f"Excluindo modelo: {model_info['training_id']}...", "warning")
+                    print(f"⚠️ Excluindo modelo: {model_info['training_id']}...")
                     try:
                         fs.rm(model_info['path'], recursive=True)
                         self._refresh_models_list(show_loader=True)
                     except Exception as e:
-                        if logger: logger(f"Erro ao excluir: {e}", "error")
+                        print(f"❌ Erro ao excluir: {e}")
                 return callback
                 
             btn.on_click(_make_callback(m))
+            btn_proj.on_click(_make_proj_callback(m))
             btn_del.on_click(_make_del_callback(m))
 
             row = widgets.HBox([
-                widgets.HTML(f"<div style='width:300px;font-family:monospace;'>{m['training_id']}</div>"), 
+                widgets.HTML(f"<div style='width:250px;font-family:monospace;'>{m['training_id']}</div>"), 
                 widgets.HTML(f"<div style='width:100px;'>{status}</div>"),
                 btn,
+                widgets.HTML('<div style="width:5px;"></div>'),
+                btn_proj,
                 widgets.HTML('<div style="width:5px;"></div>'),
                 btn_del
             ], layout=widgets.Layout(align_items='center', margin='2px 0', border_bottom='1px solid #eee'))
@@ -947,22 +1116,52 @@ def start_training(ui):
     
     print("Entrenando DNN...")
     
-    def update_chart(history):
+    def update_chart(history, embeds=None, preds=None, y_true=None):
         with ui.training_chart_output:
             clear_output(wait=True)
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.5))
+            fig = plt.figure(figsize=(15, 4))
             
+            # 1. Loss
+            ax1 = fig.add_subplot(1, 3, 1)
             ax1.plot(history['steps'], history['loss'], color='#d9534f', linewidth=2)
             ax1.set_title('Función de Costo (Loss)', fontsize=10, weight='bold')
             ax1.set_xlabel('Iteración', fontsize=9)
             ax1.grid(True, linestyle='--', alpha=0.5)
             
+            # 2. Accuracy
+            ax2 = fig.add_subplot(1, 3, 2)
             ax2.plot(history['steps'], history['acc'], color='#0275d8', label='Entrenamiento', linewidth=2)
             ax2.plot(history['steps'], history['val_acc'], color='#5cb85c', label='Validación', linestyle='--', linewidth=2)
             ax2.set_title('Precisión', fontsize=10, weight='bold')
             ax2.set_xlabel('Iteración', fontsize=9)
             ax2.legend(fontsize=9)
             ax2.grid(True, linestyle='--', alpha=0.5)
+
+            # 3. Live Playground (Latent Space 3D)
+            if embeds is not None:
+                from sklearn.decomposition import PCA
+                try:
+                    pca = PCA(n_components=3)
+                    coords = pca.fit_transform(embeds)
+                    
+                    ax3 = fig.add_subplot(1, 3, 3, projection='3d')
+                    # Colorimos pelo gradiente da predição (Playground Style)
+                    # Azul (0) -> Vermelho (1)
+                    sc = ax3.scatter(coords[:, 0], coords[:, 1], coords[:, 2], 
+                                     c=preds, cmap='RdBu_r', s=20, alpha=0.7, 
+                                     edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
+                    
+                    # Adicionamos contorno extra para os que o modelo está errando feio?
+                    # Por enquanto apenas o scatter básico já é muito visual
+                    
+                    ax3.set_title('Playground: Espaço Latente (Live)', fontsize=10, weight='bold')
+                    ax3.set_xticks([]); ax3.set_yticks([]); ax3.set_zticks([])
+                    
+                    # Colorbar pequena para confiança
+                    cb = plt.colorbar(sc, ax=ax3, pad=0.1, shrink=0.7)
+                    cb.set_label('Confianza (Predicción)', fontsize=8)
+                except:
+                    pass
             
             plt.tight_layout()
             plt.show()
@@ -975,7 +1174,6 @@ def start_training(ui):
         print("¡Modelo y Model Card guardados exitosamente!")
         
         # Carregar o Model Card automaticamente no dashboard inferior
-        from M0_auth_config import model_path
         model_info = {
             'training_id': f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{GLOBAL_OPTS['SENSOR'].lower()}", 
             'path': model_path(ui.w_training_id.value, ui.w_shortname.value)
