@@ -647,37 +647,61 @@ def render_model_card_html(hp, metrics):
     return html_content
 
 def view_analytics(model_info, out_widget=None):
+    """Visualiza as métricas e o card de um modelo salvo no GCS."""
+    fs = _get_fs()
+    try:
+        # 1. Carregar dados do GCS
+        with fs.open(f"{model_info['path']}/hyperparameters.json", 'r') as f:
+            hp = json.load(f)
+        with fs.open(f"{model_info['path']}/metrics.json", 'r') as f:
+            metrics = json.load(f)
         
+        cm = np.array(metrics.get('confusion_matrix', [[0,0],[0,0]]))
+        rep = metrics.get('classification_report', {})
+        history = hp.get('history', {})
+
         if out_widget:
             out_widget.clear_output(wait=True)
             with out_widget:
-                display(HTML(html_content))
+                # Renderizar Header HTML
+                display(HTML(render_model_card_html(hp, metrics)))
                 
-                # Plot Confusion Matrix and Training History
+                # Plotar Gráficos
                 fig = plt.figure(figsize=(16, 4.5))
                 
                 # 1. Confusion Matrix
-                ax1 = plt.subplot(1, 3, 1)
+                ax1 = fig.add_subplot(1, 3, 1)
                 cax = ax1.matshow(cm, cmap='Blues', alpha=0.8)
-                fig.colorbar(cax, ax=ax1)
                 for (i, j), z in np.ndenumerate(cm):
                     ax1.text(j, i, f"{z:,}", ha='center', va='center', weight='bold', color='black' if z < cm.max()/2 else 'white')
                 ax1.set_title('Matriz de confusión', pad=15, weight='bold')
-                ax1.set_ylabel('Real')
-                ax1.set_xlabel('Predito')
-                ax1.set_xticks([0, 1])
-                ax1.set_yticks([0, 1])
-                ax1.set_xticklabels(['No-fuego', 'Fuego'])
-                ax1.set_yticklabels(['No-fuego', 'Fuego'])
+                ax1.set_xticks([0, 1]); ax1.set_yticks([0, 1])
+                ax1.set_xticklabels(['No-fuego', 'Fuego']); ax1.set_yticklabels(['No-fuego', 'Fuego'])
                 
-                # 2. Training History (Accuracy & Loss)
-                history = hp.get('history', {})
+                # 2. History
                 if history and 'steps' in history:
-                    ax2 = plt.subplot(1, 3, 2)
+                    ax2 = fig.add_subplot(1, 3, 2)
                     ax2.plot(history['steps'], history['acc'], color='#28a745', label='Acc Treino', linewidth=2)
                     ax2.plot(history['steps'], history['val_acc'], color='#28a745', label='Acc Validação', linestyle='--', alpha=0.6)
                     ax2.set_ylabel('Acurácia', color='#28a745', weight='bold')
-                    ax2.tick_params(axis='y', labelcolor='#28a745')
+                    
+                    ax2b = ax2.twinx()
+                    ax2b.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
+                    ax2b.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
+                    ax2.set_title('Historial de entrenamiento', weight='bold')
+                    ax2.grid(True, linestyle='--', alpha=0.3)
+                
+                # 3. Placeholder para Embeddings (em modelos antigos apenas se houver o npy)
+                ax3 = fig.add_subplot(1, 3, 3)
+                ax3.text(0.5, 0.5, "PCA 3D disponível via\nTensorBoard Projector", ha='center', va='center', color='#999')
+                ax3.set_xticks([]); ax3.set_yticks([])
+                ax3.set_title('Espacio Latente', weight='bold')
+
+                plt.tight_layout()
+                plt.show()
+    except Exception as e:
+        if out_widget:
+            with out_widget: print(f"❌ Erro ao carregar analíticos: {e}")
                     
                     ax2b = ax2.twinx()
                     ax2b.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
@@ -947,11 +971,13 @@ class ModelTrainerUI(PipelineStepUI):
         ], layout=L(padding='15px'))
         
         # --- TAB 2: Monitorización en Vivo (Live) ---
-        self.training_chart_output = widgets.Output(layout=L(border='1px solid #dee2e6', border_radius='4px', padding='10px', min_height='250px', margin='10px 0'))
+        self.training_header_output = widgets.Output(layout=L(margin='0 0 10px 0'))
+        self.training_chart_output = widgets.Output(layout=L(border='1px solid #dee2e6', border_radius='4px', padding='10px', min_height='250px'))
         
         tab_live = widgets.VBox([
             widgets.HTML("<b>📈 Entrenamiento Actual (En vivo)</b>"),
-            widgets.HTML("<p style='font-size:11px;color:#666;'>Esta guia se atualizará automaticamente durante o processo de treinamento.</p>"),
+            widgets.HTML("<p style='font-size:11px;color:#666;margin-bottom:10px;'>Acompanhe o progresso do seu modelo e a separação dos clusters em tempo real.</p>"),
+            self.training_header_output,
             self.training_chart_output,
         ], layout=L(padding='15px'))
 
@@ -1146,17 +1172,12 @@ def start_training(ui):
     print("Entrenando DNN...")
     
     def update_chart(history, embeds=None, preds=None, y_true=None):
-        with ui.training_chart_output:
-            clear_output(wait=True)
-            
-            # --- PARTE 1: Model Card (Header e KPIs) ---
-            # Geramos métricas parciais baseadas no y_true e preds
-            from sklearn.metrics import classification_report, confusion_matrix
+        # 1. Atualizar Header HTML (KPIs)
+        with ui.training_header_output:
+            from sklearn.metrics import classification_report
             try:
-                cm = confusion_matrix(y_true, (preds > 0.5).astype(int))
                 rep = classification_report(y_true, (preds > 0.5).astype(int), output_dict=True, zero_division=0)
             except:
-                cm = np.zeros((2,2))
                 rep = {}
 
             hp_live = {
@@ -1170,14 +1191,21 @@ def start_training(ui):
                 'comment': ui.w_comment.value,
                 'training_date': 'En progreso...'
             }
-            metrics_live = {'classification_report': rep}
-            
-            display(HTML(render_model_card_html(hp_live, metrics_live)))
+            clear_output(wait=True)
+            display(HTML(render_model_card_html(hp_live, {'classification_report': rep})))
 
-            # --- PARTE 2: Gráficos ---
+        # 2. Atualizar Gráficos (Matplotlib)
+        with ui.training_chart_output:
+            from sklearn.metrics import confusion_matrix
+            try:
+                cm = confusion_matrix(y_true, (preds > 0.5).astype(int))
+            except:
+                cm = np.zeros((2,2))
+
+            clear_output(wait=True)
             fig = plt.figure(figsize=(16, 4.5))
             
-            # 1. Confusion Matrix (Live)
+            # Confusion Matrix
             ax1 = fig.add_subplot(1, 3, 1)
             cax = ax1.matshow(cm, cmap='Blues', alpha=0.8)
             for (i, j), z in np.ndenumerate(cm):
@@ -1186,28 +1214,25 @@ def start_training(ui):
             ax1.set_xticks([0, 1]); ax1.set_yticks([0, 1])
             ax1.set_xticklabels(['No-fuego', 'Fuego']); ax1.set_yticklabels(['No-fuego', 'Fuego'])
             
-            # 2. Loss & Acc (Live)
+            # Loss & Acc
             ax2 = fig.add_subplot(1, 3, 2)
             ax2.plot(history['steps'], history['acc'], color='#28a745', label='Acc Treino', linewidth=2)
             ax2.plot(history['steps'], history['val_acc'], color='#28a745', label='Acc Validação', linestyle='--', alpha=0.6)
             ax2.set_ylabel('Acurácia', color='#28a745', weight='bold')
-            
             ax2b = ax2.twinx()
             ax2b.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
             ax2b.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
             ax2.set_title('Evolución (Loss vs Acc)', weight='bold')
             ax2.grid(True, linestyle='--', alpha=0.3)
 
-            # 3. Live Playground (Latent Space 3D)
+            # Live Playground
             if embeds is not None:
                 from sklearn.decomposition import PCA
                 try:
                     pca = PCA(n_components=3)
                     coords = pca.fit_transform(embeds)
                     ax3 = fig.add_subplot(1, 3, 3, projection='3d')
-                    sc = ax3.scatter(coords[:, 0], coords[:, 1], coords[:, 2], 
-                                     c=preds, cmap='RdBu_r', s=20, alpha=0.7, 
-                                     edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
+                    ax3.scatter(coords[:, 0], coords[:, 1], coords[:, 2], c=preds, cmap='RdBu_r', s=20, alpha=0.7, edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
                     ax3.set_title('Espaço Latente (Playground)', fontsize=10, weight='bold')
                     ax3.set_xticks([]); ax3.set_yticks([]); ax3.set_zticks([])
                 except: pass
