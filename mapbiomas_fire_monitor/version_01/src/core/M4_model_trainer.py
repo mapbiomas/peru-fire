@@ -1211,7 +1211,11 @@ def start_training(ui):
             from sklearn.decomposition import PCA
             
             try:
-                cm = confusion_matrix(y_true, (preds > 0.5).astype(int))
+                # Forçar arrays unidimensionais para evitar IndexError
+                y_true_f = y_true.flatten()
+                preds_f = preds.flatten()
+                
+                cm = confusion_matrix(y_true_f, (preds_f > 0.5).astype(int))
                 cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
             except:
                 cm = np.zeros((2,2)); cm_norm = np.zeros((2,2))
@@ -1253,15 +1257,16 @@ def start_training(ui):
 
             # (2,1) Histograma de Confianza (Probabilidades)
             ax4 = fig.add_subplot(2, 3, 4)
-            ax4.hist(preds[y_true==0], bins=30, alpha=0.5, color='#007bff', label='No-Fuego', density=True)
-            ax4.hist(preds[y_true==1], bins=30, alpha=0.5, color='#ff4d4d', label='Fuego', density=True)
+            # Usar os arrays achatados aqui
+            ax4.hist(preds_f[y_true_f==0], bins=30, alpha=0.5, color='#007bff', label='No-Fuego', density=True)
+            ax4.hist(preds_f[y_true_f==1], bins=30, alpha=0.5, color='#ff4d4d', label='Fuego', density=True)
             ax4.set_title('Distribución de Probabilidades', weight='bold')
             ax4.set_xlabel('Confianza (Predicción)'); ax4.legend(fontsize=8); ax4.grid(True, alpha=0.2)
 
             # (2,2) Curva Precision-Recall
             try:
-                precision, recall, _ = precision_recall_curve(y_true, preds)
-                ap_score = average_precision_score(y_true, preds)
+                precision, recall, _ = precision_recall_curve(y_true_f, preds_f)
+                ap_score = average_precision_score(y_true_f, preds_f)
                 ax5 = fig.add_subplot(2, 3, 5)
                 ax5.plot(recall, precision, color='#17a2b8', linewidth=2, label=f'AP={ap_score:.3f}')
                 ax5.fill_between(recall, precision, alpha=0.2, color='#17a2b8')
