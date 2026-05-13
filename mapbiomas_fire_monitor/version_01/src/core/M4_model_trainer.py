@@ -397,7 +397,7 @@ class ModelTrainer:
         preds = (1 / (1 + np.exp(-np.clip(logits, -20, 20)))).flatten() > 0.5
         
         cm = confusion_matrix(self._y_raw, preds)
-        rep = classification_report(self._y_raw, preds, output_dict=True)
+        rep = classification_report(self._y_raw, preds, output_dict=True, zero_division=0)
         return cm, rep
 
     def load(self, training_id, shortname):
