@@ -823,31 +823,6 @@ def view_analytics(model_info, out_widget=None):
         path_variants = [f"gs://mapbiomas-fire/{clean_path}", f"mapbiomas-fire/{clean_path}"]
         meta_filenames = ['metadata.json', 'hyperparameters.json']
         
-        last_err = ""
-        for p in path_variants:
-            for m_name in meta_filenames:
-                try:
-                    with fs.open(f"{p}/{m_name}", 'r') as f: hp = json.load(f)
-                    with fs.open(f"{p}/metrics.json", 'r') as f: metrics = json.load(f)
-                    if hp and metrics: break
-                except Exception as e:
-                    last_err = str(e); continue
-            if hp: break
-        
-        if not hp:
-            # Fallback Robusto com gsutil
-            import tempfile, subprocess
-            with tempfile.TemporaryDirectory() as tmpdir:
-                for m_name in meta_filenames:
-                    try:
-                        p_final = f"gs://mapbiomas-fire/{clean_path}"
-                        subprocess.run(['gsutil', 'cp', f"{p_final}/{m_name}", f"{tmpdir}/hp.json"], check=True, capture_output=True)
-                        subprocess.run(['gsutil', 'cp', f"{p_final}/metrics.json", f"{tmpdir}/met.json"], check=True, capture_output=True)
-                        with open(f"{tmpdir}/hp.json") as f: hp = json.load(f)
-                        with open(f"{tmpdir}/met.json") as f: metrics = json.load(f)
-                        if hp: break
-                    except Exception as e2: last_err = f"gsutil failed: {e2}"
-
         if out_widget:
             out_widget.clear_output(wait=True)
             with out_widget:
@@ -1019,14 +994,19 @@ class ModelTrainerUI(PipelineStepUI):
     def __init__(self):
         super().__init__(
             title="M4 - Entrenador del Modelo (DNN)", 
-            description="Interfaz Matricial de Muestras, entrenamiento de red neuronal y análisis postergados."
+            description="Centro de Operaciones de Entrenamiento y Auditoría de Modelos."
         )
         self.trainer_instance = None
         self.chk_dict = {}
         self.search_query_samples = ""
-        self.search_query_models = "" # Novo: busca no ranking
-        self.sort_column = "acc"      # Novo: coluna de ordenação
-        self.sort_ascending = False   # Novo: ordem descrescente (melhores primeiro)
+        self.search_query_models = "" 
+        self.sort_column = "acc"      
+        self.sort_ascending = False   
+        
+        # --- ESTADO DEL CANVAS ---
+        self.selected_models = {} # ID -> info
+        self.canvas_output = widgets.Output(layout=widgets.Layout(background_color='white', padding='20px'))
+        
         self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
 
     def _on_select_all_samples(self, _):
@@ -1231,17 +1211,6 @@ class ModelTrainerUI(PipelineStepUI):
             self.w_comment
         ], layout=L(padding='15px'))
         
-        # --- TAB 2: Monitorización en Vivo (Live) ---
-        self.training_header_output = widgets.Output(layout=L(margin='0 0 10px 0'))
-        self.training_chart_output = widgets.Output(layout=L(border='1px solid #dee2e6', border_radius='4px', padding='10px', min_height='250px'))
-        
-        tab_live = widgets.VBox([
-            widgets.HTML("<b>📈 Entrenamiento Actual (En vivo)</b>"),
-            widgets.HTML("<p style='font-size:11px;color:#666;margin-bottom:10px;'>Acompanhe o progresso do seu modelo e a separação dos clusters em tempo real.</p>"),
-            self.training_header_output,
-            self.training_chart_output,
-        ], layout=L(padding='15px'))
-
         # --- TAB 3: Historial & Analytics ---
         self.analytics_dashboard_output = widgets.Output(layout=L(border='1px solid #dee2e6', border_radius='4px', padding='10px', min_height='300px', margin='10px 0', background_color='#fafafa'))
         self.analytics_area = widgets.VBox()
@@ -1294,29 +1263,21 @@ class ModelTrainerUI(PipelineStepUI):
         ranking_data.sort(key=lambda x: x[self.sort_column], reverse=not self.sort_ascending)
         if show_loader: self.hide_loader()
 
-        # --- TOOLBAR MINIMALISTA ---
-        txt_search = widgets.Text(value=self.search_query_models, placeholder='🔍 Buscar modelo...', layout=widgets.Layout(width='300px'))
+        # --- TOOLBAR ---
+        txt_search = widgets.Text(value=self.search_query_models, placeholder='🔍 Buscar...', layout=widgets.Layout(width='300px'))
         txt_search.observe(self._on_search_models_change, names='value')
-        btn_refresh = widgets.Button(description="Actualizar base de modelos", icon='refresh', layout=widgets.Layout(width='220px'), button_style='success')
+        btn_refresh = widgets.Button(description="Actualizar base", icon='refresh', layout=widgets.Layout(width='180px'), button_style='success')
         btn_refresh.on_click(lambda _: self._refresh_models_list(show_loader=True))
-        
-        # Ações em lote discretas (apenas se houver seleção)
-        btn_view_batch = widgets.Button(description="Ver seleccionados", icon='search', layout=widgets.Layout(width='150px'))
-        btn_view_batch.on_click(lambda _: self._on_view_batch_logic(ranking_data))
-
-        toolbar = widgets.HBox([txt_search, btn_refresh, btn_view_batch], layout=widgets.Layout(margin='0 0 15px 0', align_items='center', gap='15px'))
+        toolbar = widgets.HBox([txt_search, btn_refresh], layout=widgets.Layout(margin='0 0 15px 0', align_items='center', gap='15px'))
 
         # LARGURAS
         W = {'sel': '35px', 'pos': '45px', 'id': '200px', 'met': '55px', 'sep': '15px', 'stars': '95px', 'btn': '45px'}
 
-        # --- HEADER INTERATIVO (SORT) ---
         def make_sort_head(label, key, width):
             icon = 'sort-desc' if self.sort_column == key and not self.sort_ascending else \
                    'sort-asc' if self.sort_column == key and self.sort_ascending else 'sort'
             btn = widgets.Button(description=label, icon=icon, layout=widgets.Layout(width=width, height='30px', margin='0', padding='0'))
-            btn.style.button_color = '#34495e'
-            btn.style.font_weight = 'bold'
-            
+            btn.style.button_color = '#34495e'; btn.style.font_weight = 'bold'
             def _on_click(_):
                 if self.sort_column == key: self.sort_ascending = not self.sort_ascending
                 else: self.sort_column = key; self.sort_ascending = False
@@ -1325,7 +1286,7 @@ class ModelTrainerUI(PipelineStepUI):
             return btn
 
         header = widgets.HBox([
-            widgets.HTML("<div style='width:35px;'></div>"), # Checkbox
+            widgets.HTML("<div style='width:35px;'></div>"), 
             widgets.HTML("<div style='width:45px; color:white; font-weight:bold; text-align:center;'>#</div>"),
             make_sort_head("ID", "id", W['id']),
             make_sort_head("ACC", "acc", W['met']),
@@ -1333,14 +1294,14 @@ class ModelTrainerUI(PipelineStepUI):
             make_sort_head("REC", "rec", W['met']),
             make_sort_head("F1", "f1", W['met']),
             widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #fff; height:20px;'></div>"),
-            make_sort_head("IA 🤖", "auto_rating", W['stars']),
-            make_sort_head("IH 👤", "human_rating", W['stars']),
-            widgets.HTML(f"<div style='width:100px; color:white; font-weight:bold; text-align:center;'>ACCIONES</div>"),
+            make_sort_head("IA", "auto_rating", W['stars']),
+            make_sort_head("IH", "human_rating", W['stars']),
+            widgets.HTML(f"<div style='width:50px; color:white; font-weight:bold; text-align:center;'>DEL</div>"),
         ], layout=widgets.Layout(background='#2c3e50', padding='8px', border_radius='8px 8px 0 0', align_items='center'))
 
         final_rows = []
         for i, r in enumerate(ranking_data):
-            medal = "🥇" if i == 0 and not self.sort_ascending and self.sort_column in ['acc','f1','auto_rating'] else f"#{i+1}"
+            medal = "🥇" if i == 0 and not self.sort_ascending and self.sort_column in ['acc','f1'] else f"#{i+1}"
             
             def make_star_row(val, color, is_human=False):
                 btns = []
@@ -1355,17 +1316,18 @@ class ModelTrainerUI(PipelineStepUI):
                     btns.append(b)
                 return widgets.HBox(btns, layout=widgets.Layout(width=W['stars'], justify_content='center'))
 
-            chk = widgets.Checkbox(value=False, indent=False, layout=widgets.Layout(width=W['sel']))
-            self.model_chk_map[r['id']] = chk
-            
-            btn_card = widgets.Button(icon='search', layout=widgets.Layout(width=W['btn']), button_style='info', tooltip='Ver Card')
-            btn_card.on_click(lambda _, info=r['info']: view_analytics(info, out_widget=self.analytics_dashboard_output))
-            
-            btn_trash = widgets.Button(icon='trash', layout=widgets.Layout(width=W['btn']), button_style='danger', tooltip='Eliminar Modelo')
+            chk = widgets.Checkbox(value=r['id'] in self.selected_models, indent=False, layout=widgets.Layout(width=W['sel']))
+            def _on_chk_change(change, info=r['info'], rid=r['id']):
+                if change['new']: self.selected_models[rid] = info
+                else: self.selected_models.pop(rid, None)
+                self._update_canvas()
+            chk.observe(_on_chk_change, names='value')
+
+            btn_trash = widgets.Button(icon='trash', layout=widgets.Layout(width='40px'), button_style='danger')
             def _on_del_single(_, rid=r['id'], rs=r['short']):
-                self.show_loader(f"Eliminando {rid}...")
                 ModelTrainer().delete_model(rid, rs)
-                self._refresh_models_list(show_loader=True)
+                self.selected_models.pop(rid, None)
+                self._refresh_models_list(show_loader=True); self._update_canvas()
             btn_trash.on_click(_on_del_single)
 
             row = widgets.HBox([
@@ -1379,17 +1341,55 @@ class ModelTrainerUI(PipelineStepUI):
                 widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #ddd; height:20px;'></div>"),
                 make_star_row(r['auto_rating'], '#bdc3c7'),
                 make_star_row(r['human_rating'], '#f1c40f', True),
-                widgets.HBox([btn_card, btn_trash], layout=widgets.Layout(width='100px', justify_content='center', gap='5px'))
+                btn_trash
             ], layout=widgets.Layout(padding='5px', border_bottom='1px solid #eee', align_items='center', background='#fff' if i%2==0 else '#f9f9f9'))
             final_rows.append(row)
 
         self.analytics_area.children = [toolbar, widgets.VBox([header, widgets.VBox(final_rows, layout=widgets.Layout(border='1px solid #dee2e6', border_radius='0 0 8px 8px'))])]
 
+    def _update_canvas_live(self, history, embeds, preds, y_true, samples, b_cfg):
+        self.canvas_output.clear_output(wait=True)
+        with self.canvas_output:
+            # 1. HEADER DO TREINO ATUAL
+            from sklearn.metrics import classification_report
+            try:
+                rep = classification_report(y_true, (preds > 0.5).astype(int), output_dict=True, zero_division=0)
+            except: rep = {}
+            
+            hp_live = {
+                'training_id': self.w_training_id.value, 'shortname': self.w_shortname.value,
+                'sample_collections': samples, 'bands_input': sorted(b_cfg.keys()),
+                'layers': self.w_layers.value, 'lr': self.w_lr.value,
+                'sample_count': self.trainer_instance._sample_count, 'comment': self.w_comment.value,
+                'training_date': '🚀 Entrenamiento en curso...'
+            }
+            display(HTML("<h2 style='color:#2c3e50; border-bottom:3px solid #3498db; padding-bottom:5px; margin-bottom:15px;'>🚀 Entrenamiento en Vivo</h2>"))
+            display(HTML(render_model_card_html(hp_live, {'classification_report': rep})))
+            render_diagnostic_dashboard(history, embeds, preds, y_true)
+            display(HTML("<div style='margin:50px 0; border-top:3px solid #3498db;'></div>"))
+            
+            # 2. MODELOS DO RANKING (PARALELO)
+            for mid, info in self.selected_models.items():
+                view_analytics(info, out_widget=None, clear_before=False)
+                display(HTML("<div style='margin:40px 0; border-top:1px dashed #ccc;'></div>"))
+
+    def _update_canvas(self):
+        self.canvas_output.clear_output(wait=True)
+        with self.canvas_output:
+            if not self.selected_models and not self.trainer_instance:
+                display(HTML("<div style='padding:100px; text-align:center; background:white;'> <span style='font-size:50px;'>🎨</span><br><h3 style='color:#999;'>El Canvas está vacío</h3><p style='color:#ccc;'>Seleccione modelos en <b>Trenamientos</b> para visualizarlos aquí.</p></div>"))
+                return
+            
+            # Modelos Selecionados do Ranking
+            for mid, info in self.selected_models.items():
+                view_analytics(info, out_widget=None, clear_before=False)
+                display(HTML("<div style='margin:40px 0; border-top:1px dashed #ccc;'></div>"))
+
     def _on_view_batch_logic(self, ranking_data):
         selected = [r['info'] for r in ranking_data if self.model_chk_map[r['id']].value]
         if not selected: return
-        self.analytics_dashboard_output.clear_output()
-        with self.analytics_dashboard_output:
+        self.canvas_output.clear_output()
+        with self.canvas_output:
             display(HTML(f"<h3 style='color:#007bff;'>📂 Comparativa ({len(selected)} modelos)</h3>"))
             for info in selected: view_analytics(info, out_widget=None)
 
@@ -1468,37 +1468,15 @@ def start_training(ui):
     
     print("Entrenando DNN...")
     
+    # Mudar para aba Canvas
+    ui.tab.selected_index = 1
+    
     def update_chart(history, embeds=None, preds=None, y_true=None):
-        # 1. Atualizar Header HTML (KPIs)
-        with ui.training_header_output:
-            from sklearn.metrics import classification_report
-            try:
-                rep = classification_report(y_true, (preds > 0.5).astype(int), output_dict=True, zero_division=0)
-            except:
-                rep = {}
+        with ui.canvas_output:
+            # Mantemos o que já está no canvas, mas o topo é o treino
+            # Para isso limpamos e re-renderizamos tudo
+            ui._update_canvas_live(history, embeds, preds, y_true, selected_samples, bands_config)
 
-            hp_live = {
-                'training_id': ui.w_training_id.value,
-                'shortname': ui.w_shortname.value,
-                'sample_collections': selected_samples,
-                'bands_input': sorted(bands_config.keys()),
-                'layers': ui.w_layers.value,
-                'lr': ui.w_lr.value,
-                'sample_count': ui.trainer_instance._sample_count,
-                'comment': ui.w_comment.value,
-                'training_date': 'En progreso...'
-            }
-            clear_output(wait=True)
-            display(HTML(render_model_card_html(hp_live, {'classification_report': rep})))
-
-        # 2. RENDERIZAR GRID 2x3 UNIFICADO
-        with ui.training_chart_output:
-            clear_output(wait=True)
-            if hasattr(ui.trainer_instance, 'diagnostic_snapshot'):
-                render_diagnostic_dashboard(ui.trainer_instance.diagnostic_snapshot)
-            else:
-                render_diagnostic_dashboard(history, embeds, preds, y_true)
-            
     # Iniciar Treino
     ui.trainer_instance.train(X_train, y_train, X_val=X_val, y_val=y_val, 
                               batch_size=batch, n_iters=iters, logger=_logger, update_chart_fn=update_chart)
