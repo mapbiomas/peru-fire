@@ -805,7 +805,7 @@ def render_model_card_html(hp, metrics):
     """
     return html_content
 
-def view_analytics(model_info, out_widget=None):
+def view_analytics(model_info, out_widget=None, clear_before=True):
     """Visualiza as métricas e o card de um modelo salvo no GCS."""
     fs = _get_fs()
     try:
@@ -824,7 +824,7 @@ def view_analytics(model_info, out_widget=None):
         meta_filenames = ['metadata.json', 'hyperparameters.json']
         
         if out_widget:
-            out_widget.clear_output(wait=True)
+            if clear_before: out_widget.clear_output(wait=True)
             with out_widget:
                 # --- SISTEMA DE VOTACIÓN "SAFO" (UNIFICADO) ---
                 h_rating = hp.get('rating', 0)
