@@ -458,21 +458,20 @@ class ModelTrainer:
 
     @staticmethod
     def delete_model(training_id, shortname):
-        """Deleta recursivamente a pasta do modelo no GCS."""
-        import subprocess
-        from M0_auth_config import gcs_path
+        """Deleta recursivamente a pasta do modelo no GCS usando GCSFS."""
+        from M_cache import _get_fs
+        from M0_auth_config import CONFIG
+        fs = _get_fs()
         base_uri = model_path(training_id, shortname)
-        full_gcs_uri = gcs_path(base_uri)
-        if not full_gcs_uri.endswith('/'): full_gcs_uri += '/'
+        # Caminho completo para o gcsfs (ex: bucket/models/...)
+        full_path = f"{CONFIG['bucket']}/{base_uri}"
         
-        print(f"🧹 Eliminando carpeta del modelo: {full_gcs_uri}")
+        print(f"🧹 Eliminando carpeta del modelo (GCSFS): {full_path}")
         try:
-            # -m para remover em paralelo (rápido) e -r para recursivo
-            subprocess.run(['gsutil', '-m', 'rm', '-r', full_gcs_uri], check=True, capture_output=True)
+            if fs.exists(full_path):
+                fs.rm(full_path, recursive=True)
             return True
         except Exception as e:
-            # Se já não existe, ignoramos
-            if 'not found' in str(e).lower(): return True
             raise RuntimeError(f"No se pudo eliminar de GCS: {e}")
 
     def save_projector_files(self, training_id, shortname, X, y, logger=None):
@@ -499,11 +498,12 @@ class ModelTrainer:
             
             # Upload to GCS
             dest_dir = f"{base_path}/projector"
+            fs = _get_fs()
             for fname in ['vectors.tsv', 'metadata.tsv']:
                 src = os.path.join(tmpdir, fname)
-                dest = gcs_path(f"{dest_dir}/{fname}")
+                dest = f"{CONFIG['bucket']}/{dest_dir}/{fname}"
                 if logger: logger(f"  📤 Subiendo {fname} a GCS...", "info")
-                subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                fs.put(src, dest)
             
             if logger: 
                 logger(f"✅ Arquivos do Projector salvos em: {dest_dir}", "info")
@@ -543,8 +543,8 @@ class ModelTrainer:
 
             for fname in ['weights.npz', 'metadata.json']:
                 src  = os.path.join(tmpdir, fname)
-                dest = gcs_path(f"{base_path}/{fname}")
-                subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                dest = f"{CONFIG['bucket']}/{base_path}/{fname}"
+                fs.put(src, dest)
             
             # 2.5 Metrics
             if logger: logger("Generación y guardado de métricas de evaluación...", "info")
@@ -585,7 +585,7 @@ class ModelTrainer:
             }
             with open(os.path.join(tmpdir, 'metrics.json'), 'w') as f:
                 json.dump(metrics, f, indent=2)
-            subprocess.run(['gsutil', 'cp', os.path.join(tmpdir, 'metrics.json'), gcs_path(f"{base_path}/metrics.json")], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            fs.put(os.path.join(tmpdir, 'metrics.json'), f"{CONFIG['bucket']}/{base_path}/metrics.json")
             
             # --- 2.7 TensorBoard Projector Files (Auto-Snapshot) ---
             try:
@@ -601,8 +601,8 @@ class ModelTrainer:
             
             for fname in ['X_data.npy', 'y_data.npy']:
                 src  = os.path.join(tmpdir, fname)
-                dest = gcs_path(f"{base_path}/extracted_pixels/{fname}")
-                subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                dest = f"{CONFIG['bucket']}/{base_path}/extracted_pixels/{fname}"
+                fs.put(src, dest)
                 
         # 4. Copy samples
         if logger: logger("Copiar archivos CSV de las muestras para su almacenamiento...", "info")
@@ -636,7 +636,7 @@ class ModelTrainer:
                 tmp_file = os.path.join(tmpdir, 'metadata.json')
                 with open(tmp_file, 'w') as f:
                     json.dump(hp, f, indent=2)
-                subprocess.run(['gsutil', 'cp', tmp_file, gcs_path(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                fs.put(tmp_file, f"{CONFIG['bucket']}/{path}")
             return True
         except Exception as e:
             print(f"❌ Erro ao atualizar metadados: {e}")
@@ -815,184 +815,112 @@ def render_model_card_html(hp, metrics):
 def view_analytics(model_info, out_widget=None, clear_before=True):
     """Visualiza as métricas e o card de um modelo salvo no GCS."""
     fs = _get_fs()
+    from M0_auth_config import CONFIG
     try:
         import urllib.parse
         m_path = model_info['path']
         m_path = urllib.parse.unquote(m_path)
-        
-        # Limpar o caminho para ter apenas o que importa
         clean_path = m_path.replace('gs://', '').replace('mapbiomas-fire/', '').lstrip('/')
-        if 'b/' in clean_path and '/o/' in clean_path:
-            clean_path = clean_path.split('/o/')[-1]
+        if 'b/' in clean_path and '/o/' in clean_path: clean_path = clean_path.split('/o/')[-1]
         
-        # Tentar carregar os arquivos testando variantes de caminho e NOMES
-        hp, metrics = None, None
-        path_variants = [f"gs://mapbiomas-fire/{clean_path}", f"mapbiomas-fire/{clean_path}"]
-        meta_filenames = ['metadata.json', 'hyperparameters.json']
-        
+        try:
+            with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f: hp = json.load(f)
+            with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
+        except:
+            with fs.open(f"{CONFIG['bucket']}/{clean_path}/hyperparameters.json", 'r') as f: hp = json.load(f)
+            with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
+
+        def _render_content():
+            # --- SISTEMA DE VOTACIÓN "SAFO" (UNIFICADO) ---
+            h_rating = hp.get('rating', 0)
+            a_rating = metrics.get('auto_rating', 0)
+            
+            ai_btns = []
+            for s_idx in range(1, 6):
+                char = "★" if s_idx <= a_rating else "☆"
+                b = widgets.Button(description=char, layout=widgets.Layout(width='30px', height='30px', margin='0', padding='0'))
+                b.style.button_color = '#bdc3c7' if s_idx <= a_rating else '#fff'
+                ai_btns.append(b)
+            ai_panel = widgets.HBox([widgets.HTML("🤖 <b>IA:</b>", layout=widgets.Layout(margin='0 10px 0 0'))] + ai_btns)
+            
+            user_btns = []
+            status_msg = widgets.HTML("", layout=widgets.Layout(margin='0 0 0 10px'))
+            def _upd_stars(val):
+                for idx, b in enumerate(user_btns):
+                    b.description = "★" if idx < val else "☆"
+                    b.style.button_color = '#f1c40f' if idx < val else '#fff'
+            def _hnd(val):
+                def handler(_):
+                    if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
+                        _upd_stars(val); status_msg.value = "✅"
+                        try:
+                            import __main__
+                            if hasattr(__main__, 'ui'): __main__.ui._refresh_models_list()
+                        except: pass
+                return handler
+            for i in range(1, 6):
+                btn = widgets.Button(description="★" if i <= h_rating else "☆", 
+                                   layout=widgets.Layout(width='30px', height='30px', margin='0', padding='0'),
+                                   style={'button_color': '#f1c40f' if i <= h_rating else '#fff'})
+                btn.on_click(_hnd(i)); user_btns.append(btn)
+            user_panel = widgets.HBox([widgets.HTML("👤 <b>IH:</b>", layout=widgets.Layout(margin='0 10px 0 20px'))] + user_btns + [status_msg])
+            
+            display(widgets.HBox([ai_panel, user_panel], layout=widgets.Layout(align_items='center', padding='10px', background='#fdfdfd', border='1px solid #eee', border_radius='8px', margin='10px 0')))
+            display(HTML(render_model_card_html(hp, metrics)))
+            
+            # --- DIAGNÓSTICO ---
+            snap = metrics.get('diagnostic_snapshot')
+            if snap:
+                pca_coords = np.array(snap.get('pca_coords', []))
+                tsne_coords = np.array(snap.get('tsne_coords', []))
+                preds = np.array(snap['preds'])
+                y_sub = np.array(snap['y_true'])
+                render_diagnostic_dashboard(hp.get('history', {}), None, preds, y_sub, coords_override=pca_coords)
+                
+                import plotly.graph_objects as go
+                use_tsne = tsne_coords is not None and len(tsne_coords) > 0
+                coords_p = tsne_coords if use_tsne else pca_coords
+                if len(coords_p) > 0:
+                    fig_p = go.Figure(data=[go.Scatter3d(
+                        x=coords_p[:,0], y=coords_p[:,1], z=coords_p[:,2], mode='markers',
+                        marker=dict(size=4, color=preds, colorscale='RdBu_r', opacity=0.8, showscale=True),
+                        text=[f"Clase: {'F' if l==1 else 'NF'}<br>Pred: {p:.2%}" for l, p in zip(y_sub, preds)]
+                    )])
+                    fig_p.update_layout(title="Auditoría 3D", margin=dict(l=0, r=0, b=0, t=30), scene=dict(xaxis_title='V1', yaxis_title='V2', zaxis_title='V3'))
+                    display(HTML(fig_p.to_html(include_plotlyjs=True, full_html=False)))
+            else:
+                try:
+                    with fs.open(f"{CONFIG['bucket']}/{clean_path}/weights.npz", 'rb') as f: weights = dict(np.load(f))
+                    trainer_tmp = ModelTrainer(num_input=hp['num_input'], layers=hp['layers'])
+                    trainer_tmp._saved_vars = weights
+                    trainer_tmp.norm_stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
+                    X_sub = np.random.randn(300, hp['num_input']); y_sub = np.zeros(300)
+                    embeds = trainer_tmp.get_embeddings(X_sub); preds = trainer_tmp.predict(X_sub)
+                    render_diagnostic_dashboard(hp.get('history', {}), embeds, preds, y_sub)
+                except: pass
+
+            # --- TENSORBOARD PROJECTOR ---
+            vec_url = f"https://storage.googleapis.com/mapbiomas-fire/{clean_path}/projector/vectors.tsv"
+            meta_url = f"https://storage.googleapis.com/mapbiomas-fire/{clean_path}/projector/metadata.tsv"
+            display(HTML(f"""
+            <div style="background:#f0f7ff; border-radius:12px; padding:25px; margin-top:30px; border:1px solid #cce5ff;">
+                <h3 style="margin:0; color:#004085;">🚀 Auditoría de Clusters con TensorBoard</h3>
+                <div style="display:flex; gap:15px; margin-top:20px;">
+                    <a href="{vec_url}" target="_blank" download style="flex:1; text-align:center; background:#007bff; color:white; padding:12px; border-radius:6px; text-decoration:none; font-weight:bold;">📥 Vectors (.tsv)</a>
+                    <a href="{meta_url}" target="_blank" download style="flex:1; text-align:center; background:#17a2b8; color:white; padding:12px; border-radius:6px; text-decoration:none; font-weight:bold;">📥 Metadata (.tsv)</a>
+                </div>
+            </div>
+            """))
+
         if out_widget:
             if clear_before: out_widget.clear_output(wait=True)
-            with out_widget:
-                # --- SISTEMA DE VOTACIÓN "SAFO" (UNIFICADO) ---
-                h_rating = hp.get('rating', 0)
-                a_rating = metrics.get('auto_rating', 0)
-                
-                # IA Stars (Prata)
-                ai_btns = []
-                for s_idx in range(1, 6):
-                    char = "★" if s_idx <= a_rating else "☆"
-                    b = widgets.Button(description=char, layout=widgets.Layout(width='30px', height='30px', margin='0', padding='0'))
-                    b.style.button_color = '#bdc3c7' if s_idx <= a_rating else '#fff'
-                    ai_btns.append(b)
-                
-                ai_panel = widgets.HBox([widgets.HTML("🤖 <b>IA:</b>", layout=widgets.Layout(margin='0 10px 0 0'))] + ai_btns)
-                
-                # Humano Stars (Amarelo)
-                user_btns = []
-                status_msg = widgets.HTML("", layout=widgets.Layout(margin='0 0 0 10px'))
-
-                def _upd_stars(val):
-                    for idx, b in enumerate(user_btns):
-                        b.description = "★" if idx < val else "☆"
-                        b.style.button_color = '#f1c40f' if idx < val else '#fff'
-
-                def _hnd(val):
-                    def handler(_):
-                        if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
-                            _upd_stars(val)
-                            status_msg.value = "✅"
-                            try:
-                                import __main__
-                                if hasattr(__main__, 'ui'): __main__.ui._refresh_models_list()
-                            except: pass
-                    return handler
-
-                for i in range(1, 6):
-                    btn = widgets.Button(description="★" if i <= h_rating else "☆", 
-                                       layout=widgets.Layout(width='30px', height='30px', margin='0', padding='0'),
-                                       style={'button_color': '#f1c40f' if i <= h_rating else '#fff'})
-                    btn.on_click(_hnd(i))
-                    user_btns.append(btn)
-                
-                user_panel = widgets.HBox([widgets.HTML("👤 <b>IH:</b>", layout=widgets.Layout(margin='0 10px 0 20px'))] + user_btns + [status_msg])
-                
-                display(widgets.HBox([ai_panel, user_panel], 
-                                   layout=widgets.Layout(align_items='center', padding='10px', 
-                                                       background='#fdfdfd', border='1px solid #eee', 
-                                                       border_radius='8px', margin='10px 0')))
-
-                display(HTML(render_model_card_html(hp, metrics)))
-                
-                # USAR SNAPSHOT PRÉ-CALCULADO (CARGA INSTANTÂNEA)
-                snap = metrics.get('diagnostic_snapshot')
-                X_sub, y_sub, embeds, preds = None, None, None, None
-                
-                if snap:
-                    # Se temos snapshot, usamos as coordenadas PCA/t-SNE prontas
-                    pca_coords = np.array(snap.get('pca_coords', []))
-                    tsne_coords = np.array(snap.get('tsne_coords', []))
-                    preds = np.array(snap['preds'])
-                    y_sub = np.array(snap['y_true'])
-                else:
-                    # MODO LEGACY: Tentar carregar pesos para gerar na hora (lento)
-                    try:
-                        p_final = f"gs://mapbiomas-fire/{clean_path}"
-                        print("📡 Modelo antiguo: Generando diagnóstico dinâmico...")
-                        with fs.open(f"{p_final}/weights.npz", 'rb') as f: weights = dict(np.load(f))
-                        trainer_tmp = ModelTrainer(num_input=hp['num_input'], layers=hp['layers'])
-                        trainer_tmp._saved_vars = weights
-                        trainer_tmp.norm_stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
-                        X_sub = np.random.randn(300, hp['num_input']); y_sub = np.zeros(300)
-                        embeds = trainer_tmp.get_embeddings(X_sub); preds = trainer_tmp.predict(X_sub)
-                    except: pass
-
-                # RENDERIZAR GRID 2x3 UNIFICADO
-                if snap:
-                    # Versão instantânea usando os dados do snapshot
-                    render_diagnostic_dashboard(hp.get('history', {}), None, preds, y_sub, coords_override=pca_coords)
-                    
-                    # PLOTLY INTERATIVO (t-SNE se existir, senão PCA)
-                    import plotly.graph_objects as go
-                    use_tsne = tsne_coords is not None and len(tsne_coords) > 0
-                    coords_p = tsne_coords if use_tsne else pca_coords
-                    title_p = "Auditoría t-SNE 3D (Instantánea)" if use_tsne else "Exploración PCA 3D (Instantánea)"
-                    
-                    if len(coords_p) > 0:
-                        fig_p = go.Figure(data=[go.Scatter3d(
-                            x=coords_p[:,0], y=coords_p[:,1], z=coords_p[:,2], mode='markers',
-                            marker=dict(size=4, color=preds, colorscale='RdBu_r', opacity=0.8, showscale=True),
-                            text=[f"Clase: {'F' if l==1 else 'NF'}<br>Pred: {p:.2%}" for l, p in zip(y_sub, preds)]
-                        )])
-                        fig_p.update_layout(title=title_p, margin=dict(l=0, r=0, b=0, t=30), scene=dict(xaxis_title='V1', yaxis_title='V2', zaxis_title='V3'))
-                        display(HTML(fig_p.to_html(include_plotlyjs=True, full_html=False)))
-                else:
-                    # Modo Legacy ou Live
-                    render_diagnostic_dashboard(hp.get('history', {}), embeds, preds, y_sub if y_sub is not None else np.array([]))
-
-                # --- SEÇÃO TENSORBOARD PROJECTOR (Elegante e Informativa) ---
-                p_final = f"gs://mapbiomas-fire/{clean_path}"
-                vec_url = f"https://storage.googleapis.com/mapbiomas-fire/{clean_path}/projector/vectors.tsv"
-                meta_url = f"https://storage.googleapis.com/mapbiomas-fire/{clean_path}/projector/metadata.tsv"
-                
-                display(HTML(f"""
-                <div style="background:#f0f7ff; border-radius:12px; padding:25px; margin-top:30px; border:1px solid #cce5ff; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-                    <div style="display:flex; align-items:center; margin-bottom:15px;">
-                        <span style="font-size:32px; margin-right:15px;">🚀</span>
-                        <h3 style="margin:0; color:#004085; font-weight:700;">Auditoría de Clusters con TensorBoard</h3>
-                    </div>
-                    
-                    <p style="color:#004085; font-size:14px; margin-bottom:20px;">
-                        Para una exploración profesional del espacio latente en 3D, utilice el motor de Google. 
-                        Este modelo tiene sus embeddings listos para ser visualizados sin sobrecargar su navegador.
-                    </p>
-
-                    <div style="background:#fff; border-radius:8px; padding:15px; border:1px solid #b8daff; margin-bottom:20px;">
-                        <b style="color:#004085; display:block; margin-bottom:10px;">📋 Instrucciones de uso:</b>
-                        <ol style="color:#333; font-size:13px; line-height:1.6;">
-                            <li>Descargue los archivos <b>Vectors</b> e <b>Metadata</b> usando os botões abaixo.</li>
-                            <li>Abra o site <a href="https://projector.tensorflow.org/" target="_blank" style="color:#007bff; font-weight:bold;">projector.tensorflow.org</a>.</li>
-                            <li>Clique em <b>"Load"</b> no menu lateral esquerdo.</li>
-                            <li>Suba o arquivo <code>vectors.tsv</code> no primeiro botão (Step 1).</li>
-                            <li>Suba o arquivo <code>metadata.tsv</code> no segundo botão (Step 2).</li>
-                            <li><i>Dica:</i> Selecione "T-SNE" ou "UMAP" no Projector para ver as nuvens de pontos!</li>
-                        </ol>
-                    </div>
-
-                    <div style="display:flex; gap:15px;">
-                        <a href="{vec_url}" target="_blank" download
-                           style="flex:1; text-align:center; background:#007bff; color:white; padding:12px; border-radius:6px; text-decoration:none; font-weight:bold; transition:0.3s; box-shadow:0 4px 6px rgba(0,123,255,0.2);">
-                           📥 Descargar Vectors (.tsv)
-                        </a>
-                        <a href="{meta_url}" target="_blank" download
-                           style="flex:1; text-align:center; background:#17a2b8; color:white; padding:12px; border-radius:6px; text-decoration:none; font-weight:bold; transition:0.3s; box-shadow:0 4px 6px rgba(23,162,184,0.2);">
-                           📥 Descargar Metadata (.tsv)
-                        </a>
-                    </div>
-                    
-                    <div style="margin-top:15px; font-size:11px; color:#6c757d; text-align:center;">
-                        📍 Ubicación en GCS: <code style="background:#eee; padding:2px 4px; border-radius:3px;">{clean_path}/projector/</code>
-                    </div>
-                </div>
-                """))
-
-                # SEÇÃO DE EXPLORAÇÃO DE CLUSTERS FINALIZADA
-                display(HTML(f"""
-                <div style="background:#f8f9fa; border:1px solid #dee2e6; padding:15px; border-radius:8px; margin-top:15px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <b style="color:#2c3e50; font-size:14px;">🚀 Análisis Avanzado (t-SNE / UMAP)</b><br>
-                            <span style="color:#7f8c8d; font-size:12px;">Para exploraciones pesadas de clusters, use el TensorBoard Projector.</span>
-                        </div>
-                        <a href="https://projector.tensorflow.org/" target="_blank" 
-                           style="background:#007bff; color:white; padding:8px 16px; border-radius:4px; text-decoration:none; font-weight:bold;">
-                           Abrir Projector
-                        </a>
-                    </div>
-                </div>
-                """))
+            with out_widget: _render_content()
+        else:
+            _render_content()
     except Exception as e:
         if out_widget:
             with out_widget: print(f"❌ Erro ao carregar analíticos: {e}")
+        else: print(f"❌ Erro ao carregar analíticos: {e}")
 
 
 
@@ -1038,13 +966,15 @@ class ModelTrainerUI(PipelineStepUI):
         ], layout=widgets.Layout(padding='20px', background_color='white'))
         
         self.tab = widgets.Tab(children=[
-            self.analytics_area,
-            self.canvas_area,
-            self.new_training_tab
+            self.new_training_tab, # Índice 0
+            self.analytics_area,    # Índice 1
+            self.canvas_area        # Índice 2
         ])
-        self.tab.set_title(0, "📊 Trenamientos")
-        self.tab.set_title(1, "🎨 Canvas")
-        self.tab.set_title(2, "⚙️ Novo Treino")
+        self.tab.set_title(0, "⚙️ Novo Treino")
+        self.tab.set_title(1, "📊 Trenamientos")
+        self.tab.set_title(2, "🎨 Canvas")
+        
+        self.tab.selected_index = 1 # Começa no Ranking
         
         self.main_area.children = [self.tab]
         self._refresh_models_list()
