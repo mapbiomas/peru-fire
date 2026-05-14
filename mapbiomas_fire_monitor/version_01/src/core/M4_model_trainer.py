@@ -892,7 +892,7 @@ def view_analytics(model_info, out_widget=None):
                     btn.on_click(_hnd(i))
                     user_btns.append(btn)
                 
-                user_panel = widgets.HBox([widgets.HTML("👤 <b>Tú:</b>", layout=widgets.Layout(margin='0 10px 0 20px'))] + user_btns + [status_msg])
+                user_panel = widgets.HBox([widgets.HTML("👤 <b>IH:</b>", layout=widgets.Layout(margin='0 10px 0 20px'))] + user_btns + [status_msg])
                 
                 display(widgets.HBox([ai_panel, user_panel], 
                                    layout=widgets.Layout(align_items='center', padding='10px', 
@@ -1334,7 +1334,7 @@ class ModelTrainerUI(PipelineStepUI):
             make_sort_head("F1", "f1", W['met']),
             widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #fff; height:20px;'></div>"),
             make_sort_head("IA 🤖", "auto_rating", W['stars']),
-            make_sort_head("TÚ 👤", "human_rating", W['stars']),
+            make_sort_head("IH 👤", "human_rating", W['stars']),
             widgets.HTML(f"<div style='width:100px; color:white; font-weight:bold; text-align:center;'>ACCIONES</div>"),
         ], layout=widgets.Layout(background='#2c3e50', padding='8px', border_radius='8px 8px 0 0', align_items='center'))
 
