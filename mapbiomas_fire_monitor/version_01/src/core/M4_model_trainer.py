@@ -952,10 +952,6 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
             btn_reex.on_click(_set_intent('re-extract'))
             btn_borr.on_click(_set_intent('borrar'))
 
-            lifecycle_panel = widgets.VBox([
-                widgets.HTML("<div style='font-size:11px; color:#6c757d; font-weight:bold; margin-bottom:5px; text-transform:uppercase;'>🔄 Ciclo de Vida</div>"),
-                widgets.HBox([btn_retr, btn_reex, btn_borr], layout=widgets.Layout(gap='10px'))
-            ], layout=widgets.Layout(background='#fff9f9', padding='15px', border='1px dashed #f5c6cb', border_radius='4px', margin='10px 0'))
 
             # --- INTEGRACIÓN DE CARD E CICLO DE VIDA ---
             # O Header é sempre exibido
@@ -981,6 +977,13 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
             # --- DIAGNÓSTICO ---
             snap = metrics.get('diagnostic_snapshot')
             if snap:
+                import plotly.graph_objects as go
+                # Paleta: #2c3e50 (No Fogo) -> #bdc3c7 (Dúvida) -> #e67e22 (Fogo)
+                fire_colorscale = [
+                    [0, '#2c3e50'],   # Azul Escuro / No Fire
+                    [0.5, '#bdc3c7'], # Cinza / Unsure
+                    [1, '#e67e22']    # Laranja / Fire
+                ]
                 pca_coords = np.array(snap.get('pca_coords', []))
                 tsne_coords = np.array(snap.get('tsne_coords', []))
                 preds = np.array(snap['preds'])
