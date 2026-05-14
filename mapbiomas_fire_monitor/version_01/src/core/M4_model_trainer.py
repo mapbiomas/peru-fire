@@ -766,12 +766,8 @@ def render_model_card_html(hp, metrics):
     html_content = f"""
     {style}
     <div class="dash-card">
-        <div class="dash-title" style="display:flex; justify-content:space-between; align-items:center;">
-            <span>📄 Ficha del modelo: {hp.get('training_id')} / {hp.get('shortname')}</span>
-            <div style="font-size:14px; display:flex; gap:15px;">
-                <span title="AI Rating" style="color:#ffc107;">🤖 {a_stars}</span>
-                <span title="Human Rating" style="color:#2c3e50;">👤 {h_stars}</span>
-            </div>
+        <div class="dash-title">
+            📄 Ficha del modelo: {hp.get('training_id')} / {hp.get('shortname')}
         </div>
         <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 15px;">
             <div style="flex: 2; min-width: 300px;">
@@ -855,6 +851,48 @@ def view_analytics(model_info, out_widget=None):
         if out_widget:
             out_widget.clear_output(wait=True)
             with out_widget:
+                # --- SISTEMA DE VOTACIÓN "SAFO" (TOPO) ---
+                h_rating = hp.get('rating', 0)
+                a_rating = metrics.get('auto_rating', 0)
+                
+                ai_label = widgets.HTML(f"<div style='margin-right:15px; color:#666; font-size:13px;'>🤖 <b>IA:</b> {'★'*a_rating}{'☆'*(5-a_rating)}</div>")
+                user_label = widgets.Label("👤 Tu Voto:", layout=widgets.Layout(margin='0 10px 0 0'))
+                
+                star_btns = []
+                star_box = widgets.HBox()
+                status_msg = widgets.HTML("", layout=widgets.Layout(margin='0 0 0 10px'))
+
+                def _update_stars(val):
+                    for idx, b in enumerate(star_btns):
+                        b.description = "★" if idx < val else "☆"
+                        b.style.button_color = '#fff9c4' if idx < val else '#fff'
+
+                def _create_handler(val):
+                    def handler(_):
+                        status_msg.value = "⏳..."
+                        if ModelTrainer().update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
+                            _update_stars(val)
+                            status_msg.value = "<b style='color:#28a745;'>✅ Voto guardado</b>"
+                            try:
+                                import __main__
+                                if hasattr(__main__, 'ui'): __main__.ui._refresh_models_list()
+                            except: pass
+                        else: status_msg.value = "❌"
+                    return handler
+
+                for i in range(1, 6):
+                    btn = widgets.Button(description="★" if i <= h_rating else "☆", 
+                                       layout=widgets.Layout(width='35px', height='35px', padding='0'),
+                                       style={'button_color': '#fff9c4' if i <= h_rating else '#fff'})
+                    btn.on_click(_create_handler(i))
+                    star_btns.append(btn)
+                
+                star_box.children = star_btns
+                display(widgets.HBox([ai_label, user_label, star_box, status_msg], 
+                                   layout=widgets.Layout(align_items='center', padding='10px 20px', 
+                                                       background='#fdfdfd', border='1px solid #eee', 
+                                                       border_radius='12px', margin='10px 0')))
+
                 display(HTML(render_model_card_html(hp, metrics)))
                 
                 # USAR SNAPSHOT PRÉ-CALCULADO (CARGA INSTANTÂNEA)
@@ -949,35 +987,7 @@ def view_analytics(model_info, out_widget=None):
                 </div>
                 """))
 
-                # SEÇÃO TENSORBOARD PROJECTOR (Elegante e Informativa) ---
-                # ... [CÓDIGO ANTERIOR DO PROJECTOR] ...
-                # (Vou manter o código do projector aqui, apenas adicionei o rating acima)
-                
-                # --- SISTEMA DE VOTACIÓN (STARS) ---
-                rating_slider = widgets.IntSlider(
-                    value=hp.get('rating', 0), min=0, max=5, step=1,
-                    description='Calificar:', style={'description_width': 'initial'},
-                    layout=widgets.Layout(width='250px')
-                )
-                btn_save_rating = widgets.Button(description="Guardar Nota", button_style='success', icon='star', layout=widgets.Layout(width='120px'))
-                
-                def _on_save_rating(_):
-                    btn_save_rating.description = "Guardando..."
-                    success = ModelTrainer().update_model_metadata(hp['training_id'], hp['shortname'], {'rating': rating_slider.value})
-                    if success:
-                        btn_save_rating.description = "¡Guardado!"
-                        btn_save_rating.button_style = ''
-                        # Forçar refresh do ranking se possível (precisa de acesso à instância UI)
-                        try:
-                            import __main__
-                            if hasattr(__main__, 'ui'): __main__.ui._refresh_models_list()
-                        except: pass
-                    else:
-                        btn_save_rating.description = "Erro"
-                
-                btn_save_rating.on_click(_on_save_rating)
-                rating_box = widgets.HBox([rating_slider, btn_save_rating], layout=widgets.Layout(align_items='center', margin='20px 0', padding='15px', background='#fff8e1', border_radius='8px', border='1px solid #ffe082'))
-                display(rating_box)
+                # SEÇÃO DE EXPLORAÇÃO DE CLUSTERS FINALIZADA
                 display(HTML(f"""
                 <div style="background:#f8f9fa; border:1px solid #dee2e6; padding:15px; border-radius:8px; margin-top:15px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
