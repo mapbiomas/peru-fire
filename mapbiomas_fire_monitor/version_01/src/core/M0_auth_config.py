@@ -194,7 +194,12 @@ def model_path(training_id, shortname, region=None):
     Asset: training_{training_id}_{shortname}_{sensor}
     """
     sensor = GLOBAL_OPTS['SENSOR'].lower()
-    asset_name = f"training_{training_id}_{shortname}_{sensor}"
+    t_id = str(training_id)
+    if t_id.startswith('training_'):
+        asset_name = t_id
+    else:
+        asset_name = f"training_{t_id}_{shortname}_{sensor}"
+    
     base = f"{_gcs_models_base()}/{asset_name}"
     if region:
         return f"{base}/{region}"

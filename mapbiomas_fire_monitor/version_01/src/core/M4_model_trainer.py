@@ -306,7 +306,7 @@ class ModelTrainer:
         self.train_op = tf.train.AdamOptimizer(self.lr).minimize(self.loss)
         self.saver    = tf.train.Saver()
 
-    def train(self, X_train, y_train, X_val=None, y_val=None, batch_size=None, n_iters=None, keep_prob=0.8, logger=None, update_chart_fn=None):
+    def train(self, X_train, y_train, X_val=None, y_val=None, batch_size=None, n_iters=None, keep_prob=0.8, logger=None, update_chart_fn=None, snapshot_dir=None):
         self._X_raw = X_train
         self._y_raw = y_train
         
@@ -374,9 +374,14 @@ class ModelTrainer:
                     
                     if update_chart_fn:
                         update_chart_fn(history, embeds, preds_viz.flatten(), y_viz)
+                    
+                    if snapshot_dir:
+                        snap_path = os.path.join(snapshot_dir, f"iteration_{i:05d}.png")
+                        render_diagnostic_dashboard(history, embeds, preds_viz.flatten(), y_viz, save_path=snap_path)
 
             self._saved_vars = {v.name: sess.run(v) for v in tf.global_variables()}
             self._history = history
+            self.snapshot_dir = snapshot_dir
 
         return history
 
@@ -594,6 +599,15 @@ class ModelTrainer:
             except Exception as e_proj:
                 if logger: logger(f"⚠️ Nota: No se pudo gerar archivos del Projector: {e_proj}", "info")
 
+            # --- 2.8 Iteration History (Snapshots) ---
+            if hasattr(self, 'snapshot_dir') and self.snapshot_dir and os.path.exists(self.snapshot_dir):
+                if logger: logger("Sincronizando historial de iteraciones com GCS...", "info")
+                snap_files = [f for f in os.listdir(self.snapshot_dir) if f.endswith('.png')]
+                for sf in snap_files:
+                    src_sf = os.path.join(self.snapshot_dir, sf)
+                    dest_sf = f"{CONFIG['bucket']}/{base_path}/history/{sf}"
+                    fs.put(src_sf, dest_sf)
+
             # 3. Extracted Pixels
             if logger: logger("Guardar una matriz de píxeles en GCS...", "info")
             np.save(os.path.join(tmpdir, 'X_data.npy'), self._X_raw)
@@ -647,8 +661,13 @@ class ModelTrainer:
 
 # --- VIEW_ANALYTICS UNIFICADA ---
         
-def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=None):
-    """Motor gráfico unificado para o grid 2x3 (Treino e Histórico)."""
+def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=None, save_path=None, viz_config=None):
+    """
+    Motor gráfico unificado para o grid 2x3 (Treino e Histórico).
+    viz_config: dict com flags de visibilidade.
+    """
+    if viz_config is None:
+        viz_config = {k: True for k in ['cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d']}
     from sklearn.metrics import confusion_matrix, precision_recall_curve, average_precision_score
     from sklearn.decomposition import PCA
     import matplotlib.pyplot as plt
@@ -664,156 +683,129 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
     except:
         cm = np.zeros((2,2)); cm_norm = np.zeros((2,2))
 
-    fig = plt.figure(figsize=(18, 9))
+    # Determina quais subplots mostrar
+    active_plots = []
+    if viz_config.get('cm'): active_plots.append('cm')
+    if viz_config.get('history'): active_plots.append('history')
+    if viz_config.get('pca2d'): active_plots.append('pca2d')
+    if viz_config.get('prob'): active_plots.append('prob')
+    if viz_config.get('pr'): active_plots.append('pr')
     
-    # 1. Matriz de Confusión (%)
-    ax1 = fig.add_subplot(2, 3, 1)
-    ax1.matshow(cm_norm, cmap='Blues', alpha=0.8, vmin=0, vmax=1)
-    for (i, j), z in np.ndenumerate(cm):
-        ax1.text(j, i, f"{z:,}\n({cm_norm[i,j]:.1%})", ha='center', va='center', 
-                 weight='bold', color='black' if cm_norm[i,j] < 0.5 else 'white')
-    ax1.set_title('Matriz de Confusión (%)', pad=15, weight='bold')
-    ax1.set_xticks([0, 1]); ax1.set_yticks([0, 1])
-    ax1.set_xticklabels(['No-fuego', 'Fuego']); ax1.set_yticklabels(['No-fuego', 'Fuego'])
+    if not active_plots: return
 
-    # 2. Historial de Entrenamiento
-    if history and 'steps' in history and len(history['steps']) > 0:
-        ax2 = fig.add_subplot(2, 3, 2)
-        ax2.plot(history['steps'], history['acc'], color='#28a745', label='Acc', linewidth=2)
-        if 'val_acc' in history: ax2.plot(history['steps'], history['val_acc'], color='#28a745', label='Val', linestyle='--', alpha=0.6)
-        ax2.set_ylabel('Acurácia', color='#28a745', weight='bold')
-        ax2b = ax2.twinx()
-        ax2b.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
-        ax2b.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
-        ax2.set_title('Evolución Histórica', weight='bold')
-        ax2.grid(True, linestyle='--', alpha=0.3)
+    n = len(active_plots)
+    cols = 3
+    rows = (n + cols - 1) // cols
+    
+    fig = plt.figure(figsize=(18, 4.5 * rows))
+    
+    for idx, ptype in enumerate(active_plots):
+        if ptype == 'cm':
+            ax = fig.add_subplot(rows, cols, idx + 1)
+            ax.matshow(cm_norm, cmap='Blues', alpha=0.8, vmin=0, vmax=1)
+            for (i, j), z in np.ndenumerate(cm):
+                ax.text(j, i, f"{z:,}\n({cm_norm[i,j]:.1%})", ha='center', va='center', weight='bold', color='black' if cm_norm[i,j] < 0.5 else 'white')
+            ax.set_title('Matriz de Confusión (%)', pad=15, weight='bold')
+            ax.set_xticks([0, 1]); ax.set_yticks([0, 1])
+            ax.set_xticklabels(['No-fuego', 'Fuego']); ax.set_yticklabels(['No-fuego', 'Fuego'])
 
-    # 3. PCA 2D (ou Snapshot)
-    coords2, coords3 = None, None
-    if coords_override is not None:
-        coords2 = coords_override[:, :2]
-        coords3 = coords_override
-    elif embeds is not None:
-        try:
-            pca_tmp = PCA(n_components=3)
-            coords3 = pca_tmp.fit_transform(embeds)
-            coords2 = coords3[:, :2]
-        except: pass
+        elif ptype == 'history':
+            if history and 'steps' in history and len(history['steps']) > 0:
+                ax = fig.add_subplot(rows, cols, idx + 1)
+                ax.plot(history['steps'], history['acc'], color='#28a745', label='Acc', linewidth=2)
+                if 'val_acc' in history: ax.plot(history['steps'], history['val_acc'], color='#28a745', label='Val', linestyle='--', alpha=0.6)
+                ax.set_ylabel('Acurácia', color='#28a745', weight='bold')
+                axb = ax.twinx()
+                axb.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
+                axb.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
+                ax.set_title('Evolución Histórica', weight='bold')
+                ax.grid(True, linestyle='--', alpha=0.3)
 
-    if coords2 is not None:
-        ax3 = fig.add_subplot(2, 3, 3)
-        ax3.scatter(coords2[:, 0], coords2[:, 1], c=preds_f, cmap='RdBu_r', s=25, alpha=0.7, edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
-        ax3.set_title('Proyección Latente 2D', weight='bold', fontsize=10)
-        ax3.set_xticks([]); ax3.set_yticks([])
+        elif ptype == 'pca2d':
+            coords2 = None
+            if coords_override is not None: coords2 = coords_override[:, :2]
+            elif embeds is not None:
+                try: pca = PCA(n_components=2); coords2 = pca.fit_transform(embeds)
+                except: pass
+            if coords2 is not None:
+                ax = fig.add_subplot(rows, cols, idx + 1)
+                ax.scatter(coords2[:, 0], coords2[:, 1], c=preds_f, cmap='RdYlBu_r', s=25, alpha=0.7, edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
+                ax.set_title('Proyección Latente 2D', weight='bold', fontsize=10)
+                ax.set_xticks([]); ax.set_yticks([])
 
-    # 4. Histograma
-    ax4 = fig.add_subplot(2, 3, 4)
-    if len(preds_f) > 0 and len(y_true_f) > 0:
-        ax4.hist(preds_f[y_true_f==0], bins=30, alpha=0.5, color='#007bff', label='No-Fuego', density=True)
-        ax4.hist(preds_f[y_true_f==1], bins=30, alpha=0.5, color='#ff4d4d', label='Fuego', density=True)
-    ax4.set_title('Distribución de Probabilidades', weight='bold', fontsize=10)
-    ax4.set_xlabel('Confianza'); ax4.legend(fontsize=8); ax4.grid(True, alpha=0.2)
+        elif ptype == 'prob':
+            ax = fig.add_subplot(rows, cols, idx + 1)
+            if len(preds_f) > 0 and len(y_true_f) > 0:
+                ax.hist(preds_f[y_true_f==0], bins=30, alpha=0.5, color='#007bff', label='No-Fuego', density=True)
+                ax.hist(preds_f[y_true_f==1], bins=30, alpha=0.5, color='#ff4d4d', label='Fuego', density=True)
+            ax.set_title('Distribución de Probabilidades', weight='bold', fontsize=10)
+            ax.set_xlabel('Confianza'); ax.legend(fontsize=8); ax.grid(True, alpha=0.2)
 
-    # 5. Curva Precision-Recall
-    if len(preds_f) > 0 and len(y_true_f) > 0:
-        try:
-            precision, recall, _ = precision_recall_curve(y_true_f, preds_f)
-            ap_score = average_precision_score(y_true_f, preds_f)
-            ax5 = fig.add_subplot(2, 3, 5)
-            ax5.plot(recall, precision, color='#17a2b8', linewidth=2, label=f'AP={ap_score:.3f}')
-            ax5.fill_between(recall, precision, alpha=0.2, color='#17a2b8')
-            ax5.set_title('Curva Precision-Recall', weight='bold', fontsize=10)
-            ax5.set_xlabel('Recall'); ax5.legend(loc='lower left', fontsize=8); ax5.grid(True, alpha=0.3)
-        except: pass
-
-    # 6. PCA 3D (ou Snapshot)
-    if coords3 is not None:
-        try:
-            ax6 = fig.add_subplot(2, 3, 6, projection='3d')
-            ax6.scatter(coords3[:, 0], coords3[:, 1], coords3[:, 2], c=preds_f, cmap='RdBu_r', s=15, alpha=0.6, edgecolors='white', linewidth=0.2, vmin=0, vmax=1)
-            ax6.set_title('Espacio Latente 3D', weight='bold', fontsize=10)
-            ax6.set_xticks([]); ax6.set_yticks([]); ax6.set_zticks([])
-        except: pass
+        elif ptype == 'pr':
+            try:
+                precision, recall, _ = precision_recall_curve(y_true_f, preds_f)
+                ap_score = average_precision_score(y_true_f, preds_f)
+                ax = fig.add_subplot(rows, cols, idx + 1)
+                ax.plot(recall, precision, color='#17a2b8', linewidth=2, label=f'AP={ap_score:.3f}')
+                ax.fill_between(recall, precision, alpha=0.2, color='#17a2b8')
+                ax.set_title('Curva Precision-Recall', weight='bold', fontsize=10)
+                ax.set_xlabel('Recall'); ax.legend(loc='lower left', fontsize=8); ax.grid(True, alpha=0.3)
+            except: pass
 
     plt.tight_layout()
     plt.show()
 
-def render_model_card_html(hp, metrics):
-    """Gera o HTML do header e KPIs do Model Card."""
-    # Cores e estilos
+    plt.tight_layout()
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=100, bbox_inches='tight')
+        plt.close(fig)
+    else:
+        plt.show()
+
+def render_model_card_html(hp, metrics, only_header=False):
+    """Gera o HTML do card de metadados sem emojis."""
     style = """
     <style>
-    .dash-card { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .dash-title { font-size: 18px; font-weight: bold; color: #343a40; margin-bottom: 10px; border-bottom: 2px solid #007bff; padding-bottom: 5px; }
-    .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
-    .kpi-box { background: #fff; padding: 10px; border-left: 4px solid #007bff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .kpi-title { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
-    .kpi-value { font-size: 20px; font-weight: bold; color: #212529; }
-    .meta-text { font-size: 13px; color: #495057; margin: 2px 0; }
+        .dash-card-header { background: #2c3e50; color: white; padding: 10px 15px; font-size: 14px; font-weight: bold; border-radius: 8px 8px 0 0; border: 1px solid #2c3e50; }
+        .dash-card-body { border: 1px solid #dee2e6; border-top: none; background: white; padding: 15px; font-family: sans-serif; }
+        .meta-text { margin: 3px 0; font-size: 12px; color: #444; }
+        .meta-label { font-weight: bold; color: #222; width: 110px; display: inline-block; }
     </style>
     """
+    if only_header:
+        return f"{style}<div class='dash-card-header'>Ficha del modelo: {hp.get('training_id')} / {hp.get('shortname')}</div>"
     
-    # Preparando métricas
-    rep = metrics.get('classification_report', {})
-    acc = rep.get('accuracy', 0)
-    f1_fire = rep.get('1', {}).get('f1-score', 0)
-    prec_fire = rep.get('1', {}).get('precision', 0)
-    rec_fire = rep.get('1', {}).get('recall', 0)
-    
-    # Formatando data
     date_str = hp.get('training_date', 'Entrenando...')
     if date_str and 'T' in date_str: date_str = date_str[:16].replace('T', ' ')
     
-    # Estrelas (Humana e IA)
-    h_rating = hp.get('rating', 0)
-    a_rating = metrics.get('auto_rating', 0)
-    h_stars = "★" * h_rating + "☆" * (5 - h_rating)
-    a_stars = "★" * a_rating + "☆" * (5 - a_rating)
-
     html_content = f"""
     {style}
-    <div class="dash-card">
-        <div class="dash-title">
-            📄 Ficha del modelo: {hp.get('training_id')} / {hp.get('shortname')}
-        </div>
-        <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 15px;">
+    <div class="dash-card-body">
+        <div style="display: flex; flex-wrap: wrap; gap: 15px;">
             <div style="flex: 2; min-width: 300px;">
-                <p class="meta-text"><b>Estado/Fecha:</b> {date_str}</p>
-                <p class="meta-text"><b>Muestras:</b> {', '.join(hp.get('sample_collections', []))}</p>
-                <p class="meta-text"><b>Bandas:</b> {', '.join([f"{b} ({hp.get('bands_config', {}).get(b, {}).get('sensor', 'N/A').upper()})" for b in hp.get('bands_input', [])])}</p>
-                <p class="meta-text"><b>Capas:</b> {hp.get('layers')} | <b>LR:</b> {hp.get('lr')}</p>
-                <p class="meta-text"><b>Píxeles:</b> {hp.get('sample_count', {}).get('burned', 0)} (F) | {hp.get('sample_count', {}).get('not_burned', 0)} (NF)</p>
-            </div>
-            <div style="flex: 1; min-width: 250px; background:#fff3cd; padding:10px; border-radius:4px; border:1px solid #ffeeba;">
-                <p class="meta-text" style="color:#856404; font-weight:bold; margin-bottom:5px;">📝 Comentario:</p>
-                <p class="meta-text" style="color:#856404; font-style:italic;">{hp.get('comment', 'Sin comentarios.')}</p>
-            </div>
-        </div>
-        
-        <div class="dash-grid">
-            <div class="kpi-box" style="border-left-color: #28a745;">
-                <div class="kpi-title">Acurácia Global</div>
-                <div class="kpi-value">{acc:.1%}</div>
-            </div>
-            <div class="kpi-box" style="border-left-color: #dc3545;">
-                <div class="kpi-title">Precisión (Fuego)</div>
-                <div class="kpi-value">{prec_fire:.1%}</div>
-            </div>
-            <div class="kpi-box" style="border-left-color: #ffc107;">
-                <div class="kpi-title">Recall (Fuego)</div>
-                <div class="kpi-value">{rec_fire:.1%}</div>
-            </div>
-            <div class="kpi-box" style="border-left-color: #17a2b8;">
-                <div class="kpi-title">F1-Score (Fuego)</div>
-                <div class="kpi-value">{f1_fire:.1%}</div>
+                <p class="meta-text"><span class="meta-label">Estado/Fecha:</span> {date_str}</p>
+                <p class="meta-text"><span class="meta-label">Muestras:</span> {', '.join(hp.get('sample_collections', []))}</p>
+                <p class="meta-text"><span class="meta-label">Bandas:</span> {', '.join([f"{b} ({hp.get('bands_config', {}).get(b, {}).get('sensor', 'N/A').upper()})" for b in hp.get('bands_input', [])])}</p>
+                <p class="meta-text"><span class="meta-label">Capas:</span> {hp.get('layers')} | <b>LR:</b> {hp.get('lr')}</p>
+                <p class="meta-text"><span class="meta-label">Píxeles:</span> {hp.get('sample_count', {}).get('burned', 0)} (F) | {hp.get('sample_count', {}).get('not_burned', 0)} (NF)</p>
+                <div style="margin-top:8px; padding:8px; background:#fff3cd; border-radius:4px; border:1px solid #ffeeba;">
+                    <p class="meta-text" style="color:#856404; font-weight:bold; margin-bottom:3px;">Comentario:</p>
+                    <p class="meta-text" style="color:#856404; font-style:italic;">{hp.get('comment', 'Sin comentarios.')}</p>
+                </div>
             </div>
         </div>
     </div>
     """
     return html_content
 
-def view_analytics(model_info, out_widget=None, clear_before=True):
-    """Visualiza as métricas e o card de um modelo salvo no GCS."""
+def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=None):
+    """
+    Visualiza as métricas e o card de um modelo salvo no GCS.
+    viz_config: dict opcional com flags de visibilidade.
+    """
+    if viz_config is None:
+        viz_config = {k: True for k in ['title', 'scores', 'cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d', 'tsne3d']}
     fs = _get_fs()
     from M0_auth_config import CONFIG
     try:
@@ -831,42 +823,160 @@ def view_analytics(model_info, out_widget=None, clear_before=True):
             with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
 
         def _render_content():
-            # --- SISTEMA DE VOTACIÓN "SAFO" (UNIFICADO) ---
+            # --- CHECKBOXES DE ACCIÓN (LIFECYCLE) ---
+            try:
+                import __main__
+                ui = getattr(__main__, 'ui', None)
+            except: ui = None
+
+            if ui:
+                chk_retrain = widgets.Checkbox(description="Retreinar (mismos píxeles)", value=(ui.retrain_intent['mode']=='retrain' and ui.retrain_intent['hp'].get('training_id')==hp['training_id']), indent=False)
+                chk_reextract = widgets.Checkbox(description="Re-extraer & Retreinar", value=(ui.retrain_intent['mode']=='re-extract' and ui.retrain_intent['hp'].get('training_id')==hp['training_id']), indent=False)
+                chk_borrar = widgets.Checkbox(description="Borrar & Retreinar", value=(ui.retrain_intent['mode']=='borrar' and ui.retrain_intent['hp'].get('training_id')==hp['training_id']), indent=False)
+                
+                def _make_exclusive(changed_chk, mode):
+                    def _handler(change):
+                        if change['new']:
+                            # Desmarca os outros
+                            for c in [chk_retrain, chk_reextract, chk_borrar]:
+                                if c != changed_chk: c.value = False
+                            # Salva a intenção global
+                            ui.retrain_intent = {'mode': mode, 'hp': hp}
+                            ui._load_config_into_widgets(hp) # Pre-carrega na aba 1
+                        else:
+                            # Se desmarcou o atual e os outros estão falsos, limpa a intenção
+                            if not any([chk_retrain.value, chk_reextract.value, chk_borrar.value]):
+                                ui.retrain_intent = {'mode': None, 'hp': None}
+                    return _handler
+                
+                chk_retrain.observe(_make_exclusive(chk_retrain, 'retrain'), names='value')
+                chk_reextract.observe(_make_exclusive(chk_reextract, 're-extract'), names='value')
+                chk_borrar.observe(_make_exclusive(chk_borrar, 'borrar'), names='value')
+                
+                action_row = widgets.HBox([
+                    widgets.HTML("<b style='color:#e67e22; font-size:12px; margin-right:15px;'>⚙️ Acción Pendiente (Run start_training):</b>"),
+                    chk_retrain, chk_reextract, chk_borrar
+                ], layout=widgets.Layout(margin='0 0 15px 0', padding='10px', background='#fff3cd', border='1px solid #ffeeba', border_radius='4px', align_items='center'))
+                display(action_row)
+
+            # --- SISTEMA DE VOTACIÓN "SAFO" (SUBCARDS) ---
             h_rating = hp.get('rating', 0)
             a_rating = metrics.get('auto_rating', 0)
             
+            # --- GRID UNIFICADO DE KPIs Y AUDITORÍA ---
+            rep = metrics.get('classification_report', {})
+            
+            def make_kpi_card(title, value, color):
+                return widgets.HTML(f"""
+                <div class="kpi-box" style="border-left: 5px solid {color}; padding: 15px; background: white; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: 100%;">
+                    <div style="font-size: 11px; color: #6c757d; text-transform: uppercase; font-weight: bold; margin-bottom: 5px;">{title}</div>
+                    <div style="font-size: 22px; font-weight: bold; color: #212529;">{value}</div>
+                </div>
+                """)
+
+            kpi_acc = make_kpi_card("Acurácia Global", f"{rep.get('accuracy', 0):.1%}", "#28a745")
+            kpi_prec = make_kpi_card("Precisión (Fuego)", f"{rep.get('1', {}).get('precision', 0):.1%}", "#dc3545")
+            kpi_rec = make_kpi_card("Recall (Fuego)", f"{rep.get('1', {}).get('recall', 0):.1%}", "#ffc107")
+            kpi_f1 = make_kpi_card("F1-Score (Fuego)", f"{rep.get('1', {}).get('f1-score', 0):.1%}", "#17a2b8")
+
+            # Estrelas IA (Subcard Professional)
             ai_btns = []
             for s_idx in range(1, 6):
                 char = "★" if s_idx <= a_rating else "☆"
-                b = widgets.Button(description=char, layout=widgets.Layout(width='30px', height='30px', margin='0', padding='0'))
+                b = widgets.Button(description=char, layout=widgets.Layout(width='26px', height='26px', margin='0', padding='0'))
                 b.style.button_color = '#bdc3c7' if s_idx <= a_rating else '#fff'
                 ai_btns.append(b)
-            ai_panel = widgets.HBox([widgets.HTML("🤖 <b>IA:</b>", layout=widgets.Layout(margin='0 10px 0 0'))] + ai_btns)
             
+            ai_panel = widgets.VBox([
+                widgets.HTML("<div style='font-size:11px; color:#6c757d; font-weight:bold; margin-bottom:5px; text-transform:uppercase;'>Evaluación IA</div>"),
+                widgets.HBox(ai_btns, layout=widgets.Layout(margin='0'))
+            ], layout=widgets.Layout(background='white', padding='15px', border_left='5px solid #bdc3c7', border_radius='4px', box_shadow='0 2px 5px rgba(0,0,0,0.1)', flex='1'))
+            
+            # Estrelas Humanas (Subcard Professional con Confirmación)
             user_btns = []
-            status_msg = widgets.HTML("", layout=widgets.Layout(margin='0 0 0 10px'))
-            def _upd_stars(val):
-                for idx, b in enumerate(user_btns):
-                    b.description = "★" if idx < val else "☆"
-                    b.style.button_color = '#f1c40f' if idx < val else '#fff'
-            def _hnd(val):
-                def handler(_):
-                    if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
-                        _upd_stars(val); status_msg.value = "✅"
-                        try:
-                            import __main__
-                            if hasattr(__main__, 'ui'): __main__.ui._refresh_models_list()
-                        except: pass
-                return handler
-            for i in range(1, 6):
-                btn = widgets.Button(description="★" if i <= h_rating else "☆", 
-                                   layout=widgets.Layout(width='30px', height='30px', margin='0', padding='0'),
-                                   style={'button_color': '#f1c40f' if i <= h_rating else '#fff'})
-                btn.on_click(_hnd(i)); user_btns.append(btn)
-            user_panel = widgets.HBox([widgets.HTML("👤 <b>IH:</b>", layout=widgets.Layout(margin='0 10px 0 20px'))] + user_btns + [status_msg])
+            user_stars_container = widgets.HBox([], layout=widgets.Layout(margin='0')) # Container para trocar entre estrelas e confirmação
             
-            display(widgets.HBox([ai_panel, user_panel], layout=widgets.Layout(align_items='center', padding='10px', background='#fdfdfd', border='1px solid #eee', border_radius='8px', margin='10px 0')))
-            display(HTML(render_model_card_html(hp, metrics)))
+            def _show_stars():
+                btns = []
+                for i in range(1, 6):
+                    btn = widgets.Button(description="★" if i <= h_rating else "☆", 
+                                       layout=widgets.Layout(width='26px', height='26px', margin='0', padding='0'),
+                                       style={'button_color': '#f1c40f' if i <= h_rating else '#fff'})
+                    def _hnd_click(b, val=i):
+                        # Mostrar confirmação
+                        btn_back = widgets.Button(description="<-", layout=widgets.Layout(width='35px', height='26px'), button_style='info')
+                        btn_ok = widgets.Button(description="OK", layout=widgets.Layout(width='45px', height='26px'), button_style='success')
+                        conf_msg = widgets.HTML(f"<b style='color:#d4ac0d; font-size:11px; margin-right:5px;'>¿Confirmar {val}?</b>")
+                        
+                        def _do_ok(_):
+                            user_stars_container.children = [self.make_spinner("Guardando...")]
+                            if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
+                                if ui: ui._refresh_models_list()
+                                # Simplesmente atualiza a visão local do card
+                                hp['rating'] = val # Update local ref
+                                _show_stars()
+                            else:
+                                _show_stars() # Reverter em caso de erro
+
+                        def _do_back(_): _show_stars()
+                        
+                        btn_ok.on_click(_do_ok); btn_back.on_click(_do_back)
+                        user_stars_container.children = [conf_msg, btn_back, btn_ok]
+                    
+                    btn.on_click(_hnd_click)
+                    btns.append(btn)
+                user_stars_container.children = btns
+
+            _show_stars()
+                
+            user_panel = widgets.VBox([
+                widgets.HTML("<div style='font-size:11px; color:#6c757d; font-weight:bold; margin-bottom:5px; text-transform:uppercase;'>Auditoría Humana</div>"),
+                user_stars_container
+            ], layout=widgets.Layout(background='white', padding='15px', border_left='5px solid #f1c40f', border_radius='4px', box_shadow='0 2px 5px rgba(0,0,0,0.1)', flex='1'))
+            
+            # --- CICLO DE VIDA (Nuevas acciones integradas al Card) ---
+            def _set_intent(mode):
+                def __h(_):
+                    if ui:
+                        ui.retrain_intent = {'mode': mode, 'hp': hp}
+                        ui._load_config_into_widgets(hp)
+                        ui.tab.selected_index = 0 # Volver a Novo Treino
+                        print(f"✅ Intento '{mode}' cargado para {hp['training_id']}. Revise la pestaña 'Novo Treino'.")
+                return __h
+
+            btn_retr = widgets.Button(description="Retreinar", icon="refresh", layout=widgets.Layout(width='140px'), button_style='info')
+            btn_reex = widgets.Button(description="Re-extraer", icon="database", layout=widgets.Layout(width='140px'), button_style='info')
+            btn_borr = widgets.Button(description="Borrar & Retreinar", icon="trash", layout=widgets.Layout(width='180px'), button_style='danger')
+            
+            btn_retr.on_click(_set_intent('retrain'))
+            btn_reex.on_click(_set_intent('re-extract'))
+            btn_borr.on_click(_set_intent('borrar'))
+
+            lifecycle_panel = widgets.VBox([
+                widgets.HTML("<div style='font-size:11px; color:#6c757d; font-weight:bold; margin-bottom:5px; text-transform:uppercase;'>🔄 Ciclo de Vida</div>"),
+                widgets.HBox([btn_retr, btn_reex, btn_borr], layout=widgets.Layout(gap='10px'))
+            ], layout=widgets.Layout(background='#fff9f9', padding='15px', border='1px dashed #f5c6cb', border_radius='4px', margin='10px 0'))
+
+            # --- INTEGRACIÓN DE CARD E CICLO DE VIDA ---
+            # O Header é sempre exibido
+            display(HTML(render_model_card_html(hp, metrics, only_header=True)))
+            
+            if viz_config.get('title'):
+                body_html = HTML(render_model_card_html(hp, metrics))
+                
+                # Painel de Ciclo de Vida integrado (sem emojis no texto)
+                lifecycle_box = widgets.VBox([
+                    widgets.HTML("<div style='font-size:11px; color:#6c757d; font-weight:bold; margin-bottom:5px; text-transform:uppercase;'>Ciclo de Vida</div>"),
+                    widgets.HBox([btn_retr, btn_reex, btn_borr], layout=widgets.Layout(gap='10px'))
+                ], layout=widgets.Layout(background='#fdfdfd', padding='15px', border='1px solid #dee2e6', border_top='none', border_radius='0 0 8px 8px', margin='-20px 0 20px 0'))
+                
+                display(body_html)
+                display(lifecycle_box)
+            else:
+                # Se os metadados estiverem ocultos, adicionamos um espaçador pequeno para o header não ficar colado
+                display(HTML("<div style='margin-bottom:15px;'></div>"))
+
+            if viz_config.get('scores'): display(unified_grid)
             
             # --- DIAGNÓSTICO ---
             snap = metrics.get('diagnostic_snapshot')
@@ -875,19 +985,29 @@ def view_analytics(model_info, out_widget=None, clear_before=True):
                 tsne_coords = np.array(snap.get('tsne_coords', []))
                 preds = np.array(snap['preds'])
                 y_sub = np.array(snap['y_true'])
-                render_diagnostic_dashboard(hp.get('history', {}), None, preds, y_sub, coords_override=pca_coords)
-                
-                import plotly.graph_objects as go
-                use_tsne = tsne_coords is not None and len(tsne_coords) > 0
-                coords_p = tsne_coords if use_tsne else pca_coords
-                if len(coords_p) > 0:
-                    fig_p = go.Figure(data=[go.Scatter3d(
-                        x=coords_p[:,0], y=coords_p[:,1], z=coords_p[:,2], mode='markers',
-                        marker=dict(size=4, color=preds, colorscale='RdBu_r', opacity=0.8, showscale=True),
-                        text=[f"Clase: {'F' if l==1 else 'NF'}<br>Pred: {p:.2%}" for l, p in zip(y_sub, preds)]
+                render_diagnostic_dashboard(hp.get('history', {}), None, preds, y_sub, coords_override=pca_coords, viz_config=viz_config)
+                # PCA 3D Interactiva
+                if viz_config.get('pca3d') and pca_coords is not None and len(pca_coords) > 0:
+                    fig_pca = go.Figure(data=[go.Scatter3d(
+                        x=pca_coords[:,0], y=pca_coords[:,1], z=pca_coords[:,2], mode='markers',
+                        marker=dict(size=4, color=preds, colorscale=fire_colorscale, opacity=0.8, showscale=True,
+                                   colorbar=dict(title="Confianza", tickvals=[0, 0.5, 1], ticktext=["No Fogo", "Duda", "Fogo"])),
+                        text=[f"<b>Real:</b> {'🔥 Fuego' if l==1 else '🌿 No Fuego'}<br><b>Pred:</b> {p:.2%}" for l, p in zip(y_sub, preds)]
                     )])
-                    fig_p.update_layout(title="Auditoría 3D", margin=dict(l=0, r=0, b=0, t=30), scene=dict(xaxis_title='V1', yaxis_title='V2', zaxis_title='V3'))
-                    display(HTML(fig_p.to_html(include_plotlyjs=True, full_html=False)))
+                    fig_pca.update_layout(title="Auditoría PCA 3D (Interactiva)", margin=dict(l=0, r=0, b=0, t=30), scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3'))
+                    display(HTML(fig_pca.to_html(include_plotlyjs=True, full_html=False)))
+
+                # t-SNE 3D Interactiva
+                if viz_config.get('tsne3d') and tsne_coords is not None and len(tsne_coords) > 0:
+                    coords_p = tsne_coords
+                    fig_tsne = go.Figure(data=[go.Scatter3d(
+                        x=coords_p[:,0], y=coords_p[:,1], z=coords_p[:,2], mode='markers',
+                        marker=dict(size=4, color=preds, colorscale=fire_colorscale, opacity=0.8, showscale=True,
+                                   colorbar=dict(title="Confianza", tickvals=[0, 0.5, 1], ticktext=["No Fogo", "Duda", "Fogo"])),
+                        text=[f"<b>Real:</b> {'🔥 Fuego' if l==1 else '🌿 No Fuego'}<br><b>Pred:</b> {p:.2%}" for l, p in zip(y_sub, preds)]
+                    )])
+                    fig_tsne.update_layout(title="Auditoría t-SNE 3D (Interactiva)", margin=dict(l=0, r=0, b=0, t=30), scene=dict(xaxis_title='T1', yaxis_title='T2', zaxis_title='T3'))
+                    display(HTML(fig_tsne.to_html(include_plotlyjs=True, full_html=False)))
             else:
                 try:
                     with fs.open(f"{CONFIG['bucket']}/{clean_path}/weights.npz", 'rb') as f: weights = dict(np.load(f))
@@ -896,21 +1016,32 @@ def view_analytics(model_info, out_widget=None, clear_before=True):
                     trainer_tmp.norm_stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
                     X_sub = np.random.randn(300, hp['num_input']); y_sub = np.zeros(300)
                     embeds = trainer_tmp.get_embeddings(X_sub); preds = trainer_tmp.predict(X_sub)
-                    render_diagnostic_dashboard(hp.get('history', {}), embeds, preds, y_sub)
+                    render_diagnostic_dashboard(hp.get('history', {}), embeds, preds, y_sub, viz_config=viz_config)
                 except: pass
+
+            # --- SLIDER DE HISTÓRICO (TIME MACHINE) ---
+            snap_dir = f"library_images/models/{hp['training_id']}_{hp['shortname']}"
+            if os.path.exists(snap_dir):
+                snaps = sorted([f for f in os.listdir(snap_dir) if f.endswith('.png')])
+                if snaps:
+                    slider = widgets.IntSlider(min=0, max=len(snaps)-1, description='Época:', layout=widgets.Layout(width='100%'))
+                    img_out = widgets.Output()
+                    def _show_snap(change):
+                        with img_out:
+                            clear_output(wait=True)
+                            fname = snaps[change['new']]
+                            with open(os.path.join(snap_dir, fname), 'rb') as f:
+                                display(widgets.Image(value=f.read(), format='png'))
+                    slider.observe(_show_snap, names='value')
+                    display(widgets.VBox([
+                        widgets.HTML("<b style='color:#2c3e50; font-size:14px; margin-top:15px;'>🕰️ Historial de Entrenamiento (Slider Temporal)</b>"),
+                        slider, img_out
+                    ], layout=widgets.Layout(padding='10px', background='#f9f9f9', border='1px solid #ddd', border_radius='8px')))
+                    _show_snap({'new': 0})
 
             # --- TENSORBOARD PROJECTOR ---
             vec_url = f"https://storage.googleapis.com/mapbiomas-fire/{clean_path}/projector/vectors.tsv"
             meta_url = f"https://storage.googleapis.com/mapbiomas-fire/{clean_path}/projector/metadata.tsv"
-            display(HTML(f"""
-            <div style="background:#f0f7ff; border-radius:12px; padding:25px; margin-top:30px; border:1px solid #cce5ff;">
-                <h3 style="margin:0; color:#004085;">🚀 Auditoría de Clusters con TensorBoard</h3>
-                <div style="display:flex; gap:15px; margin-top:20px;">
-                    <a href="{vec_url}" target="_blank" download style="flex:1; text-align:center; background:#007bff; color:white; padding:12px; border-radius:6px; text-decoration:none; font-weight:bold;">📥 Vectors (.tsv)</a>
-                    <a href="{meta_url}" target="_blank" download style="flex:1; text-align:center; background:#17a2b8; color:white; padding:12px; border-radius:6px; text-decoration:none; font-weight:bold;">📥 Metadata (.tsv)</a>
-                </div>
-            </div>
-            """))
 
         if out_widget:
             if clear_before: out_widget.clear_output(wait=True)
@@ -938,21 +1069,98 @@ class ModelTrainerUI(PipelineStepUI):
         self.sort_column = "acc"      
         self.sort_ascending = False   
         
+        # --- INTENÇÃO DE RETREINAMENTO ---
+        self.retrain_intent = {'mode': None, 'hp': None} # Guarda a intenção atual de re-treinamento
+        
         # --- ESTADO DEL CANVAS ---
-        self.selected_models = {} # ID -> info
+        self.selected_models = {} # ID -> info (Active in Canvas)
+        self.canvas_history = {} # ID -> info (Ever viewed in session)
+        self.canvas_search_query = ""
         self.canvas_output = widgets.Output(layout=widgets.Layout(background_color='white', padding='20px'))
         
+        # --- CONFIGURACIÓN DE VISIBILIDAD ---
+        self.viz_config = {
+            'title': True, 'scores': True, 'cm': True, 'history': True, 
+            'prob': True, 'pr': True, 'pca2d': True, 'pca3d': True, 'tsne3d': True
+        }
+        
+        self.canvas_available_box = widgets.VBox([], layout=widgets.Layout(height='300px', border='1px solid #ddd', padding='0', overflow_y='auto'))
+        self.canvas_selected_box = widgets.VBox([], layout=widgets.Layout(height='300px', border='1px solid #ddd', padding='0', overflow_y='auto'))
+        
         self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
+
+    def _load_config_into_widgets(self, hp):
+        """Carrega os parâmetros de um modelo de volta para os widgets de configuração."""
+        self.w_training_id.value = hp.get('training_id', '')
+        self.w_shortname.value = hp.get('shortname', '')
+        self.w_layers.value = ",".join(map(str, hp.get('layers', [64, 32])))
+        self.w_lr.value = str(hp.get('lr', 0.001))
+        self.w_iters.value = str(hp.get('iters', 5000))
+        self.w_batch.value = str(hp.get('batch', 1000))
+        self.w_comment.value = hp.get('comment', '')
+        
+        # Muestras
+        sc = hp.get('sample_collections', [])
+        for name, chk in self.chk_dict.items():
+            chk.value = name in sc
+            
+        # Bandas
+        b_cfg = hp.get('bands_config', {})
+        for (s, m, b), chk in self.band_chk_map.items():
+            chk.value = (b in b_cfg and b_cfg[b]['sensor'] == s and b_cfg[b]['mosaic'] == m)
+
+        # Sync Intent Checkboxes
+        mode = self.retrain_intent.get('mode')
+        # Temporarily unobserve to avoid feedback loops
+        for cb in [self.cb_retrain, self.cb_reextract, self.cb_borrar_retrain]:
+            cb.unobserve(self._on_intent_cb_change, names='value')
+            cb.value = False
+            
+        if mode == 'retrain': self.cb_retrain.value = True
+        elif mode == 're-extract': self.cb_reextract.value = True
+        elif mode == 'borrar': self.cb_borrar_retrain.value = True
+        
+        for cb in [self.cb_retrain, self.cb_reextract, self.cb_borrar_retrain]:
+            cb.observe(self._on_intent_cb_change, names='value')
 
     def display(self):
         # 1. TRENAMIENTOS (Ranking)
         self.analytics_area = widgets.VBox([], layout=widgets.Layout(padding='10px', background_color='white'))
         
         # 2. CANVAS (Visualización)
-        self.canvas_area = widgets.VBox([self.canvas_output], layout=widgets.Layout(padding='10px', background_color='white'))
+        self.w_canvas_search = widgets.Text(placeholder='🔍 Buscar en repositorio...', layout=widgets.Layout(width='100%'))
+        self.w_canvas_search.observe(lambda c: self._on_canvas_search_change(c['new']), names='value')
+        
+        btn_all_canvas = widgets.Button(description="Todos", icon="check-square", layout=widgets.Layout(width='90px'), button_style='info')
+        btn_none_canvas = widgets.Button(description="Limpiar", icon="square-o", layout=widgets.Layout(width='90px'), button_style='warning')
+        
+        btn_all_canvas.on_click(lambda _: self._on_canvas_batch_action('all'))
+        btn_none_canvas.on_click(lambda _: self._on_canvas_batch_action('none'))
+        
+        canvas_toolbar = widgets.HBox([self.w_canvas_search, btn_all_canvas, btn_none_canvas], layout=widgets.Layout(gap='5px', margin='0 0 10px 0'))
+
+        left_pane = widgets.VBox([
+            widgets.HTML("<b style='font-size:12px;'>📂 Repositorio / Historial</b>"),
+            canvas_toolbar,
+            self.canvas_available_box
+        ], layout=widgets.Layout(flex='1'))
+        
+        right_pane = widgets.VBox([
+            widgets.HTML("<b style='font-size:12px;'>✅ Seleccionados en Canvas</b>"),
+            widgets.HTML("<div style='height:42px;'></div>"), # Alinhador com a toolbar
+            self.canvas_selected_box
+        ], layout=widgets.Layout(flex='1'))
+        
+        self.canvas_area = widgets.VBox([
+            widgets.HTML("<h3 style='color:#2c3e50; margin:0;'>🎨 Canvas Hub: Auditoría Paralela</h3>"),
+            widgets.HBox([left_pane, right_pane], layout=widgets.Layout(gap='20px', padding='10px')),
+            widgets.HTML("<hr>"),
+            self.canvas_output
+        ], layout=widgets.Layout(padding='15px', background_color='white'))
         
         # 3. NOVO TREINO (Fluxo Completo)
-        self.config_area = self._build_config_area()
+        hp_sec = self._build_hp_section()
+        dest_sec = self._build_dest_section()
         self.samples_area = self._build_matrix()
         self.extraction_area = self._build_extraction_matrix()
         
@@ -961,8 +1169,10 @@ class ModelTrainerUI(PipelineStepUI):
             self.samples_area,
             widgets.HTML("<br><h2 style='color:#2c3e50;'>🛰️ 2. Matriz de Extracción (Multisensor)</h2>"),
             self.extraction_area,
-            widgets.HTML("<br><h2 style='color:#2c3e50;'>⚙️ 3. Hiperparámetros y Destino</h2>"),
-            self.config_area,
+            widgets.HTML("<br><h2 style='color:#2c3e50;'>⚙️ 3. Configuración del Modelo</h2>"),
+            hp_sec,
+            widgets.HTML("<br><h2 style='color:#2c3e50;'>📍 4. Destino GCS</h2>"),
+            dest_sec,
         ], layout=widgets.Layout(padding='20px', background_color='white'))
         
         self.tab = widgets.Tab(children=[
@@ -994,7 +1204,7 @@ class ModelTrainerUI(PipelineStepUI):
 
     def _on_search_samples_change(self, change):
         self.search_query_samples = change['new']
-        self._refresh_matrix_only()
+        self._refresh_samples_panes()
 
     def _on_search_models_change(self, change):
         self.search_query_models = change['new']
@@ -1008,6 +1218,22 @@ class ModelTrainerUI(PipelineStepUI):
     def _on_sort_order_change(self, change):
         self.sort_ascending = not self.sort_ascending
         self._refresh_models_list()
+
+    def _on_intent_cb_change(self, change):
+        """Ensures exclusivity between retraining intent checkboxes."""
+        if not change['new']: return
+        owner = change['owner']
+        for cb in [self.cb_retrain, self.cb_reextract, self.cb_borrar_retrain]:
+            if cb != owner:
+                cb.unobserve(self._on_intent_cb_change, names='value')
+                cb.value = False
+                cb.observe(self._on_intent_cb_change, names='value')
+        
+        # Update retrain_intent mode
+        mode = 'retrain' if self.cb_retrain.value else \
+               're-extract' if self.cb_reextract.value else \
+               'borrar' if self.cb_borrar_retrain.value else None
+        self.retrain_intent['mode'] = mode
 
     def _refresh_matrix_only(self):
         new_matrix = self._build_matrix_content()
@@ -1044,30 +1270,80 @@ class ModelTrainerUI(PipelineStepUI):
         L = widgets.Layout
         css = PipelineStepUI.get_status_css()
         
-        # BARRA DE BUSCA
+        # BARRA DE BUSCA E BOTÕES DE LOTE (Estilo Canvas Hub)
         self.txt_search_samples = widgets.Text(
             value=self.search_query_samples,
-            placeholder='Buscar muestras (ex: r10)...',
-            layout=L(width='300px')
+            placeholder='🔍 Buscar muestras...',
+            layout=L(width='100%')
         )
         self.txt_search_samples.observe(self._on_search_samples_change, names='value')
 
-        btn_all = widgets.Button(description="Seleccionar filtradas", button_style='info', icon='check-square', layout=L(width='180px'))
-        btn_none = widgets.Button(description="Borrar filtrados", button_style='warning', icon='square-o', layout=L(width='180px'))
-        btn_refresh = widgets.Button(description="", button_style='success', icon='refresh', layout=L(width='40px'))
-        
+        btn_all = widgets.Button(description="Todos", icon="check-square", layout=L(width='90px'), button_style='info')
+        btn_none = widgets.Button(description="Limpiar", icon="square-o", layout=L(width='90px'), button_style='warning')
         btn_all.on_click(self._on_select_all_samples)
         btn_none.on_click(self._on_select_none_samples)
-        btn_refresh.on_click(lambda _: self._refresh_ui())
         
-        toolbar = widgets.HBox([self.txt_search_samples, btn_all, btn_none, btn_refresh], layout=L(margin='0 0 10px 0', gap='10px', align_items='center'))
-        
-        # Container persistente para a matriz
-        self.matrix_container = widgets.VBox([self._build_matrix_content()], layout=L(
-            border='1px solid #dee2e6', padding='10px', max_height='300px', overflow_y='auto'
+        sample_toolbar = widgets.HBox([self.txt_search_samples, btn_all, btn_none], layout=L(gap='5px', margin='0 0 10px 0'))
+
+        self.available_samples_container = widgets.VBox([], layout=L(
+            border='1px solid #ddd', height='300px', overflow_y='auto', padding='0'
         ))
+        self.selected_samples_container = widgets.VBox([], layout=L(
+            border='1px solid #ddd', height='300px', overflow_y='auto', padding='0'
+        ))
+
+        left_pane = widgets.VBox([
+            widgets.HTML("<b style='font-size:12px; color:#555;'>📂 Muestras Disponibles</b>"),
+            sample_toolbar,
+            self.available_samples_container
+        ], layout=L(flex='1'))
+
+        right_pane = widgets.VBox([
+            widgets.HTML("<b style='font-size:12px; color:#555;'>✅ Muestras Seleccionadas</b>"),
+            widgets.HTML("<div style='height:42px;'></div>"), # Alinhador com a toolbar
+            self.selected_samples_container
+        ], layout=L(flex='1'))
+
+        dual_pane = widgets.HBox([left_pane, right_pane], layout=L(gap='20px', padding='10px'))
         
-        return widgets.VBox([css, toolbar, self.matrix_container])
+        self._refresh_samples_panes()
+        
+        return widgets.VBox([css, dual_pane])
+
+    def _refresh_samples_panes(self):
+        L = widgets.Layout
+        samples_available = list_sample_collections_gcs()
+        
+        # Left Pane (Available)
+        available_widgets = []
+        for s in samples_available:
+            if self.search_query_samples and self.search_query_samples.lower() not in s.lower():
+                continue
+            if s in self.chk_dict and self.chk_dict[s].value:
+                continue # Already selected
+                
+            btn = widgets.Button(description=f"➕ {s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#f8f9fa'})
+            def _add(b, name=s):
+                if name not in self.chk_dict: self.chk_dict[name] = widgets.Checkbox(value=False)
+                self.chk_dict[name].value = True
+                self._refresh_samples_panes()
+            btn.on_click(_add)
+            available_widgets.append(btn)
+        
+        self.available_samples_container.children = available_widgets
+
+        # Right Pane (Selected)
+        selected_widgets = []
+        for s, chk in self.chk_dict.items():
+            if chk.value:
+                btn = widgets.Button(description=f"❌ {s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#e3f2fd'})
+                def _remove(b, name=s):
+                    self.chk_dict[name].value = False
+                    self._refresh_samples_panes()
+                btn.on_click(_remove)
+                selected_widgets.append(btn)
+        
+        self.selected_samples_container.children = selected_widgets
 
     def _build_extraction_matrix(self):
         """Constrói a matriz dinâmica baseada no que existe no GCS."""
@@ -1132,29 +1408,83 @@ class ModelTrainerUI(PipelineStepUI):
             background_color='#fff', border_radius='4px', max_height='400px', overflow_y='auto'
         ))
 
-    def _build_config_area(self):
+    def _build_hp_section(self):
         L = widgets.Layout
         self.w_iters = widgets.Text(value="7000", description='Iteraciones:', style={'description_width': '150px'}, layout=L(width='350px'))
         self.w_batch = widgets.Text(value="1000", description='Tamaño de Lote:', style={'description_width': '150px'}, layout=L(width='350px'))
         self.w_lr = widgets.Text(value="0.001", description='Tasa de Aprendizaje:', style={'description_width': '150px'}, layout=L(width='350px'))
         self.w_layers = widgets.Text(value="7, 14, 7", description='Capas Ocultas:', style={'description_width': '150px'}, layout=L(width='350px'))
         
-        self.w_training_id = widgets.Text(value='42', description='ID:', layout=L(width='100px'))
-        self.w_shortname = widgets.Text(value='peru_v1', description='Nome:', layout=L(width='150px'))
+        return widgets.VBox([
+            widgets.HTML("<b style='font-size:14px; color:#2c3e50;'>⚙️ Hiperparámetros (DNN)</b>"),
+            widgets.HBox([self.w_iters, self.w_batch], layout=L(gap='10px')),
+            widgets.HBox([self.w_lr, self.w_layers], layout=L(gap='10px')),
+        ], layout=L(padding='15px', border='1px solid #eee', border_radius='8px', margin='0 0 15px 0', flex='1'))
+
+    def _suggest_next_id(self):
+        """Sugere o MENOR ID de treino (001, 002...) disponível (preenchendo lacunas)."""
+        models = list_trained_models()
+        used_ids = set()
+        import re
+        for m in models:
+            match = re.search(r'training_(\d{3})', m['training_id'])
+            if match:
+                used_ids.add(int(match.group(1)))
+        
+        # Encontra o primeiro buraco na sequência começando de 1
+        for i in range(1, 1000):
+            if i not in used_ids:
+                return f"{i:03d}"
+        return "001"
+
+    def _build_dest_section(self):
+        L = widgets.Layout
+        next_id = self._suggest_next_id()
+        self.w_training_id = widgets.Text(value=next_id, description='ID Training:', style={'description_width': '120px'}, layout=L(width='300px'))
+        self.w_shortname = widgets.Text(value='peru_v1', description='Nome:', layout=L(width='200px'))
         self.w_comment = widgets.Textarea(placeholder='Comentários...', layout=L(width='98%', height='60px'))
         
         return widgets.VBox([
-            widgets.HTML("<b>⚙️ Hiperparámetros (DNN)</b>"),
-            widgets.HBox([self.w_iters, self.w_batch]),
-            widgets.HBox([self.w_lr, self.w_layers]),
-            widgets.HTML("<hr><b>📍 Destino GCS</b>"),
-            widgets.HBox([self.w_training_id, self.w_shortname]),
-            self.w_comment
-        ], layout=L(padding='15px', border='1px solid #eee', border_radius='8px', margin='0 0 20px 0'))
+            widgets.HTML("<b style='font-size:14px; color:#2c3e50;'>Destino de los Resultados</b>"),
+            widgets.HBox([self.w_training_id, self.w_shortname], layout=L(gap='15px')),
+            self.w_comment,
+        ], layout=L(padding='15px', border='1px solid #eee', border_radius='8px', margin='0 0 15px 0'))
 
     def _refresh_ui(self):
         self._refresh_models_list(show_loader=True)
         
+
+    def make_spinner(self, msg="Cargando..."):
+        return widgets.HTML(f"""
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <div class="mfm-loader-mini"></div>
+                <span style="color: #666; font-size: 11px; font-weight: bold;">{msg}</span>
+            </div>
+            <style>
+            .mfm-loader-mini {{
+                border: 2px solid #f3f3f3;
+                border-top: 2px solid #3498db;
+                border-radius: 50%;
+                width: 14px;
+                height: 14px;
+                animation: mfm-spin 0.8s linear infinite;
+            }}
+            @keyframes mfm-spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
+            </style>
+        """)
+
+    def _on_canvas_batch_action(self, mode):
+        """Ação em lote no repositório do Canvas."""
+        q = self.canvas_search_query.lower()
+        if mode == 'all':
+            for rid, info in self.canvas_history.items():
+                if q in rid.lower() or q in info.get('shortname','').lower():
+                    self.selected_models[rid] = info
+        elif mode == 'none':
+            self.selected_models = {}
+        
+        self._refresh_canvas_hub()
+        self._update_canvas()
 
     def _refresh_models_list(self, show_loader=False):
         if show_loader: self.show_loader("Actualizando Ranking...")
@@ -1176,6 +1506,8 @@ class ModelTrainerUI(PipelineStepUI):
                     'auto_rating': met.get('auto_rating', 0), 'human_rating': hp.get('rating', 0),
                     'path': m['path'], 'info': m
                 })
+                # Sync all models to canvas history for repo-wide search
+                self.canvas_history[m['training_id']] = m
             except: continue
             
         if self.search_query_models:
@@ -1192,14 +1524,16 @@ class ModelTrainerUI(PipelineStepUI):
         btn_refresh.on_click(lambda _: self._refresh_models_list(show_loader=True))
         toolbar = widgets.HBox([txt_search, btn_refresh], layout=widgets.Layout(margin='0 0 15px 0', align_items='center', gap='15px'))
 
-        # LARGURAS
-        W = {'sel': '35px', 'pos': '45px', 'id': '200px', 'met': '55px', 'sep': '15px', 'stars': '95px', 'btn': '45px'}
+        # LARGURAS (Optimizado para evitar scrollbars)
+        W = {'pos': '40px', 'id': '180px', 'met': '50px', 'sep': '10px', 'stars': '90px', 'del': '150px'}
 
         def make_sort_head(label, key, width):
             icon = 'sort-desc' if self.sort_column == key and not self.sort_ascending else \
                    'sort-asc' if self.sort_column == key and self.sort_ascending else 'sort'
             btn = widgets.Button(description=label, icon=icon, layout=widgets.Layout(width=width, height='30px', margin='0', padding='0'))
-            btn.style.button_color = '#34495e'; btn.style.font_weight = 'bold'
+            btn.style.button_color = '#f8f9fa'
+            btn.style.font_weight = 'bold'
+            btn.style.text_color = '#2c3e50'
             def _on_click(_):
                 if self.sort_column == key: self.sort_ascending = not self.sort_ascending
                 else: self.sort_column = key; self.sort_ascending = False
@@ -1209,51 +1543,84 @@ class ModelTrainerUI(PipelineStepUI):
 
         header = widgets.HBox([
             widgets.HTML("<div style='width:35px;'></div>"), 
-            widgets.HTML("<div style='width:45px; color:white; font-weight:bold; text-align:center;'>#</div>"),
+            widgets.HTML(f"<div style='width:{W['pos']}; color:#2c3e50; font-weight:bold; text-align:center;'>#</div>"),
             make_sort_head("ID", "id", W['id']),
             make_sort_head("ACC", "acc", W['met']),
             make_sort_head("PRE", "prec", W['met']),
             make_sort_head("REC", "rec", W['met']),
             make_sort_head("F1", "f1", W['met']),
-            widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #fff; height:20px;'></div>"),
+            widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #dee2e6; height:20px;'></div>"),
             make_sort_head("IA", "auto_rating", W['stars']),
             make_sort_head("IH", "human_rating", W['stars']),
-            widgets.HTML(f"<div style='width:50px; color:white; font-weight:bold; text-align:center;'>DEL</div>"),
-        ], layout=widgets.Layout(background='#2c3e50', padding='8px', border_radius='8px 8px 0 0', align_items='center'))
+            widgets.HTML(f"<div style='width:{W['del']}; color:#2c3e50; font-weight:bold; text-align:center;'>ACCIONES</div>"),
+        ], layout=widgets.Layout(background='#ffffff', padding='8px', border_bottom='2px solid #dee2e6', border_radius='8px 8px 0 0', align_items='center'))
 
         final_rows = []
         for i, r in enumerate(ranking_data):
             medal = "🥇" if i == 0 and not self.sort_ascending and self.sort_column in ['acc','f1'] else f"#{i+1}"
             
             def make_star_row(val, color, is_human=False):
-                btns = []
-                for s_idx in range(1, 6):
-                    char = "★" if s_idx <= val else "☆"
-                    b = widgets.Button(description=char, layout=widgets.Layout(width='18px', height='20px', margin='0', padding='0'))
-                    b.style.button_color = color if s_idx <= val else '#fff'
-                    if is_human:
-                        def _handler(_, v=s_idx, rid=r['id'], rs=r['short']):
-                            if ModelTrainer.update_model_metadata(rid, rs, {'rating': v}): self._refresh_models_list()
-                        b.on_click(_handler)
-                    btns.append(b)
-                return widgets.HBox(btns, layout=widgets.Layout(width=W['stars'], justify_content='center'))
+                btns_container = widgets.HBox([], layout=widgets.Layout(width=W['stars'], justify_content='center'))
+                
+                def _show_stars_row():
+                    btns = []
+                    for s_idx in range(1, 6):
+                        char = "★" if s_idx <= val else "☆"
+                        b = widgets.Button(description=char, layout=widgets.Layout(width='18px', height='20px', margin='0', padding='0'))
+                        b.style.button_color = color if s_idx <= val else '#fff'
+                        if is_human:
+                            def _on_click_star(btn, v=s_idx):
+                                # Mostrar confirmação compacta
+                                btn_b = widgets.Button(description="<", layout=widgets.Layout(width='20px', height='20px', padding='0'), button_style='info')
+                                btn_o = widgets.Button(description="OK", layout=widgets.Layout(width='30px', height='20px', padding='0'), button_style='success')
+                                def _ok(_):
+                                    btns_container.children = [self.make_spinner("Votando...")]
+                                    if ModelTrainer.update_model_metadata(r['id'], r['short'], {'rating': v}): 
+                                        self._refresh_models_list()
+                                    else:
+                                        _show_stars_row()
+                                def _back(_): _show_stars_row()
+                                btn_b.on_click(_back); btn_o.on_click(_ok)
+                                btns_container.children = [btn_b, btn_o]
+                            b.on_click(_on_click_star)
+                        btns.append(b)
+                    btns_container.children = btns
+                
+                _show_stars_row()
+                return btns_container
 
-            chk = widgets.Checkbox(value=r['id'] in self.selected_models, indent=False, layout=widgets.Layout(width=W['sel']))
-            def _on_chk_change(change, info=r['info'], rid=r['id']):
-                if change['new']: self.selected_models[rid] = info
-                else: self.selected_models.pop(rid, None)
+            # --- GRUPO DE ACCIONES ESTABLE ---
+            btn_mirar = widgets.Button(description='Mirar', layout=widgets.Layout(width='60px', height='30px'), button_style='primary', tooltip="Mirar en Canvas")
+            btn_trash = widgets.Button(description='Deletar', layout=widgets.Layout(width='70px', height='30px'), button_style='danger')
+            
+            action_box = widgets.HBox([btn_mirar, btn_trash], layout=widgets.Layout(width=W['del'], justify_content='center', gap='5px'))
+            
+            def _on_mirar(_, info=r['info'], rid=r['id']):
+                self.selected_models = {rid: info}
+                self.canvas_history[rid] = info
+                self.tab.selected_index = 2
                 self._update_canvas()
-            chk.observe(_on_chk_change, names='value')
+            btn_mirar.on_click(_on_mirar)
 
-            btn_trash = widgets.Button(icon='trash', layout=widgets.Layout(width='40px'), button_style='danger')
-            def _on_del_single(_, rid=r['id'], rs=r['short']):
-                ModelTrainer.delete_model(rid, rs)
-                self.selected_models.pop(rid, None)
-                self._refresh_models_list(show_loader=True); self._update_canvas()
-            btn_trash.on_click(_on_del_single)
+            def _on_del_confirm(_, rid=r['id'], rs=r['short'], abox=action_box, btrash=btn_trash, bmirar=btn_mirar):
+                btn_back = widgets.Button(description="<-", layout=widgets.Layout(width='35px', height='30px'), button_style='info')
+                btn_real_del = widgets.Button(description="Borrar", layout=widgets.Layout(width='65px', height='30px'), button_style='warning')
+                conf_box = widgets.HBox([btn_back, btn_real_del], layout=widgets.Layout(align_items='center', gap='2px'))
+                
+                def _do_back(_): abox.children = [bmirar, btrash]
+                def _do_del(_):
+                    abox.children = [self.make_spinner("Borrando...")]
+                    ModelTrainer.delete_model(rid, rs)
+                    self.selected_models.pop(rid, None)
+                    self.canvas_history.pop(rid, None)
+                    self._refresh_models_list(show_loader=True); self._update_canvas()
+                    
+                btn_back.on_click(_do_back); btn_real_del.on_click(_do_del)
+                abox.children = [conf_box]
+                
+            btn_trash.on_click(_on_del_confirm)
 
             row = widgets.HBox([
-                chk,
                 widgets.HTML(f"<div style='width:{W['pos']}; text-align:center; font-weight:bold;'>{medal}</div>"),
                 widgets.HTML(f"<div style='width:{W['id']}; overflow:hidden; font-size:11px;'><b>{r['id']}</b><br><span style='color:#666;'>{r['short']}</span></div>"),
                 widgets.HTML(f"<div style='width:{W['met']}; text-align:center; font-weight:bold; color:#2c3e50;'>{r['acc']:.1%}</div>"),
@@ -1263,15 +1630,19 @@ class ModelTrainerUI(PipelineStepUI):
                 widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #ddd; height:20px;'></div>"),
                 make_star_row(r['auto_rating'], '#bdc3c7'),
                 make_star_row(r['human_rating'], '#f1c40f', True),
-                btn_trash
-            ], layout=widgets.Layout(padding='5px', border_bottom='1px solid #eee', align_items='center', background='#fff' if i%2==0 else '#f9f9f9'))
+                action_box
+            ], layout=widgets.Layout(padding='5px', border_bottom='1px solid #eee', align_items='center', overflow='hidden', background='#fff' if i%2==0 else '#f9f9f9'))
             final_rows.append(row)
 
-        self.analytics_area.children = [toolbar, widgets.VBox([header, widgets.VBox(final_rows, layout=widgets.Layout(border='1px solid #dee2e6', border_radius='0 0 8px 8px'))])]
+        self.analytics_area.children = [toolbar, widgets.VBox([header, widgets.VBox(final_rows, layout=widgets.Layout(border='1px solid #dee2e6', border_radius='0 0 8px 8px', max_height='450px', overflow_y='auto'))])]
+        self._refresh_canvas_hub()
 
     def _update_canvas_live(self, history, embeds, preds, y_true, samples, b_cfg):
         self.canvas_output.clear_output(wait=True)
         with self.canvas_output:
+            # Toolbar de Visibilidade
+            display(self._build_viz_toolbar())
+            
             # 1. HEADER DO TREINO ATUAL
             from sklearn.metrics import classification_report
             try:
@@ -1286,51 +1657,150 @@ class ModelTrainerUI(PipelineStepUI):
                 'training_date': '🚀 Entrenamiento en curso...'
             }
             display(HTML("<h2 style='color:#2c3e50; border-bottom:3px solid #3498db; padding-bottom:5px; margin-bottom:15px;'>🚀 Entrenamiento en Vivo</h2>"))
-            display(HTML(render_model_card_html(hp_live, {'classification_report': rep})))
-            render_diagnostic_dashboard(history, embeds, preds, y_true)
+            
+            if self.viz_config.get('title'): display(HTML(render_model_card_html(hp_live, {'classification_report': rep})))
+            
+            render_diagnostic_dashboard(history, embeds, preds, y_true, viz_config=self.viz_config)
+            
             display(HTML("<div style='margin:50px 0; border-top:3px solid #3498db;'></div>"))
             
             # 2. MODELOS DO RANKING (PARALELO)
             for mid, info in self.selected_models.items():
-                view_analytics(info, out_widget=None, clear_before=False)
+                view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config)
                 display(HTML("<div style='margin:40px 0; border-top:1px dashed #ccc;'></div>"))
 
+    def _on_canvas_search_change(self, val):
+        self.canvas_search_query = val
+        self._refresh_canvas_hub()
+
+    def _refresh_canvas_hub(self):
+        """Redesenha as listas de modelos disponíveis e selecionados no Canvas."""
+        # 1. Disponíveis (Filtrados)
+        available = []
+        q = self.canvas_search_query.lower()
+        for rid, info in self.canvas_history.items():
+            if rid in self.selected_models: continue
+            if q and q not in rid.lower() and q not in info.get('shortname','').lower(): continue
+            
+            sname = info.get('shortname','')
+            lbl = f"➕ {rid} ({sname})" if sname else f"➕ {rid}"
+            
+            btn = widgets.Button(
+                description=lbl,
+                layout=widgets.Layout(width='100%', min_height='28px', margin='1px 0'),
+                style={'button_color': '#f8f9fa'}
+            )
+            def _add(b, r=rid, i=info):
+                self.selected_models[r] = i
+                self._refresh_canvas_hub(); self._update_canvas()
+            btn.on_click(_add)
+            available.append(btn)
+        self.canvas_available_box.children = available
+        
+        # 2. Selecionados
+        selected = []
+        for rid, info in self.selected_models.items():
+            sname = info.get('shortname','')
+            lbl = f"❌ {rid} ({sname})" if sname else f"❌ {rid}"
+            
+            btn = widgets.Button(
+                description=lbl,
+                layout=widgets.Layout(width='100%', min_height='28px', margin='1px 0'),
+                style={'button_color': '#e3f2fd'}
+            )
+            def _rem(b, r=rid):
+                self.selected_models.pop(r, None)
+                self._refresh_canvas_hub(); self._update_canvas()
+            btn.on_click(_rem)
+            selected.append(btn)
+        self.canvas_selected_box.children = selected
+
+    def _build_viz_toolbar(self):
+        L = widgets.Layout
+        labels = {
+            'title': 'Metadatos', 'scores': 'KPIs', 'cm': 'Confusion', 
+            'history': 'Historial', 'prob': 'Prob', 'pr': 'PR-Curve', 
+            'pca2d': 'PCA 2D', 'pca3d': 'PCA 3D', 'tsne3d': 't-SNE 3D'
+        }
+        chks = []
+        for key, label in labels.items():
+            cb = widgets.Checkbox(value=self.viz_config[key], description=label, layout=L(width='auto', margin='0 8px 0 0'))
+            def _on_change(change, k=key):
+                self.viz_config[k] = change['new']
+                self._update_canvas()
+            cb.observe(_on_change, names='value')
+            chks.append(cb)
+        
+        return widgets.HBox([widgets.HTML("<b style='margin-right:10px;'>Ver:</b>")] + chks, 
+                           layout=L(margin='10px 0', padding='10px', background_color='#f8f9fa', border_radius='5px', align_items='center'))
+
     def _update_canvas(self):
+        # Sincroniza o hub antes de renderizar
+        self._refresh_canvas_hub()
         self.canvas_output.clear_output(wait=True)
         with self.canvas_output:
             if not self.selected_models and not self.trainer_instance:
                 display(HTML("<div style='padding:100px; text-align:center; background:white;'> <span style='font-size:50px;'>🎨</span><br><h3 style='color:#999;'>El Canvas está vacío</h3><p style='color:#ccc;'>Seleccione modelos en <b>Trenamientos</b> para visualizarlos aquí.</p></div>"))
                 return
             
+            # Toolbar de Visibilidade
+            display(self._build_viz_toolbar())
+            
             # Modelos Selecionados do Ranking
             for mid, info in self.selected_models.items():
-                view_analytics(info, out_widget=None, clear_before=False)
+                view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config)
                 display(HTML("<div style='margin:40px 0; border-top:1px dashed #ccc;'></div>"))
 
     def _on_view_batch_logic(self, ranking_data):
+        """Visualiza una comparación de los modelos seleccionados."""
         selected = [r['info'] for r in ranking_data if self.model_chk_map[r['id']].value]
-        if not selected: return
+        if not selected:
+            return
         self.canvas_output.clear_output()
         with self.canvas_output:
             display(HTML(f"<h3 style='color:#007bff;'>📂 Comparativa ({len(selected)} modelos)</h3>"))
-            for info in selected: view_analytics(info, out_widget=None)
-
-    def _on_del_batch_logic(self, ranking_data):
-        selected = [r for r in ranking_data if self.model_chk_map[r['id']].value]
-        if not selected: return
-        self.show_loader(f"Eliminando {len(selected)} modelos...")
-        for r in selected:
-            try: ModelTrainer.delete_model(r['id'], r['short'])
-            except: pass
-        self._refresh_models_list(show_loader=True)
-
-def run_ui():
-    ui = ModelTrainerUI()
-    ui.display()
-    return ui
-
+            for info in selected:
+                view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config)
 def start_training(ui):
-    selected_samples = [name for name, chk in ui.chk_dict.items() if chk.value]
+    # -----------------------------------------------------------------
+    # 1️⃣ Retraining intent (checked via the UI state)
+    # -----------------------------------------------------------------
+    intent = ui.retrain_intent
+    if intent.get('mode'):
+        hp = intent.get('hp')
+        
+        # Determine training ID and shortname for the target model
+        # If hp is provided (from Canvas/Ranking), use it. Otherwise use widgets.
+        target_id = hp['training_id'] if hp else ui.w_training_id.value
+        target_short = hp['shortname'] if hp else ui.w_shortname.value
+        
+        # If 'borrar' mode is selected, delete the target model first.
+        if intent['mode'] == 'borrar':
+            print(f"🗑️ Borrando modelo previo: {target_id} ({target_short})")
+            ModelTrainer.delete_model(target_id, target_short)
+            
+        # If hp is provided, load its full configuration into the widgets.
+        if hp:
+            ui._load_config_into_widgets(hp)
+            selected_samples = hp.get('sample_collections', [])
+            # Also extract other HPs if needed (though start_training reads widgets below)
+            
+        print(f"🔄 Modo '{intent['mode']}' activado para {target_id}")
+        
+        # Reset the intent so it does not fire again accidentally.
+        ui.retrain_intent = {'mode': None, 'hp': None}
+        # Reset the checkboxes visually too
+        for cb in [ui.cb_retrain, ui.cb_reextract, ui.cb_borrar_retrain]:
+            cb.unobserve(ui._on_intent_cb_change, names='value')
+            cb.value = False
+            cb.observe(ui._on_intent_cb_change, names='value')
+            
+        # Continue to training...
+    
+    # 2️⃣ Get parameters from UI (always up-to-date after intent load or manual edit)
+    if not intent.get('mode') or not hp:
+        selected_samples = [name for name, chk in ui.chk_dict.items() if chk.value]
+
     if not selected_samples:
         print("Error: Ninguna muestra seleccionada.")
         return
@@ -1342,12 +1812,7 @@ def start_training(ui):
     bands_config = {}
     for (s, m, b), chk in ui.band_chk_map.items():
         if chk.value:
-            # Se a mesma banda for selecionada em múltiplos sensores, a última prevalece
-            # Mas na prática o usuário escolherá uma fonte por banda
-            bands_config[b] = {
-                'sensor': s,
-                'mosaic': m
-            }
+            bands_config[b] = {'sensor': s, 'mosaic': m}
             
     if not bands_config:
         print("Error: Ninguna banda seleccionada en la Matriz de Extracción.")
@@ -1375,25 +1840,30 @@ def start_training(ui):
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
     
     ui.trainer_instance = ModelTrainer(num_input=len(bands_config), layers=layers, lr=lr)
-    ui.trainer_instance._bands_input = sorted(bands_config.keys()) # Salva a ordem das bandas
-    ui.trainer_instance._bands_config = bands_config # Salva a configuração completa
+    ui.trainer_instance._bands_input = sorted(bands_config.keys())
+    ui.trainer_instance._bands_config = bands_config
     ui.trainer_instance._sample_collections = selected_samples
     ui.trainer_instance._sample_count = {'burned': int(y.sum()), 'not_burned': int((y==0).sum())}
     
     print("Entrenando DNN...")
     
-    # Mudar para aba Canvas
-    ui.tab.selected_index = 1
+    # Mudar para aba Canvas (Índice 2)
+    ui.tab.selected_index = 2
     
+    # Snapshot Directory
+    m_id = ui.w_training_id.value
+    m_short = ui.w_shortname.value
+    snap_dir = f"library_images/models/{m_id}_{m_short}"
+    os.makedirs(snap_dir, exist_ok=True)
+
     def update_chart(history, embeds=None, preds=None, y_true=None):
         with ui.canvas_output:
-            # Mantemos o que já está no canvas, mas o topo é o treino
-            # Para isso limpamos e re-renderizamos tudo
             ui._update_canvas_live(history, embeds, preds, y_true, selected_samples, bands_config)
 
     # Iniciar Treino
     ui.trainer_instance.train(X_train, y_train, X_val=X_val, y_val=y_val, 
-                              batch_size=batch, n_iters=iters, logger=_logger, update_chart_fn=update_chart)
+                              batch_size=batch, n_iters=iters, logger=_logger, 
+                              update_chart_fn=update_chart, snapshot_dir=snap_dir)
     
     # --- AUDITORIA FINAL COM t-SNE (INTERATIVO) ---
     print("\n🏁 Entrenamiento completado. Generando auditoría t-SNE final de alta resolución...")
@@ -1451,3 +1921,8 @@ def start_training(ui):
         print(f"Error al guardar: {e}")
         
     ui._refresh_models_list()
+
+def run_ui():
+    ui = ModelTrainerUI()
+    ui.display()
+    return ui
