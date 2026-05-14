@@ -456,17 +456,23 @@ class ModelTrainer:
             
         return layer
 
-    def delete_model(self, training_id, shortname):
+    @staticmethod
+    def delete_model(training_id, shortname):
         """Deleta recursivamente a pasta do modelo no GCS."""
         import subprocess
         from M0_auth_config import gcs_path
         base_uri = model_path(training_id, shortname)
         full_gcs_uri = gcs_path(base_uri)
+        if not full_gcs_uri.endswith('/'): full_gcs_uri += '/'
+        
+        print(f"🧹 Eliminando carpeta del modelo: {full_gcs_uri}")
         try:
             # -m para remover em paralelo (rápido) e -r para recursivo
             subprocess.run(['gsutil', '-m', 'rm', '-r', full_gcs_uri], check=True, capture_output=True)
             return True
         except Exception as e:
+            # Se já não existe, ignoramos
+            if 'not found' in str(e).lower(): return True
             raise RuntimeError(f"No se pudo eliminar de GCS: {e}")
 
     def save_projector_files(self, training_id, shortname, X, y, logger=None):
@@ -608,7 +614,8 @@ class ModelTrainer:
 
         return hp
 
-    def update_model_metadata(self, training_id, shortname, updates):
+    @staticmethod
+    def update_model_metadata(training_id, shortname, updates):
         """Atualiza campos específicos do metadata.json no GCS."""
         import json, subprocess, tempfile
         from M0_auth_config import gcs_path
@@ -851,7 +858,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True):
 
                 def _hnd(val):
                     def handler(_):
-                        if ModelTrainer().update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
+                        if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
                             _upd_stars(val)
                             status_msg.value = "✅"
                             try:
@@ -1021,13 +1028,6 @@ class ModelTrainerUI(PipelineStepUI):
         self.samples_area = self._build_matrix()
         self.extraction_area = self._build_extraction_matrix()
         
-        btn_start = widgets.Button(
-            description="🚀 INICIAR ENTRENAMIENTO", 
-            button_style='primary', 
-            layout=widgets.Layout(width='100%', height='50px', margin='20px 0')
-        )
-        btn_start.on_click(lambda _: start_training(self))
-        
         self.new_training_tab = widgets.VBox([
             widgets.HTML("<h2 style='color:#2c3e50;'>📂 1. Selección de Muestras</h2>"),
             self.samples_area,
@@ -1035,7 +1035,6 @@ class ModelTrainerUI(PipelineStepUI):
             self.extraction_area,
             widgets.HTML("<br><h2 style='color:#2c3e50;'>⚙️ 3. Hiperparámetros y Destino</h2>"),
             self.config_area,
-            btn_start
         ], layout=widgets.Layout(padding='20px', background_color='white'))
         
         self.tab = widgets.Tab(children=[
@@ -1304,7 +1303,7 @@ class ModelTrainerUI(PipelineStepUI):
                     b.style.button_color = color if s_idx <= val else '#fff'
                     if is_human:
                         def _handler(_, v=s_idx, rid=r['id'], rs=r['short']):
-                            if ModelTrainer().update_model_metadata(rid, rs, {'rating': v}): self._refresh_models_list()
+                            if ModelTrainer.update_model_metadata(rid, rs, {'rating': v}): self._refresh_models_list()
                         b.on_click(_handler)
                     btns.append(b)
                 return widgets.HBox(btns, layout=widgets.Layout(width=W['stars'], justify_content='center'))
@@ -1318,7 +1317,7 @@ class ModelTrainerUI(PipelineStepUI):
 
             btn_trash = widgets.Button(icon='trash', layout=widgets.Layout(width='40px'), button_style='danger')
             def _on_del_single(_, rid=r['id'], rs=r['short']):
-                ModelTrainer().delete_model(rid, rs)
+                ModelTrainer.delete_model(rid, rs)
                 self.selected_models.pop(rid, None)
                 self._refresh_models_list(show_loader=True); self._update_canvas()
             btn_trash.on_click(_on_del_single)
@@ -1390,9 +1389,8 @@ class ModelTrainerUI(PipelineStepUI):
         selected = [r for r in ranking_data if self.model_chk_map[r['id']].value]
         if not selected: return
         self.show_loader(f"Eliminando {len(selected)} modelos...")
-        trainer = ModelTrainer(0)
         for r in selected:
-            try: trainer.delete_model(r['id'], r['short'])
+            try: ModelTrainer.delete_model(r['id'], r['short'])
             except: pass
         self._refresh_models_list(show_loader=True)
 
