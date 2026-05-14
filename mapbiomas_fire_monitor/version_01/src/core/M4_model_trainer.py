@@ -1009,6 +1009,31 @@ class ModelTrainerUI(PipelineStepUI):
         
         self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
 
+    def display(self):
+        # 1. TRENAMIENTOS (Ranking)
+        self.analytics_area = widgets.VBox([], layout=widgets.Layout(padding='10px', background_color='white'))
+        
+        # 2. CANVAS (Visualización)
+        self.canvas_area = widgets.VBox([self.canvas_output], layout=widgets.Layout(padding='10px', background_color='white'))
+        
+        # 3. NOVO TREINO (Configuración + Samples)
+        self.config_area = self._build_config_area()
+        self.samples_area = self._build_matrix()
+        self.new_training_tab = widgets.VBox([self.config_area, self.samples_area], layout=widgets.Layout(padding='10px', background_color='white'))
+        
+        self.tab = widgets.Tab(children=[
+            self.analytics_area,
+            self.canvas_area,
+            self.new_training_tab
+        ])
+        self.tab.set_title(0, "📊 Trenamientos")
+        self.tab.set_title(1, "🎨 Canvas")
+        self.tab.set_title(2, "⚙️ Novo Treino")
+        
+        self.main_area.children = [self.tab]
+        self._refresh_models_list()
+        display(self.main_area)
+
     def _on_select_all_samples(self, _):
         """Seleciona apenas as amostras que estão visíveis pelo filtro."""
         visible_keys = [s for s in self.chk_dict.keys() if self.search_query_samples.lower() in s.lower()]
@@ -1161,77 +1186,28 @@ class ModelTrainerUI(PipelineStepUI):
             background_color='#fff', border_radius='4px', max_height='400px', overflow_y='auto'
         ))
 
-    def _refresh_ui(self):
-        self.show_loader("Actualizando lista de muestras...")
-        self._build_ui()
-        self.hide_loader()
-
-    def _build_ui(self):
+    def _build_config_area(self):
         L = widgets.Layout
-        css_tags = widgets.HTML("<style>.widget-toggle-button { border-radius:12px !important; }</style>")
-        
-        # --- TAB 1: Configuración & Entrenamiento ---
-        matrix_ui = self._build_matrix()
-        extraction_matrix = self._build_extraction_matrix()
-        
         self.w_iters = widgets.Text(value="7000", description='Iteraciones:', style={'description_width': '150px'}, layout=L(width='350px'))
-        lbl_iters = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Total de iteraciones de entrenamiento (Ej: 5000, 10000). Mayor = más entrenamiento.</span>")
-        box_iters = widgets.HBox([self.w_iters, lbl_iters], layout=L(align_items='center', margin='5px 0'))
-        
         self.w_batch = widgets.Text(value="1000", description='Tamaño de Lote:', style={'description_width': '150px'}, layout=L(width='350px'))
-        lbl_batch = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Píxeles por iteración (Ej: 500, 1000). Controla el uso de memoria.</span>")
-        box_batch = widgets.HBox([self.w_batch, lbl_batch], layout=L(align_items='center', margin='5px 0'))
-        
         self.w_lr = widgets.Text(value="0.001", description='Tasa de Aprendizaje:', style={'description_width': '150px'}, layout=L(width='350px'))
-        lbl_lr = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Learning rate (Ej: 0.001, 0.01). Controla la velocidad de ajuste.</span>")
-        box_lr = widgets.HBox([self.w_lr, lbl_lr], layout=L(align_items='center', margin='5px 0'))
-        
         self.w_layers = widgets.Text(value="7, 14, 7", description='Capas Ocultas:', style={'description_width': '150px'}, layout=L(width='350px'))
-        lbl_layers = widgets.HTML("<span style='color:#666; font-size:12px; margin-left:10px;'>Neuronas por capa, separadas por coma (Ej: 14, 28, 14).</span>")
-        box_layers = widgets.HBox([self.w_layers, lbl_layers], layout=L(align_items='center', margin='5px 0'))
         
-        hp_box = widgets.VBox([box_iters, box_batch, box_lr, box_layers], layout=L(margin='10px 0'))
+        self.w_training_id = widgets.Text(value='42', description='ID:', layout=L(width='100px'))
+        self.w_shortname = widgets.Text(value='peru_v1', description='Nome:', layout=L(width='150px'))
+        self.w_comment = widgets.Textarea(placeholder='Comentários...', layout=L(width='98%', height='60px'))
         
-        self.w_training_id = widgets.Text(value='42', description='Training ID:', style={'description_width': '80px'})
-        self.w_shortname = widgets.Text(value='peru_r1', description='Nombre Corto:', style={'description_width': '100px'})
-        self.w_comment = widgets.Textarea(
-            placeholder='Descreva aqui os detalhes de este treinamento...',
-            description='Comentário:',
-            style={'description_width': '100px'},
-            layout=L(width='98%', height='80px')
-        )
-        
-        tab_config = widgets.VBox([
-            widgets.HTML("<b>1. Selección de muestras (matriz GCS)</b>"), matrix_ui,
-            widgets.HTML("<br><b>2. Matriz de extracción (bandas por sensor + mosaico)</b>"), extraction_matrix,
-            widgets.HTML("<b>3. Hiperparámetros (DNN)</b>"), hp_box,
-            widgets.HTML("<hr style='margin:10px 0'>"),
-            widgets.HTML("<b>4. Destino Final no GCS</b>"),
-            widgets.HBox([self.w_training_id, self.w_shortname], layout=L(margin='10px 0')),
+        return widgets.VBox([
+            widgets.HTML("<b>⚙️ Hiperparámetros (DNN)</b>"),
+            widgets.HBox([self.w_iters, self.w_batch]),
+            widgets.HBox([self.w_lr, self.w_layers]),
+            widgets.HTML("<hr><b>📍 Destino GCS</b>"),
+            widgets.HBox([self.w_training_id, self.w_shortname]),
             self.w_comment
-        ], layout=L(padding='15px'))
-        
-        # --- TAB 3: Historial & Analytics ---
-        self.analytics_dashboard_output = widgets.Output(layout=L(border='1px solid #dee2e6', border_radius='4px', padding='10px', min_height='300px', margin='10px 0', background_color='#fafafa'))
-        self.analytics_area = widgets.VBox()
-        self._refresh_models_list()
-        
-        tab_history = widgets.VBox([
-            widgets.HTML("<b>📊 Ficha del modelo y panel de análisis</b>"),
-            self.analytics_dashboard_output,
-            widgets.HTML("<hr style='margin:15px 0'>"),
-            widgets.HTML("<b>📂 Historial de Modelos</b>"),
-            widgets.HTML("<p style='font-size:11px;color:#666;'>Consulte os Model Cards de treinamentos anteriores ou exporte para o TensorBoard Projector.</p>"),
-            self.analytics_area
-        ], layout=L(padding='15px'))
-        
-        self.tabs = widgets.Tab(children=[tab_config, tab_live, tab_history])
-        self.tabs.set_title(0, '⚙️ Configuración')
-        self.tabs.set_title(1, '📈 Monitorización Live')
-        self.tabs.set_title(2, '📂 Historial & Analytics')
-        
-        self.clear_main()
-        self.main_area.children = [css_tags, self.tabs]
+        ], layout=L(padding='15px', border='1px solid #eee', border_radius='8px', margin='0 0 20px 0'))
+
+    def _refresh_ui(self):
+        self._refresh_models_list(show_loader=True)
         
 
     def _refresh_models_list(self, show_loader=False):
@@ -1406,12 +1382,6 @@ class ModelTrainerUI(PipelineStepUI):
 def run_ui():
     ui = ModelTrainerUI()
     ui.display()
-    
-    # Executa inicialização com loader visível
-    ui.show_loader("Cargando interfaz...")
-    ui._build_ui()
-    ui.hide_loader()
-    
     return ui
 
 def start_training(ui):
@@ -1420,9 +1390,8 @@ def start_training(ui):
         print("Error: Ninguna muestra seleccionada.")
         return
         
-    ui.tabs.selected_index = 1 # Muda para a aba "Monitorización Live"
-    ui.training_chart_output.clear_output()
-    ui.analytics_dashboard_output.clear_output()
+    ui.tab.selected_index = 1 # Muda para a aba "Canvas"
+    ui.canvas_output.clear_output()
     
     # Constrói o dicionário de configuração de bandas a partir da nova Matriz Premium
     bands_config = {}
