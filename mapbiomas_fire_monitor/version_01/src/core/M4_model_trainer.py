@@ -520,6 +520,7 @@ class ModelTrainer:
                 'country':      CONFIG['country'],
                 'sensor':       GLOBAL_OPTS['SENSOR'],
                 'bands_input':  getattr(self, '_bands_input', CONFIG['bands_model_default']),
+                'bands_config': getattr(self, '_bands_config', {}), # Nova configuração multisensor
                 'num_input':    self.num_input,
                 'layers':       self.layers,
                 'lr':           self.lr,
@@ -529,7 +530,7 @@ class ModelTrainer:
                 'sample_collections': getattr(self, '_sample_collections', []),
                 'sample_count': getattr(self, '_sample_count', {}),
                 'comment':      comment,
-                'rating':       0, # Inicializado com 0 estrelas
+                'rating':       0, 
             }
             with open(os.path.join(tmpdir, 'metadata.json'), 'w') as f:
                 json.dump(hp, f, indent=2)
@@ -776,7 +777,7 @@ def render_model_card_html(hp, metrics):
             <div style="flex: 2; min-width: 300px;">
                 <p class="meta-text"><b>Estado/Fecha:</b> {date_str}</p>
                 <p class="meta-text"><b>Muestras:</b> {', '.join(hp.get('sample_collections', []))}</p>
-                <p class="meta-text"><b>Bandas:</b> {', '.join(hp.get('bands_input', []))}</p>
+                <p class="meta-text"><b>Bandas:</b> {', '.join([f"{b} ({hp.get('bands_config', {}).get(b, {}).get('sensor', 'N/A').upper()})" for b in hp.get('bands_input', [])])}</p>
                 <p class="meta-text"><b>Capas:</b> {hp.get('layers')} | <b>LR:</b> {hp.get('lr')}</p>
                 <p class="meta-text"><b>Píxeles:</b> {hp.get('sample_count', {}).get('burned', 0)} (F) | {hp.get('sample_count', {}).get('not_burned', 0)} (NF)</p>
             </div>
@@ -1007,6 +1008,9 @@ class ModelTrainerUI(PipelineStepUI):
         self.trainer_instance = None
         self.chk_dict = {}
         self.search_query_samples = ""
+        self.search_query_models = "" # Novo: busca no ranking
+        self.sort_column = "acc"      # Novo: coluna de ordenação
+        self.sort_ascending = False   # Novo: ordem descrescente (melhores primeiro)
         self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
 
     def _on_select_all_samples(self, _):
@@ -1024,6 +1028,19 @@ class ModelTrainerUI(PipelineStepUI):
     def _on_search_samples_change(self, change):
         self.search_query_samples = change['new']
         self._refresh_matrix_only()
+
+    def _on_search_models_change(self, change):
+        self.search_query_models = change['new']
+        self._refresh_models_list()
+
+    def _on_sort_change(self, change):
+        if change['name'] == 'value':
+            self.sort_column = change['new']
+            self._refresh_models_list()
+            
+    def _on_sort_order_change(self, change):
+        self.sort_ascending = not self.sort_ascending
+        self._refresh_models_list()
 
     def _refresh_matrix_only(self):
         new_matrix = self._build_matrix_content()
@@ -1249,10 +1266,18 @@ class ModelTrainerUI(PipelineStepUI):
                 auto_rating = met.get('auto_rating', 0)
                 human_rating = hp.get('rating', 0)
                 
+                # Detectar Sensores (Multisensor support)
+                b_cfg = hp.get('bands_config', {})
+                if b_cfg:
+                    sensors = sorted(list(set(v['sensor'] for v in b_cfg.values())))
+                    sensor_display = "+".join([s.replace('sentinel2', 'S2').replace('landsat8', 'L8').upper() for s in sensors])
+                else:
+                    sensor_display = hp.get('sensor', 'N/A').replace('sentinel2', 'S2').replace('landsat8', 'L8').upper()
+
                 ranking_data.append({
                     'id': m['training_id'],
                     'short': hp.get('shortname', 'N/A'),
-                    'sensor': hp.get('sensor', 'N/A'),
+                    'sensor': sensor_display, # Agora dinâmico
                     'date': hp.get('training_date', '').split('T')[0],
                     'acc': acc,
                     'f1': f1_fire,
@@ -1263,145 +1288,122 @@ class ModelTrainerUI(PipelineStepUI):
                 })
             except: continue
             
-        ranking_data.sort(key=lambda x: x['acc'], reverse=True)
+        # --- FILTRO DE BUSCA ---
+        if self.search_query_models:
+            q = self.search_query_models.lower()
+            ranking_data = [r for r in ranking_data if q in r['id'].lower() or q in r['short'].lower() or q in r['sensor'].lower()]
+            
+        # --- ORDENAÇÃO DINÂMICA ---
+        # Mapeamento de colunas internas
+        sort_key = self.sort_column # 'acc', 'date', 'human_rating', etc.
+        ranking_data.sort(key=lambda x: x[sort_key], reverse=not self.sort_ascending)
+        
         if show_loader: self.hide_loader()
 
-        if not ranking_data:
-            self.analytics_area.children = [widgets.HTML("<i>Ningún modelo disponible para el Ranking.</i>")]
-            return
-
-        # Botões de Ação em Massa
-        btn_view_batch = widgets.Button(description="🔍 Visualizar Seleccionados", button_style='info', icon='search', layout=widgets.Layout(width='220px'))
-        btn_del_batch = widgets.Button(description="🗑️ Eliminar Seleccionados", button_style='danger', icon='trash', layout=widgets.Layout(width='220px'))
-        btn_refresh = widgets.Button(description="🔄 Actualizar Ranking", layout=widgets.Layout(width='180px'))
+        # WIDGETS DE CONTROLE (TOP BAR)
+        txt_search = widgets.Text(
+            value=self.search_query_models, placeholder='🔍 Buscar modelo...',
+            layout=widgets.Layout(width='200px')
+        )
+        txt_search.observe(self._on_search_models_change, names='value')
         
-        def _on_view_batch(_):
-            selected = [r['info'] for r in ranking_data if self.model_chk_map[r['id']].value]
-            if not selected: return
-            self.analytics_dashboard_output.clear_output()
-            with self.analytics_dashboard_output:
-                display(HTML(f"<h3 style='color:#007bff; margin-bottom:20px;'>📂 Comparativa de {len(selected)} Modelos</h3>"))
-                for info in selected:
-                    view_analytics(info, out_widget=None, is_batch=True) # Versão que apenas faz display sem limpar
+        dd_sort = widgets.Dropdown(
+            options=[
+                ('📊 Acurácia', 'acc'), 
+                ('📅 Fecha', 'date'), 
+                ('🤖 Nota IA', 'auto_rating'), 
+                ('👤 Nota Humana', 'human_rating'),
+                ('🔥 F1-Fire', 'f1')
+            ],
+            value=self.sort_column,
+            description='Ordenar:',
+            style={'description_width': 'initial'},
+            layout=widgets.Layout(width='200px')
+        )
+        dd_sort.observe(self._on_sort_change, names='value')
+        
+        btn_order = widgets.Button(
+            description="" if self.sort_ascending else "", 
+            icon='sort-amount-desc' if not self.sort_ascending else 'sort-amount-asc',
+            layout=widgets.Layout(width='40px')
+        )
+        btn_order.on_click(self._on_sort_order_change)
 
-        def _on_del_batch(_):
-            selected = [r for r in ranking_data if self.model_chk_map[r['id']].value]
-            if not selected: return
-            if btn_del_batch.description == "🗑️ Eliminar Seleccionados":
-                btn_del_batch.description = "¿Confirmar Borrado?"; btn_del_batch.button_style = 'warning'
-                return
-            
-            self.show_loader(f"Eliminando {len(selected)} modelos...")
-            trainer = ModelTrainer(0)
-            for r in selected:
-                try:
-                    trainer.delete_model(r['id'], r['path'].split('/')[-1].replace(f"training_{r['id']}_", "").replace("_sentinel2", "").replace("_landsat8", ""))
-                except: pass
-            self._refresh_models_list(show_loader=True)
-
-        btn_view_batch.on_click(_on_view_batch)
-        btn_del_batch.on_click(_on_del_batch)
+        btn_view_batch = widgets.Button(description="🔍 Ver", button_style='info', icon='search', layout=widgets.Layout(width='100px'), tooltip='Visualizar seleccionados')
+        btn_del_batch = widgets.Button(description="🗑️", button_style='danger', icon='trash', layout=widgets.Layout(width='40px'), tooltip='Eliminar seleccionados')
+        btn_refresh = widgets.Button(icon='refresh', layout=widgets.Layout(width='40px'))
+        
+        # Callbacks de lote (batch) já definidos na Issue anterior...
+        btn_view_batch.on_click(lambda _: self._on_view_batch_logic(ranking_data))
+        btn_del_batch.on_click(lambda _: self._on_del_batch_logic(ranking_data))
         btn_refresh.on_click(lambda _: self._refresh_models_list(show_loader=True))
 
-        batch_box = widgets.HBox([btn_refresh, widgets.Label("|", layout=widgets.Layout(margin='0 15px')), btn_view_batch, btn_del_batch], layout=widgets.Layout(margin='0 0 15px 0', align_items='center'))
+        control_box = widgets.HBox([
+            txt_search, dd_sort, btn_order, widgets.Label("|", layout=widgets.Layout(margin='0 10px')),
+            btn_view_batch, btn_del_batch, btn_refresh
+        ], layout=widgets.Layout(margin='0 0 15px 0', align_items='center', background='#f8f9fa', padding='10px', border_radius='8px'))
 
-        # Tabela HTML
+        if not ranking_data:
+            self.analytics_area.children = [control_box, widgets.HTML("<i>Ningún modelo encontrado con estos filtros.</i>")]
+            return
+
+        # Montar Tabela HTML
         rows_html = ""
-        chk_widgets = []
-        for i, r in enumerate(ranking_data):
-            medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"<b>#{i+1}</b>"
-            ai_stars = "★" * r['auto_rating'] + "☆" * (5 - r['auto_rating'])
-            user_stars = "★" * r['human_rating'] + "☆" * (5 - r['human_rating'])
-            
-            # Criar checkbox widget
-            chk = widgets.Checkbox(value=False, indent=False, layout=widgets.Layout(width='30px'))
-            self.model_chk_map[r['id']] = chk
-            chk_widgets.append(chk)
-            
-            row_style = "background:#fff;" if i % 2 == 0 else "background:#f9f9f9;"
-            if i == 0: row_style = "background:#fffde7; font-weight:bold; border:1px solid #fbc02d;"
-            
-            rows_html += f"""
-            <tr style="{row_style} border-bottom:1px solid #eee;">
-                <td style="padding:5px; text-align:center;" id="chk_{i}"></td>
-                <td style="padding:12px; text-align:center; font-size:16px;">{medal}</td>
-                <td style="padding:12px;"><b>{r['id']}</b><br><span style="font-size:10px; color:#666;">{r['short']} | {r['date']}</span></td>
-                <td style="padding:12px; text-align:center; color:#28a745;"><b>{r['acc']:.1%}</b></td>
-                <td style="padding:12px; text-align:center; color:#ffc107; font-size:10px;">🤖 {ai_stars}</td>
-                <td style="padding:12px; text-align:center; color:#2c3e50; font-size:10px;">👤 {user_stars}</td>
-                <td style="padding:12px; text-align:center;"><button onclick="window.load_model_card('{r['id']}')" style="cursor:pointer; border:none; background:none; color:#007bff; text-decoration:underline; font-size:11px;">Detalles</button></td>
-            </tr>
-            """
-            
-        table_html = f"""
-        <div style="background:white; border-radius:12px; border:1px solid #dee2e6; overflow:hidden; box-shadow:0 4px 15px rgba(0,0,0,0.05); margin-bottom:10px;">
-            <table style="width:100%; border-collapse:collapse; font-family:sans-serif;">
-                <thead style="background:#2c3e50; color:white; text-align:center; font-size:11px; text-transform:uppercase;">
-                    <tr>
-                        <th style="padding:10px; width:40px;">Sel</th>
-                        <th style="padding:10px; width:60px;">Pos</th>
-                        <th style="padding:10px; text-align:left;">Modelo / Info</th>
-                        <th style="padding:10px;">Acc</th>
-                        <th style="padding:10px;">AI Rating</th>
-                        <th style="padding:10px;">User Rating</th>
-                        <th style="padding:10px;">Link</th>
-                    </tr>
-                </thead>
-                <tbody>{rows_html}</tbody>
-            </table>
-        </div>
-        """
-        
-        # Como o HTML acima não pode conter os checkboxes reais do ipywidgets de forma nativa e funcional,
-        # Vamos criar um VBox lateral ou uma estrutura de grid para alinhar os checkboxes com as linhas.
-        # Estratégia: Usar HBoxes para cada linha da tabela (mais robusto no Colab).
-        
-        table_header = widgets.HBox([
-            widgets.Label("Sel", layout=widgets.Layout(width='40px')),
-            widgets.Label("Pos", layout=widgets.Layout(width='60px')),
-            widgets.Label("Modelo / Info", layout=widgets.Layout(width='250px')),
-            widgets.Label("Acc", layout=widgets.Layout(width='60px')),
-            widgets.Label("AI Rating", layout=widgets.Layout(width='100px')),
-            widgets.Label("User Rating", layout=widgets.Layout(width='100px')),
-            widgets.Label("Acción", layout=widgets.Layout(width='120px')),
-        ], layout=widgets.Layout(background='#2c3e50', padding='10px', border_radius='8px 8px 0 0'))
-        # Nota: Aplicar cor branca no texto do header via CSS ou widgets.HTML individuais
-        
         final_rows = []
         for i, r in enumerate(ranking_data):
-            medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"#{i+1}"
+            medal = "🥇" if i == 0 and not self.sort_ascending and self.sort_column == 'acc' else f"#{i+1}"
             ai_stars = "★" * r['auto_rating'] + "☆" * (5 - r['auto_rating'])
             user_stars = "★" * r['human_rating'] + "☆" * (5 - r['human_rating'])
             
-            btn_view = widgets.Button(description="Ver Card", button_style='info', layout=widgets.Layout(width='110px'))
-            btn_view.on_click(lambda _, info=r['info']: view_analytics(info, out_widget=self.analytics_dashboard_output))
+            chk = widgets.Checkbox(value=False, indent=False, layout=widgets.Layout(width='30px'))
+            self.model_chk_map[r['id']] = chk
+            
+            btn_card = widgets.Button(description="Card", button_style='info', layout=widgets.Layout(width='80px'))
+            btn_card.on_click(lambda _, info=r['info']: view_analytics(info, out_widget=self.analytics_dashboard_output))
             
             row = widgets.HBox([
-                self.model_chk_map[r['id']],
-                widgets.HTML(f"<div style='width:60px; text-align:center;'>{medal}</div>"),
+                chk,
+                widgets.HTML(f"<div style='width:50px; text-align:center;'>{medal}</div>"),
                 widgets.HTML(f"<div style='width:250px;'><b>{r['id']}</b><br><span style='font-size:10px;'>{r['short']} | {r['date']}</span></div>"),
                 widgets.HTML(f"<div style='width:60px; color:#28a745; font-weight:bold;'>{r['acc']:.1%}</div>"),
-                widgets.HTML(f"<div style='width:100px; color:#ffc107; font-size:10px;'>{ai_stars}</div>"),
-                widgets.HTML(f"<div style='width:100px; color:#2c3e50; font-size:10px;'>{user_stars}</div>"),
-                btn_view
-            ], layout=widgets.Layout(padding='8px', border_bottom='1px solid #eee', align_items='center', background='#fff' if i%2==0 else '#f9f9f9'))
+                widgets.HTML(f"<div style='width:90px; color:#ffc107; font-size:9px;'>{ai_stars}</div>"),
+                widgets.HTML(f"<div style='width:90px; color:#2c3e50; font-size:9px;'>{user_stars}</div>"),
+                btn_card
+            ], layout=widgets.Layout(padding='5px', border_bottom='1px solid #eee', align_items='center', background='#fff' if i%2==0 else '#f9f9f9'))
             final_rows.append(row)
 
+        header_html = widgets.HTML(f"""<div style='background:#2c3e50; color:white; padding:10px; display:flex; border-radius:8px 8px 0 0; font-size:10px; font-weight:bold; text-transform:uppercase;'>
+            <div style='width:30px; text-align:center;'>Sel</div>
+            <div style='width:50px; text-align:center;'>Pos</div>
+            <div style='width:250px;'>Modelo / Info</div>
+            <div style='width:60px;'>Acc</div>
+            <div style='width:90px; text-align:center;'>AI Rating</div>
+            <div style='width:90px; text-align:center;'>User Rating</div>
+            <div style='width:80px; text-align:center;'>Ver</div>
+        </div>""")
+
         self.analytics_area.children = [
-            batch_box,
-            widgets.VBox([
-                widgets.HTML(f"""<div style='background:#2c3e50; color:white; padding:12px; display:flex; border-radius:8px 8px 0 0; font-size:11px; font-weight:bold; text-transform:uppercase;'>
-                    <div style='width:40px; text-align:center;'>Sel</div>
-                    <div style='width:60px; text-align:center;'>Pos</div>
-                    <div style='width:250px;'>Modelo / Info</div>
-                    <div style='width:60px;'>Acc</div>
-                    <div style='width:100px; text-align:center;'>AI Rating</div>
-                    <div style='width:100px; text-align:center;'>User Rating</div>
-                    <div style='width:110px; text-align:center;'>Acción</div>
-                </div>"""),
-                widgets.VBox(final_rows, layout=widgets.Layout(border='1px solid #dee2e6', border_top='none', border_radius='0 0 8px 8px'))
-            ])
+            control_box,
+            widgets.VBox([header_html, widgets.VBox(final_rows, layout=widgets.Layout(border='1px solid #dee2e6', border_top='none', border_radius='0 0 8px 8px'))])
         ]
+
+    def _on_view_batch_logic(self, ranking_data):
+        selected = [r['info'] for r in ranking_data if self.model_chk_map[r['id']].value]
+        if not selected: return
+        self.analytics_dashboard_output.clear_output()
+        with self.analytics_dashboard_output:
+            display(HTML(f"<h3 style='color:#007bff;'>📂 Comparativa ({len(selected)} modelos)</h3>"))
+            for info in selected: view_analytics(info, out_widget=None)
+
+    def _on_del_batch_logic(self, ranking_data):
+        selected = [r for r in ranking_data if self.model_chk_map[r['id']].value]
+        if not selected: return
+        self.show_loader(f"Eliminando {len(selected)} modelos...")
+        trainer = ModelTrainer(0)
+        for r in selected:
+            try: trainer.delete_model(r['id'], r['short'])
+            except: pass
+        self._refresh_models_list(show_loader=True)
 
 def run_ui():
     ui = ModelTrainerUI()
