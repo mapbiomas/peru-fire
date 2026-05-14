@@ -1277,13 +1277,11 @@ class ModelTrainerUI(PipelineStepUI):
                 with fs.open(f"{m['path']}/metadata.json", 'r') as f: hp = json.load(f)
                 with fs.open(f"{m['path']}/metrics.json", 'r') as f: met = json.load(f)
                 crep = met.get('classification_report', {})
-                acc = crep.get('accuracy', 0)
                 f_met = crep.get('1', {}) 
                 ranking_data.append({
                     'id': m['training_id'], 'short': hp.get('shortname', 'N/A'),
                     'sensor': hp.get('sensor', 'N/A').replace('sentinel2','S2').replace('landsat8','L8').upper(),
-                    'date': hp.get('training_date', '').split('T')[0],
-                    'acc': acc, 'prec': f_met.get('precision', 0), 'rec': f_met.get('recall', 0), 'f1': f_met.get('f1-score', 0),
+                    'acc': crep.get('accuracy', 0), 'prec': f_met.get('precision', 0), 'rec': f_met.get('recall', 0), 'f1': f_met.get('f1-score', 0),
                     'auto_rating': met.get('auto_rating', 0), 'human_rating': hp.get('rating', 0),
                     'path': m['path'], 'info': m
                 })
@@ -1296,53 +1294,59 @@ class ModelTrainerUI(PipelineStepUI):
         ranking_data.sort(key=lambda x: x[self.sort_column], reverse=not self.sort_ascending)
         if show_loader: self.hide_loader()
 
-        # TOOLBAR
-        txt_search = widgets.Text(value=self.search_query_models, placeholder='🔍 Buscar...', layout=widgets.Layout(width='180px'))
+        # --- TOOLBAR MINIMALISTA ---
+        txt_search = widgets.Text(value=self.search_query_models, placeholder='🔍 Buscar modelo...', layout=widgets.Layout(width='300px'))
         txt_search.observe(self._on_search_models_change, names='value')
-        dd_sort = widgets.Dropdown(options=[('📊 Acc', 'acc'), ('🔥 F1', 'f1'), ('🤖 IA', 'auto_rating'), ('👤 Tú', 'human_rating')], value=self.sort_column, layout=widgets.Layout(width='120px'))
-        dd_sort.observe(self._on_sort_change, names='value')
-        btn_view = widgets.Button(description="Ver", button_style='info', icon='search', layout=widgets.Layout(width='80px'))
-        btn_del = widgets.Button(button_style='danger', icon='trash', layout=widgets.Layout(width='40px'))
-        btn_refresh = widgets.Button(icon='refresh', layout=widgets.Layout(width='40px'))
-        btn_view.on_click(lambda _: self._on_view_batch_logic(ranking_data))
-        btn_del.on_click(lambda _: self._on_del_batch_logic(ranking_data))
+        btn_refresh = widgets.Button(description="Actualizar base de modelos", icon='refresh', layout=widgets.Layout(width='220px'), button_style='success')
         btn_refresh.on_click(lambda _: self._refresh_models_list(show_loader=True))
+        
+        # Ações em lote discretas (apenas se houver seleção)
+        btn_view_batch = widgets.Button(description="Ver seleccionados", icon='search', layout=widgets.Layout(width='150px'))
+        btn_view_batch.on_click(lambda _: self._on_view_batch_logic(ranking_data))
 
-        control_box = widgets.HBox([txt_search, dd_sort, btn_view, btn_del, btn_refresh], layout=widgets.Layout(margin='0 0 10px 0', align_items='center', background='#f8f9fa', padding='10px', border_radius='8px'))
+        toolbar = widgets.HBox([txt_search, btn_refresh, btn_view_batch], layout=widgets.Layout(margin='0 0 15px 0', align_items='center', gap='15px'))
 
-        # LARGURAS RÍGIDAS (PIXEL PERFECT)
-        W = {'sel': '35px', 'pos': '45px', 'id': '220px', 'met': '55px', 'sep': '20px', 'stars': '100px', 'btn': '70px'}
+        # LARGURAS
+        W = {'sel': '35px', 'pos': '45px', 'id': '200px', 'met': '55px', 'sep': '15px', 'stars': '95px', 'btn': '45px'}
 
-        def make_cell(text, width, color=None, bold=False):
-            style = f"width:{width}; text-align:center; font-size:11px;"
-            if color: style += f" color:{color};"
-            if bold: style += " font-weight:bold;"
-            return widgets.HTML(f"<div style='{style}'>{text}</div>")
+        # --- HEADER INTERATIVO (SORT) ---
+        def make_sort_head(label, key, width):
+            icon = 'sort-desc' if self.sort_column == key and not self.sort_ascending else \
+                   'sort-asc' if self.sort_column == key and self.sort_ascending else 'sort'
+            btn = widgets.Button(description=label, icon=icon, layout=widgets.Layout(width=width, height='30px', margin='0', padding='0'))
+            btn.style.button_color = '#34495e'
+            btn.style.font_weight = 'bold'
+            
+            def _on_click(_):
+                if self.sort_column == key: self.sort_ascending = not self.sort_ascending
+                else: self.sort_column = key; self.sort_ascending = False
+                self._refresh_models_list()
+            btn.on_click(_on_click)
+            return btn
 
-        # HEADER UNIFICADO
         header = widgets.HBox([
-            make_cell("S", W['sel'], bold=True),
-            make_cell("#", W['pos'], bold=True),
-            widgets.HTML(f"<div style='width:{W['id']}; font-weight:bold; font-size:11px;'>MODELO / INFO</div>"),
-            make_cell("ACC", W['met'], bold=True),
-            make_cell("PRE", W['met'], bold=True),
-            make_cell("REC", W['met'], bold=True),
-            make_cell("F1", W['met'], bold=True),
-            widgets.HTML(f"<div style='width:{W['sep']}; border-right:2px solid #fff; height:15px;'></div>"), # Divisor visual
-            make_cell("IA 🤖", W['stars'], bold=True),
-            make_cell("TÚ 👤", W['stars'], bold=True),
-            make_cell("CARD", W['btn'], bold=True),
-        ], layout=widgets.Layout(background='#2c3e50', padding='10px', border_radius='8px 8px 0 0', color='white'))
+            widgets.HTML("<div style='width:35px;'></div>"), # Checkbox
+            widgets.HTML("<div style='width:45px; color:white; font-weight:bold; text-align:center;'>#</div>"),
+            make_sort_head("ID", "id", W['id']),
+            make_sort_head("ACC", "acc", W['met']),
+            make_sort_head("PRE", "prec", W['met']),
+            make_sort_head("REC", "rec", W['met']),
+            make_sort_head("F1", "f1", W['met']),
+            widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #fff; height:20px;'></div>"),
+            make_sort_head("IA 🤖", "auto_rating", W['stars']),
+            make_sort_head("TÚ 👤", "human_rating", W['stars']),
+            widgets.HTML(f"<div style='width:100px; color:white; font-weight:bold; text-align:center;'>ACCIONES</div>"),
+        ], layout=widgets.Layout(background='#2c3e50', padding='8px', border_radius='8px 8px 0 0', align_items='center'))
 
         final_rows = []
         for i, r in enumerate(ranking_data):
-            medal = "🥇" if i == 0 and not self.sort_ascending else f"#{i+1}"
+            medal = "🥇" if i == 0 and not self.sort_ascending and self.sort_column in ['acc','f1','auto_rating'] else f"#{i+1}"
             
             def make_star_row(val, color, is_human=False):
                 btns = []
                 for s_idx in range(1, 6):
                     char = "★" if s_idx <= val else "☆"
-                    b = widgets.Button(description=char, layout=widgets.Layout(width='19px', height='22px', margin='0', padding='0'))
+                    b = widgets.Button(description=char, layout=widgets.Layout(width='18px', height='20px', margin='0', padding='0'))
                     b.style.button_color = color if s_idx <= val else '#fff'
                     if is_human:
                         def _handler(_, v=s_idx, rid=r['id'], rs=r['short']):
@@ -1353,25 +1357,33 @@ class ModelTrainerUI(PipelineStepUI):
 
             chk = widgets.Checkbox(value=False, indent=False, layout=widgets.Layout(width=W['sel']))
             self.model_chk_map[r['id']] = chk
-            btn_card = widgets.Button(description="Ver", button_style='info', layout=widgets.Layout(width=W['btn']))
+            
+            btn_card = widgets.Button(icon='search', layout=widgets.Layout(width=W['btn']), button_style='info', tooltip='Ver Card')
             btn_card.on_click(lambda _, info=r['info']: view_analytics(info, out_widget=self.analytics_dashboard_output))
             
+            btn_trash = widgets.Button(icon='trash', layout=widgets.Layout(width=W['btn']), button_style='danger', tooltip='Eliminar Modelo')
+            def _on_del_single(_, rid=r['id'], rs=r['short']):
+                self.show_loader(f"Eliminando {rid}...")
+                ModelTrainer().delete_model(rid, rs)
+                self._refresh_models_list(show_loader=True)
+            btn_trash.on_click(_on_del_single)
+
             row = widgets.HBox([
                 chk,
-                make_cell(medal, W['pos'], bold=True),
-                widgets.HTML(f"<div style='width:{W['id']}; overflow:hidden;'><b>{r['id']}</b><br><span style='font-size:9px;'>{r['short']} | {r['sensor']}</span></div>"),
-                make_cell(f"{r['acc']:.1%}", W['met'], color="#2c3e50", bold=True),
-                make_cell(f"{r['prec']:.1%}", W['met'], color="#666"),
-                make_cell(f"{r['rec']:.1%}", W['met'], color="#666"),
-                make_cell(f"{r['f1']:.1%}", W['met'], color="#28a745", bold=True),
-                widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #ddd; height:20px; margin:0 5px;'></div>"), # Divisor
+                widgets.HTML(f"<div style='width:{W['pos']}; text-align:center; font-weight:bold;'>{medal}</div>"),
+                widgets.HTML(f"<div style='width:{W['id']}; overflow:hidden; font-size:11px;'><b>{r['id']}</b><br><span style='color:#666;'>{r['short']}</span></div>"),
+                widgets.HTML(f"<div style='width:{W['met']}; text-align:center; font-weight:bold; color:#2c3e50;'>{r['acc']:.1%}</div>"),
+                widgets.HTML(f"<div style='width:{W['met']}; text-align:center; color:#666;'>{r['prec']:.1%}</div>"),
+                widgets.HTML(f"<div style='width:{W['met']}; text-align:center; color:#666;'>{r['rec']:.1%}</div>"),
+                widgets.HTML(f"<div style='width:{W['met']}; text-align:center; font-weight:bold; color:#28a745;'>{r['f1']:.1%}</div>"),
+                widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #ddd; height:20px;'></div>"),
                 make_star_row(r['auto_rating'], '#bdc3c7'),
                 make_star_row(r['human_rating'], '#f1c40f', True),
-                btn_card
+                widgets.HBox([btn_card, btn_trash], layout=widgets.Layout(width='100px', justify_content='center', gap='5px'))
             ], layout=widgets.Layout(padding='5px', border_bottom='1px solid #eee', align_items='center', background='#fff' if i%2==0 else '#f9f9f9'))
             final_rows.append(row)
 
-        self.analytics_area.children = [control_box, widgets.VBox([header, widgets.VBox(final_rows, layout=widgets.Layout(border='1px solid #dee2e6', border_radius='0 0 8px 8px'))])]
+        self.analytics_area.children = [toolbar, widgets.VBox([header, widgets.VBox(final_rows, layout=widgets.Layout(border='1px solid #dee2e6', border_radius='0 0 8px 8px'))])]
 
     def _on_view_batch_logic(self, ranking_data):
         selected = [r['info'] for r in ranking_data if self.model_chk_map[r['id']].value]
