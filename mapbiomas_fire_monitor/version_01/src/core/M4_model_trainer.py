@@ -1016,10 +1016,27 @@ class ModelTrainerUI(PipelineStepUI):
         # 2. CANVAS (Visualización)
         self.canvas_area = widgets.VBox([self.canvas_output], layout=widgets.Layout(padding='10px', background_color='white'))
         
-        # 3. NOVO TREINO (Configuración + Samples)
+        # 3. NOVO TREINO (Fluxo Completo)
         self.config_area = self._build_config_area()
         self.samples_area = self._build_matrix()
-        self.new_training_tab = widgets.VBox([self.config_area, self.samples_area], layout=widgets.Layout(padding='10px', background_color='white'))
+        self.extraction_area = self._build_extraction_matrix()
+        
+        btn_start = widgets.Button(
+            description="🚀 INICIAR ENTRENAMIENTO", 
+            button_style='primary', 
+            layout=widgets.Layout(width='100%', height='50px', margin='20px 0')
+        )
+        btn_start.on_click(lambda _: start_training(self))
+        
+        self.new_training_tab = widgets.VBox([
+            widgets.HTML("<h2 style='color:#2c3e50;'>📂 1. Selección de Muestras</h2>"),
+            self.samples_area,
+            widgets.HTML("<br><h2 style='color:#2c3e50;'>🛰️ 2. Matriz de Extracción (Multisensor)</h2>"),
+            self.extraction_area,
+            widgets.HTML("<br><h2 style='color:#2c3e50;'>⚙️ 3. Hiperparámetros y Destino</h2>"),
+            self.config_area,
+            btn_start
+        ], layout=widgets.Layout(padding='20px', background_color='white'))
         
         self.tab = widgets.Tab(children=[
             self.analytics_area,
