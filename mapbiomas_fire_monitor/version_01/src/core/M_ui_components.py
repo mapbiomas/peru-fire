@@ -74,9 +74,8 @@ class PipelineStepUI:
         """Mostra o spinner de carregamento."""
         self.loader_html.value = self.loader_html.value.replace('display:none', 'display:flex')
         if message:
-            # Atualiza a mensagem se necessário (usando regex ou substituição simples)
             import re
-            self.loader_html.value = re.sub(r'<span>.*?</span>', f'<span>{message}</span>', self.loader_html.value)
+            self.loader_html.value = re.sub(r'<span.*?>.*?</span>', f'<span style="margin-left:8px; font-size:11px; color:#666;">{message}</span>', self.loader_html.value)
 
     def hide_loader(self):
         """Esconde o spinner de carregamento."""
@@ -94,7 +93,7 @@ class PipelineStepUI:
         else:
             # Apenas troca o texto
             import re
-            self.loader_html.value = re.sub(r'<span>.*?</span>', f'<span>{message}</span>', self.loader_html.value)
+            self.loader_html.value = re.sub(r'<span.*?>.*?</span>', f'<span style="margin-left:8px; font-size:11px; color:#666;">{message}</span>', self.loader_html.value)
 
     def log(self, message, type="info"):
         """Adiciona uma mensagem textualmente formatada no Output de Logs."""

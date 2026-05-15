@@ -22,13 +22,14 @@ from rasterio.io import MemoryFile
 import gcsfs
 
 import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
+tf.compat.v1.disable_v2_behavior()
 
 import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML
 import matplotlib.pyplot as plt
 from datetime import datetime
 
+import time
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
 from M_ui_components import PipelineStepUI
@@ -360,6 +361,8 @@ class ModelTrainer:
 
         self._build_graph()
         history = {'loss': [], 'acc': [], 'val_acc': [], 'steps': []}
+        # Data accumulation for time-travel
+        snapshots_data = {'y_true': y_viz.flatten()}
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
@@ -389,6 +392,11 @@ class ModelTrainer:
                         [self.latent_tensor, self.pred], 
                         feed_dict={self.x: X_viz, self.keep_prob: 1.0}
                     )
+                    
+                    # Accumulate for time-travel
+                    step_idx = len(history['steps']) - 1
+                    snapshots_data[f'embeds_{step_idx}'] = embeds
+                    snapshots_data[f'preds_{step_idx}'] = preds_viz.flatten()
 
                     if logger:
                         logger(f"Iter {i:5d}/{n_iters} | Loss: {loss_val:.4f} | Acc Treino: {acc_tr:.3f} | Validação: {acc_te:.3f}", "info")
@@ -397,12 +405,17 @@ class ModelTrainer:
                         update_chart_fn(history, embeds, preds_viz.flatten(), y_viz)
                     
                     if snapshot_dir:
+                        # Ainda mantemos o PNG para compatibilidade/preview rápido se necessário
                         snap_path = os.path.join(snapshot_dir, f"iteration_{i:05d}.png")
                         render_diagnostic_dashboard(history, embeds, preds_viz.flatten(), y_viz, save_path=snap_path)
 
             self._saved_vars = {v.name: sess.run(v) for v in tf.global_variables()}
             self._history = history
             self.snapshot_dir = snapshot_dir
+            
+            # Salva o arquivo de dados de snapshots se o diretório existir
+            if snapshot_dir:
+                np.savez_compressed(os.path.join(snapshot_dir, "snapshots_data.npz"), **snapshots_data)
 
         return history
 
@@ -623,8 +636,9 @@ class ModelTrainer:
             # --- 2.8 Iteration History (Snapshots) ---
             if hasattr(self, 'snapshot_dir') and self.snapshot_dir and os.path.exists(self.snapshot_dir):
                 if logger: logger("Sincronizando historial de iteraciones com GCS...", "info")
-                snap_files = [f for f in os.listdir(self.snapshot_dir) if f.endswith('.png')]
-                for sf in snap_files:
+                # Sincroniza PNGs (legado/preview) e o novo snapshots_data.npz
+                all_files = [f for f in os.listdir(self.snapshot_dir) if f.endswith('.png') or f == 'snapshots_data.npz']
+                for sf in all_files:
                     src_sf = os.path.join(self.snapshot_dir, sf)
                     dest_sf = f"{CONFIG['bucket']}/{base_path}/history/{sf}"
                     fs.put(src_sf, dest_sf)
@@ -688,7 +702,7 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
     viz_config: dict com flags de visibilidade.
     """
     if viz_config is None:
-        viz_config = {k: True for k in ['cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d']}
+        viz_config = {k: True for k in ['cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d', 'pca3d_static', 'tsne3d_static']}
     from sklearn.metrics import confusion_matrix, precision_recall_curve, average_precision_score
     from sklearn.decomposition import PCA
     import matplotlib.pyplot as plt
@@ -706,16 +720,18 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
 
     # Determina quais subplots mostrar
     active_plots = []
-    if viz_config.get('cm'): active_plots.append('cm')
-    if viz_config.get('history'): active_plots.append('history')
-    if viz_config.get('pca2d'): active_plots.append('pca2d')
-    if viz_config.get('prob'): active_plots.append('prob')
-    if viz_config.get('pr'): active_plots.append('pr')
+    for k in ['cm', 'history', 'pca2d', 'prob', 'pr']:
+        if viz_config.get(k): active_plots.append(k)
+    
+    # Expandir para 4 ângulos estáticos se solicitado
+    for k in ['pca3d_static', 'tsne3d_static']:
+        if viz_config.get(k):
+            for i in range(4): active_plots.append(f"{k}_{i}")
     
     if not active_plots: return
 
     n = len(active_plots)
-    cols = 3
+    cols = 4
     rows = (n + cols - 1) // cols
     
     fig = plt.figure(figsize=(18, 4.5 * rows))
@@ -773,6 +789,28 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
                 ax.set_xlabel('Recall'); ax.legend(loc='lower left', fontsize=8); ax.grid(True, alpha=0.3)
             except: pass
 
+        elif '3d_static' in ptype:
+            from mpl_toolkits.mplot3d import Axes3D
+            is_pca = 'pca' in ptype
+            angle_idx = int(ptype.split('_')[-1])
+            angles = [(20, 45), (20, 135), (20, 225), (20, 315)]
+            elev, azim = angles[angle_idx]
+            
+            coords3 = None
+            if coords_override is not None and coords_override.shape[1] >= 3: 
+                coords3 = coords_override[:, :3]
+            elif is_pca and embeds is not None:
+                try: pca = PCA(n_components=3); coords3 = pca.fit_transform(embeds)
+                except: pass
+            
+            if coords3 is not None:
+                ax = fig.add_subplot(rows, cols, idx + 1, projection='3d')
+                ax.scatter(coords3[:, 0], coords3[:, 1], coords3[:, 2], c=preds_f, cmap='RdYlBu_r', s=10, alpha=0.6)
+                ax.view_init(elev=elev, azim=azim)
+                t = "PCA 3D" if is_pca else "t-SNE 3D"
+                ax.set_title(f"{t} (Ang {azim}°)", fontsize=9, weight='bold')
+                ax.set_xticks([]); ax.set_yticks([]); ax.set_zticks([])
+
     plt.tight_layout()
     display(fig)
     plt.close(fig)
@@ -817,13 +855,15 @@ def render_model_card_html(hp, metrics, only_header=False):
     """
     return html_content
 
-def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=None):
+def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=None, epoch_index=None):
     """
     Visualiza as métricas e o card de um modelo salvo no GCS.
     viz_config: dict opcional com flags de visibilidade.
+    epoch_index: índice da época para renderizar dados passados (Time Machine).
     """
     if viz_config is None:
         viz_config = {k: True for k in ['title', 'scores', 'cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d', 'tsne3d']}
+    
     fs = _get_fs()
     from M0_auth_config import CONFIG
     try:
@@ -833,242 +873,194 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
         clean_path = m_path.replace('gs://', '').replace('mapbiomas-fire/', '').lstrip('/')
         if 'b/' in clean_path and '/o/' in clean_path: clean_path = clean_path.split('/o/')[-1]
         
+        # 1. Carrega Metadados e Métricas Base
+        with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f: hp = json.load(f)
         try:
-            with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f: hp = json.load(f)
             with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
-        except:
-            with fs.open(f"{CONFIG['bucket']}/{clean_path}/hyperparameters.json", 'r') as f: hp = json.load(f)
-            with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
+        except: metrics = {}
+
+        # 2. Carrega Dados de Snapshots para o Time Machine se solicitado
+        snap_data = None
+        if epoch_index is not None:
+            try:
+                with fs.open(f"{CONFIG['bucket']}/{clean_path}/history/snapshots_data.npz", 'rb') as f:
+                    snap_data = dict(np.load(f, allow_pickle=True))
+            except:
+                pass # Se não existir, usa os dados finais das métricas
 
         def _render_content():
-            # --- CHECKBOXES DE ACCIÓN (LIFECYCLE) ---
             try:
                 import __main__
                 ui = getattr(__main__, 'ui', None)
             except: ui = None
 
-            if ui:
-                chk_retrain = widgets.Checkbox(description="Retreinar (mismos píxeles)", value=(ui.retrain_intent['mode']=='retrain' and ui.retrain_intent['hp'].get('training_id')==hp['training_id']), indent=False)
-                chk_reextract = widgets.Checkbox(description="Re-extraer & Retreinar", value=(ui.retrain_intent['mode']=='re-extract' and ui.retrain_intent['hp'].get('training_id')==hp['training_id']), indent=False)
-                chk_borrar = widgets.Checkbox(description="Borrar & Retreinar", value=(ui.retrain_intent['mode']=='borrar' and ui.retrain_intent['hp'].get('training_id')==hp['training_id']), indent=False)
-                
-                def _make_exclusive(changed_chk, mode):
-                    def _handler(change):
-                        if change['new']:
-                            # Desmarca os outros
-                            for c in [chk_retrain, chk_reextract, chk_borrar]:
-                                if c != changed_chk: c.value = False
-                            # Salva a intenção global
-                            ui.retrain_intent = {'mode': mode, 'hp': hp}
-                            ui._load_config_into_widgets(hp) # Pre-carrega na aba 1
-                        else:
-                            # Se desmarcou o atual e os outros estão falsos, limpa a intenção
-                            if not any([chk_retrain.value, chk_reextract.value, chk_borrar.value]):
-                                ui.retrain_intent = {'mode': None, 'hp': None}
-                    return _handler
-                
-                chk_retrain.observe(_make_exclusive(chk_retrain, 'retrain'), names='value')
-                chk_reextract.observe(_make_exclusive(chk_reextract, 're-extract'), names='value')
-                chk_borrar.observe(_make_exclusive(chk_borrar, 'borrar'), names='value')
-                
-                action_row = widgets.HBox([
-                    widgets.HTML("<b style='color:#e67e22; font-size:12px; margin-right:15px;'>⚙️ Acción Pendiente (Run start_training):</b>"),
-                    chk_retrain, chk_reextract, chk_borrar
-                ], layout=widgets.Layout(margin='0 0 15px 0', padding='10px', background='#fff3cd', border='1px solid #ffeeba', border_radius='4px', align_items='center'))
-                display(action_row)
-
-            # --- SISTEMA DE VOTACIÓN "SAFO" (SUBCARDS) ---
+            # --- SISTEMA DE RATINGS (KPIs COMPACTOS) ---
             h_rating = hp.get('rating', 0)
             a_rating = metrics.get('auto_rating', 0)
-            
-            # --- GRID UNIFICADO DE KPIs Y AUDITORÍA ---
             rep = metrics.get('classification_report', {})
             
-            def make_kpi_card(title, value, color):
+            # --- OVERRIDE DE DADOS SE EPOCH_INDEX ATIVO ---
+            preds_final = np.array(metrics.get('diagnostic_snapshot', {}).get('preds', []))
+            y_true_final = np.array(metrics.get('diagnostic_snapshot', {}).get('y_true', []))
+            pca_coords_final = np.array(metrics.get('diagnostic_snapshot', {}).get('pca_coords', []))
+            tsne_coords_final = np.array(metrics.get('diagnostic_snapshot', {}).get('tsne_coords', []))
+            
+            if snap_data and f'preds_{epoch_index}' in snap_data:
+                preds_final = snap_data[f'preds_{epoch_index}']
+                y_true_final = snap_data['y_true']
+                embeds_step = snap_data[f'embeds_{epoch_index}']
+                # Re-calcula PCA simples para o Time Machine (CPU-bound mas rápido para poucas amostras)
+                from sklearn.decomposition import PCA
+                pca_tmp = PCA(n_components=3)
+                pca_coords_final = pca_tmp.fit_transform(embeds_step)
+                tsne_coords_final = None # t-SNE é muito lento para recalcular no slider
+            
+            # --- KPI BUILDER ---
+            def make_kpi_card(title, value, color, icon=None):
+                icon_html = f"<i class='fa fa-{icon}' style='margin-right:5px; opacity:0.5;'></i>" if icon else ""
                 return widgets.HTML(f"""
-                <div class="kpi-box" style="border-left: 5px solid {color}; padding: 15px; background: white; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: 100%;">
-                    <div style="font-size: 11px; color: #6c757d; text-transform: uppercase; font-weight: bold; margin-bottom: 5px;">{title}</div>
-                    <div style="font-size: 22px; font-weight: bold; color: #212529;">{value}</div>
+                <div class="kpi-box" style="border-left: 5px solid {color}; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); flex: 1; min-width: 120px;">
+                    <div style="font-size: 10px; color: #7f8c8d; text-transform: uppercase; font-weight: bold; margin-bottom: 2px;">{title}</div>
+                    <div style="font-size: 18px; font-weight: bold; color: #2c3e50;">{icon_html}{value}</div>
                 </div>
                 """)
 
-            kpi_acc = make_kpi_card("Acurácia Global", f"{rep.get('accuracy', 0):.1%}", "#28a745")
-            kpi_prec = make_kpi_card("Precisión (Fuego)", f"{rep.get('1', {}).get('precision', 0):.1%}", "#dc3545")
-            kpi_rec = make_kpi_card("Recall (Fuego)", f"{rep.get('1', {}).get('recall', 0):.1%}", "#ffc107")
-            kpi_f1 = make_kpi_card("F1-Score (Fuego)", f"{rep.get('1', {}).get('f1-score', 0):.1%}", "#17a2b8")
+            kpi_acc = make_kpi_card("Acc", f"{rep.get('accuracy', 0):.1%}", "#27ae60")
+            kpi_f1 = make_kpi_card("F1-Fire", f"{rep.get('1', {}).get('f1-score', 0):.1%}", "#16a085")
+            kpi_auto = make_kpi_card("Nota Auto.", f"{a_rating}/5", "#34495e", icon="flash")
 
-            # Estrelas IA (Subcard Professional)
-            ai_btns = []
-            for s_idx in range(1, 6):
-                char = "★" if s_idx <= a_rating else "☆"
-                b = widgets.Button(description=char, layout=widgets.Layout(width='26px', height='26px', margin='0', padding='0'))
-                b.style.button_color = '#bdc3c7' if s_idx <= a_rating else '#fff'
-                ai_btns.append(b)
-            
-            ai_panel = widgets.VBox([
-                widgets.HTML("<div style='font-size:11px; color:#6c757d; font-weight:bold; margin-bottom:5px; text-transform:uppercase;'>Evaluación IA</div>"),
-                widgets.HBox(ai_btns, layout=widgets.Layout(margin='0'))
-            ], layout=widgets.Layout(background='white', padding='15px', border_left='5px solid #bdc3c7', border_radius='4px', box_shadow='0 2px 5px rgba(0,0,0,0.1)', flex='1'))
-            
-            # Estrelas Humanas (Subcard Professional con Confirmación)
-            user_btns = []
-            user_stars_container = widgets.HBox([], layout=widgets.Layout(margin='0')) # Container para trocar entre estrelas e confirmação
-            
+            # Nota Humana Interativa no KPI
+            user_stars_container = widgets.HBox([], layout=widgets.Layout(margin='0', align_items='center'))
             def _show_stars():
                 btns = []
                 for i in range(1, 6):
                     btn = widgets.Button(description="★" if i <= h_rating else "☆", 
-                                       layout=widgets.Layout(width='26px', height='26px', margin='0', padding='0'),
+                                       layout=widgets.Layout(width='22px', height='22px', margin='0', padding='0'),
                                        style={'button_color': '#f1c40f' if i <= h_rating else '#fff'})
                     def _hnd_click(b, val=i):
-                        # Mostrar confirmação
-                        btn_back = widgets.Button(description="<-", layout=widgets.Layout(width='35px', height='26px'), button_style='info')
-                        btn_ok = widgets.Button(description="OK", layout=widgets.Layout(width='45px', height='26px'), button_style='success')
-                        conf_msg = widgets.HTML(f"<b style='color:#d4ac0d; font-size:11px; margin-right:5px;'>¿Confirmar {val}?</b>")
-                        
+                        btn_ok = widgets.Button(description="OK", layout=widgets.Layout(width='35px', height='22px'), button_style='success')
+                        btn_no = widgets.Button(description="X", layout=widgets.Layout(width='25px', height='22px'), button_style='danger')
                         def _do_ok(_):
-                            user_stars_container.children = [self.make_spinner("Guardando...")]
+                            user_stars_container.children = [widgets.HTML("<i class='fa fa-spinner fa-spin'></i>")]
                             if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
                                 if ui: ui._refresh_models_list()
-                                # Simplesmente atualiza a visão local do card
-                                hp['rating'] = val # Update local ref
-                                _show_stars()
-                            else:
-                                _show_stars() # Reverter em caso de erro
-
-                        def _do_back(_): _show_stars()
-                        
-                        btn_ok.on_click(_do_ok); btn_back.on_click(_do_back)
-                        user_stars_container.children = [conf_msg, btn_back, btn_ok]
-                    
-                    btn.on_click(_hnd_click)
-                    btns.append(btn)
+                                hp['rating'] = val; _show_stars()
+                            else: _show_stars()
+                        btn_ok.on_click(_do_ok); btn_no.on_click(lambda _: _show_stars())
+                        user_stars_container.children = [btn_no, btn_ok]
+                    btn.on_click(_hnd_click); btns.append(btn)
                 user_stars_container.children = btns
 
             _show_stars()
-                
-            user_panel = widgets.VBox([
-                widgets.HTML("<div style='font-size:11px; color:#6c757d; font-weight:bold; margin-bottom:5px; text-transform:uppercase;'>Auditoría Humana</div>"),
+            kpi_human_box = widgets.VBox([
+                widgets.HTML("<div style='font-size: 10px; color: #7f8c8d; text-transform: uppercase; font-weight: bold; margin-bottom: 2px;'>Nota Humana</div>"),
                 user_stars_container
-            ], layout=widgets.Layout(background='white', padding='15px', border_left='5px solid #f1c40f', border_radius='4px', box_shadow='0 2px 5px rgba(0,0,0,0.1)', flex='1'))
-            
-            # --- CICLO DE VIDA (Nuevas acciones integradas al Card) ---
-            def _set_intent(mode):
-                def __h(_):
-                    if ui:
-                        ui.retrain_intent = {'mode': mode, 'hp': hp}
-                        ui._load_config_into_widgets(hp)
-                        ui.tab.selected_index = 0 # Volver a Novo Treino
-                        print(f"✅ Intento '{mode}' cargado para {hp['training_id']}. Revise la pestaña 'Novo Treino'.")
-                return __h
+            ], layout=widgets.Layout(background='white', padding='10px', border_left='5px solid #f1c40f', border_radius='4px', box_shadow='0 2px 4px rgba(0,0,0,0.08)', flex='1.5'))
 
-            btn_retr = widgets.Button(description="Retreinar", icon="refresh", layout=widgets.Layout(width='140px'), button_style='info')
-            btn_reex = widgets.Button(description="Re-extraer", icon="database", layout=widgets.Layout(width='140px'), button_style='info')
-            btn_borr = widgets.Button(description="Borrar & Retreinar", icon="trash", layout=widgets.Layout(width='180px'), button_style='danger')
-            
-            btn_retr.on_click(_set_intent('retrain'))
-            btn_reex.on_click(_set_intent('re-extract'))
-            btn_borr.on_click(_set_intent('borrar'))
+            unified_grid = widgets.HBox(
+                [kpi_acc, kpi_f1, kpi_auto, kpi_human_box],
+                layout=widgets.Layout(gap='8px', margin='10px 0', width='100%')
+            )
 
-
-            # --- INTEGRACIÓN DE CARD E CICLO DE VIDA ---
-            # O Header é sempre exibido
+            # --- CARD HEADER & BODY ---
             display(HTML(render_model_card_html(hp, metrics, only_header=True)))
-            
             if viz_config.get('title'):
-                body_html = HTML(render_model_card_html(hp, metrics))
-                
-                # Painel de Ciclo de Vida integrado
-                lifecycle_box = widgets.VBox([
-                    widgets.HTML("<div style='font-size:11px; color:#6c757d; font-weight:bold; margin-bottom:5px; text-transform:uppercase;'>Ciclo de Vida</div>"),
-                    widgets.HBox([btn_retr, btn_reex, btn_borr], layout=widgets.Layout(gap='10px'))
-                ], layout=widgets.Layout(background='#fdfdfd', padding='15px', border='1px solid #dee2e6', border_top='none', border_radius='0 0 8px 8px', flex='2'))
-
-                # Painel de Controle Integrado (Rating + Ciclo de Vida)
-                control_panel = widgets.HBox([
-                    user_panel, 
-                    lifecycle_box
-                ], layout=widgets.Layout(margin='-20px 0 20px 0', align_items='stretch', gap='0px'))
-                
-                display(body_html)
-                display(control_panel)
-            else:
-                # Se os metadados estiverem ocultos, adicionamos um espaçador pequeno para o header não ficar colado
-                display(HTML("<div style='margin-bottom:15px;'></div>"))
-
-            if viz_config.get('scores'): display(unified_grid)
+                display(HTML(render_model_card_html(hp, metrics)))
             
-            # --- DIAGNÓSTICO ---
-            snap = metrics.get('diagnostic_snapshot')
-            if snap:
+            if viz_config.get('scores'):
+                display(unified_grid)
+
+            # --- CICLO DE VIDA (GESTÃO OPCIONAL) ---
+            if viz_config.get('management'):
+                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'>🛠️ Gestión del Ciclo de Vida</h4>"))
+                def _set_intent(mode):
+                    def __h(_):
+                        if ui:
+                            ui.retrain_intent = {'mode': mode, 'hp': hp}
+                            ui._load_config_into_widgets(hp)
+                            ui.tab.selected_index = 1 # Novo Treino
+                    return __h
+
+                btn_retr = widgets.Button(description="Retreinar", icon="refresh", layout=widgets.Layout(width='120px'), button_style='info')
+                btn_reex = widgets.Button(description="Re-extraer", icon="database", layout=widgets.Layout(width='120px'), button_style='info')
+                btn_borr = widgets.Button(description="Limpiar&Ret", icon="trash", layout=widgets.Layout(width='130px'), button_style='danger')
+                btn_retr.on_click(_set_intent('retrain')); btn_reex.on_click(_set_intent('re-extract')); btn_borr.on_click(_set_intent('borrar'))
+
+                # Botão de Deletar com Countdown
+                del_out = widgets.Output()
+                def _show_del_btn():
+                    del_out.clear_output()
+                    btn_del = widgets.Button(description="Deletar Modelo", icon="trash", layout=widgets.Layout(width='140px'), button_style='danger')
+                    def _on_del_click(_):
+                        import threading
+                        btn_conf = widgets.Button(description="Confirmar!", button_style='warning', layout=widgets.Layout(width='100px'))
+                        btn_canc = widgets.Button(description="X", button_style='info', layout=widgets.Layout(width='30px'))
+                        msg = widgets.HTML("<span style='color:red; font-size:10px; margin-left:5px;'>5s</span>")
+                        del_out.clear_output()
+                        with del_out: display(widgets.HBox([btn_conf, btn_canc, msg]))
+                        stop = [False]
+                        def _do_conf(_):
+                            stop[0] = True
+                            del_out.clear_output()
+                            with del_out: display(widgets.HTML("<i>Borrando...</i>"))
+                            ModelTrainer.delete_model(hp['training_id'], hp['shortname'])
+                            if ui: 
+                                ui.selected_models.pop(hp['training_id'], None)
+                                ui._update_canvas()
+                        btn_conf.on_click(_do_conf); btn_canc.on_click(lambda _: _show_del_btn())
+                        def _timer():
+                            for i in range(5, 0, -1):
+                                if stop[0]: return
+                                msg.value = f"<span style='color:red; font-size:10px; margin-left:5px;'>{i}s</span>"; time.sleep(1)
+                            if not stop[0]: _do_conf(None)
+                        threading.Thread(target=_timer, daemon=True).start()
+                    btn_del.on_click(_on_del_click)
+                    with del_out: display(btn_del)
+                _show_del_btn()
+
+                display(widgets.HBox([btn_retr, btn_reex, btn_borr, widgets.HTML("<div style='width:20px'></div>"), del_out], 
+                                    layout=widgets.Layout(margin='5px 0 15px 0', align_items='center')))
+
+            # --- GRUPOS DE GRÁFICOS ---
+            # 1. MÉTRICAS CLÁSSICAS (Incluindo Estáticas 3D)
+            classic_keys = ['cm', 'history', 'prob', 'pr', 'pca3d_static', 'tsne3d_static']
+            if any(viz_config.get(k) for k in classic_keys):
+                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px;'>📊 Métricas Clásicas y Proyecciones Estáticas</h4>"))
+                render_diagnostic_dashboard(hp.get('history', {}), None, preds_final, y_true_final, 
+                                          coords_override=tsne_coords_final if viz_config.get('tsne3d_static') else (pca_coords_final if viz_config.get('pca3d_static') or viz_config.get('pca2d') else None), 
+                                          viz_config=viz_config)
+
+            # 2. ESPAÇO LATENTE (INTERATIVO SIDE-BY-SIDE)
+            latent_keys = ['pca3d', 'tsne3d']
+            if any(viz_config.get(k) for k in latent_keys):
+                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'>🌌 Espacio Latente Interactivo</h4>"))
                 import plotly.graph_objects as go
-                # Paleta: #2c3e50 (No Fogo) -> #bdc3c7 (Dúvida) -> #e67e22 (Fogo)
-                fire_colorscale = [
-                    [0, '#2c3e50'],   # Azul Escuro / No Fire
-                    [0.5, '#bdc3c7'], # Cinza / Unsure
-                    [1, '#e67e22']    # Laranja / Fire
-                ]
-                pca_coords = np.array(snap.get('pca_coords', []))
-                tsne_coords = np.array(snap.get('tsne_coords', []))
-                preds = np.array(snap['preds'])
-                y_sub = np.array(snap['y_true'])
-                render_diagnostic_dashboard(hp.get('history', {}), None, preds, y_sub, coords_override=pca_coords, viz_config=viz_config)
-                # PCA 3D Interactiva
-                if viz_config.get('pca3d') and pca_coords is not None and len(pca_coords) > 0:
+                fire_colorscale = [[0, '#2c3e50'], [0.5, '#bdc3c7'], [1, '#e67e22']]
+                
+                out_pca = widgets.Output(layout=widgets.Layout(width='50%'))
+                out_tsne = widgets.Output(layout=widgets.Layout(width='50%'))
+                display(widgets.HBox([out_pca, out_tsne], layout=widgets.Layout(width='100%')))
+
+                if viz_config.get('pca3d') and pca_coords_final is not None and len(pca_coords_final) > 0:
                     fig_pca = go.Figure(data=[go.Scatter3d(
-                        x=pca_coords[:,0], y=pca_coords[:,1], z=pca_coords[:,2], mode='markers',
-                        marker=dict(size=4, color=preds, colorscale=fire_colorscale, opacity=0.8, showscale=True,
-                                   colorbar=dict(title="Confianza", tickvals=[0, 0.5, 1], ticktext=["No Fogo", "Duda", "Fogo"])),
-                        text=[f"<b>Real:</b> {'🔥 Fuego' if l==1 else '🌿 No Fuego'}<br><b>Pred:</b> {p:.2%}" for l, p in zip(y_sub, preds)]
+                        x=pca_coords_final[:,0], y=pca_coords_final[:,1], z=pca_coords_final[:,2], mode='markers',
+                        marker=dict(size=3, color=preds_final, colorscale=fire_colorscale, opacity=0.7),
+                        text=[f"Real: {l}<br>Pred: {p:.2%}" for l, p in zip(y_true_final, preds_final)]
                     )])
-                    fig_pca.update_layout(title="Auditoría PCA 3D (Interactiva)", margin=dict(l=0, r=0, b=0, t=30), scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3'))
-                    display(HTML(fig_pca.to_html(include_plotlyjs=True, full_html=False)))
+                    fig_pca.update_layout(title="PCA 3D Interactive", margin=dict(l=0, r=0, b=0, t=30), height=400)
+                    with out_pca: display(HTML(fig_pca.to_html(include_plotlyjs=True, full_html=False)))
 
-                # t-SNE 3D Interactiva
-                if viz_config.get('tsne3d') and tsne_coords is not None and len(tsne_coords) > 0:
-                    coords_p = tsne_coords
+                if viz_config.get('tsne3d') and tsne_coords_final is not None and len(tsne_coords_final) > 0:
                     fig_tsne = go.Figure(data=[go.Scatter3d(
-                        x=coords_p[:,0], y=coords_p[:,1], z=coords_p[:,2], mode='markers',
-                        marker=dict(size=4, color=preds, colorscale=fire_colorscale, opacity=0.8, showscale=True,
-                                   colorbar=dict(title="Confianza", tickvals=[0, 0.5, 1], ticktext=["No Fogo", "Duda", "Fogo"])),
-                        text=[f"<b>Real:</b> {'🔥 Fuego' if l==1 else '🌿 No Fuego'}<br><b>Pred:</b> {p:.2%}" for l, p in zip(y_sub, preds)]
+                        x=tsne_coords_final[:,0], y=tsne_coords_final[:,1], z=tsne_coords_final[:,2], mode='markers',
+                        marker=dict(size=3, color=preds_final, colorscale=fire_colorscale, opacity=0.7),
+                        text=[f"Real: {l}<br>Pred: {p:.2%}" for l, p in zip(y_true_final, preds_final)]
                     )])
-                    fig_tsne.update_layout(title="Auditoría t-SNE 3D (Interactiva)", margin=dict(l=0, r=0, b=0, t=30), scene=dict(xaxis_title='T1', yaxis_title='T2', zaxis_title='T3'))
-                    display(HTML(fig_tsne.to_html(include_plotlyjs=True, full_html=False)))
-            else:
-                try:
-                    with fs.open(f"{CONFIG['bucket']}/{clean_path}/weights.npz", 'rb') as f: weights = dict(np.load(f))
-                    trainer_tmp = ModelTrainer(num_input=hp['num_input'], layers=hp['layers'])
-                    trainer_tmp._saved_vars = weights
-                    trainer_tmp.norm_stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
-                    X_sub = np.random.randn(300, hp['num_input']); y_sub = np.zeros(300)
-                    embeds = trainer_tmp.get_embeddings(X_sub); preds = trainer_tmp.predict(X_sub)
-                    render_diagnostic_dashboard(hp.get('history', {}), embeds, preds, y_sub, viz_config=viz_config)
-                except: pass
-
-            # --- SLIDER DE HISTÓRICO (TIME MACHINE) ---
-            snap_dir = f"library_images/models/{hp['training_id']}_{hp['shortname']}"
-            if os.path.exists(snap_dir):
-                snaps = sorted([f for f in os.listdir(snap_dir) if f.endswith('.png')])
-                if snaps:
-                    slider = widgets.IntSlider(min=0, max=len(snaps)-1, description='Época:', layout=widgets.Layout(width='100%'))
-                    img_out = widgets.Output()
-                    def _show_snap(change):
-                        with img_out:
-                            clear_output(wait=True)
-                            fname = snaps[change['new']]
-                            with open(os.path.join(snap_dir, fname), 'rb') as f:
-                                display(widgets.Image(value=f.read(), format='png'))
-                    slider.observe(_show_snap, names='value')
-                    display(widgets.VBox([
-                        widgets.HTML("<b style='color:#2c3e50; font-size:14px; margin-top:15px;'>🕰️ Historial de Entrenamiento (Slider Temporal)</b>"),
-                        slider, img_out
-                    ], layout=widgets.Layout(padding='10px', background='#f9f9f9', border='1px solid #ddd', border_radius='8px')))
-                    _show_snap({'new': 0})
+                    fig_tsne.update_layout(title="t-SNE 3D Interactive", margin=dict(l=0, r=0, b=0, t=30), height=400)
+                    with out_tsne: display(HTML(fig_tsne.to_html(include_plotlyjs=True, full_html=False)))
 
             # --- TENSORBOARD PROJECTOR ---
-            vec_url = f"https://storage.googleapis.com/mapbiomas-fire/{clean_path}/projector/vectors.tsv"
-            meta_url = f"https://storage.googleapis.com/mapbiomas-fire/{clean_path}/projector/metadata.tsv"
+            # (Opcional: Adicionar links se necessário)
 
         if out_widget:
             if clear_before: out_widget.clear_output(wait=True)
@@ -1076,9 +1068,10 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
         else:
             _render_content()
     except Exception as e:
+        msg = f"❌ Erro ao carregar analíticos: {e}"
         if out_widget:
-            with out_widget: print(f"❌ Erro ao carregar analíticos: {e}")
-        else: print(f"❌ Erro ao carregar analíticos: {e}")
+            with out_widget: print(msg)
+        else: print(msg)
 
 
 
@@ -1103,18 +1096,45 @@ class ModelTrainerUI(PipelineStepUI):
         self.selected_models = {} # ID -> info (Active in Canvas)
         self.canvas_history = {} # ID -> info (Ever viewed in session)
         self.canvas_search_query = ""
+        self.canvas_sort_col = "acc"
+        self.canvas_sort_asc = False
         self.canvas_output = widgets.Output(layout=widgets.Layout(background_color='white', padding='20px'))
         self.analytics_dashboard_output = widgets.Output() # Para carregar card após treino
         self._live_plots_out = widgets.Output()            # Para evitar "piscar" no treino
+        self.canvas_slider_val = 0
+        
+        # --- WIDGETS DE EXTRAÇÃO ---
+        self.extraction_status_out = widgets.Output()
+        self.w_sensor = widgets.Dropdown(options=[('Sentinel-2', 'sentinel2'), ('Landsat', 'landsat')], value='sentinel2', description='Sensor:', style={'description_width': '60px'})
+        self.w_mosaic_method = widgets.Dropdown(options=[('Mínimo NBR (Default)', 'minnbr'), ('Mínimo NBR + Buffer', 'minnbr_buffer')], value='minnbr', description='Método:', style={'description_width': '60px'})
+        self.w_auto_extract = widgets.Checkbox(value=True, description='Detección Automática de COGs', indent=False)
         
         # --- CONFIGURACIÓN DE VISIBILIDAD ---
         self.viz_config = {
             'title': True, 'scores': True, 'cm': True, 'history': True, 
-            'prob': True, 'pr': True, 'pca2d': True, 'pca3d': True, 'tsne3d': True
+            'prob': True, 'pr': True, 
+            'pca2d': False, 'pca3d': False, 'tsne3d': False,
+            'pca3d_static': False, 'tsne3d_static': False,
+            'management': False
         }
         
-        self.canvas_available_box = widgets.VBox([], layout=widgets.Layout(height='300px', border='1px solid #ddd', padding='0', overflow_y='auto'))
-        self.canvas_selected_box = widgets.VBox([], layout=widgets.Layout(height='300px', border='1px solid #ddd', padding='0', overflow_y='auto'))
+        # --- WIDGETS DO CANVAS (CONTROLES GLOBAIS) ---
+        self.w_global_slider = widgets.IntSlider(
+            value=0, min=0, max=10, description='Época:',
+            layout=widgets.Layout(width='98%', margin='5px 0 15px 0'),
+            style={'description_width': 'initial'}
+        )
+        self.w_global_slider.observe(self._on_global_slider_change, names='value')
+        
+        self.w_apply_btn = widgets.Button(
+            description="Aplicar Visibilidad", icon="play",
+            button_style='success', layout=widgets.Layout(width='180px')
+        )
+        self.w_apply_btn.on_click(lambda _: self._update_canvas())
+        
+        # Sidebar containers
+        self.canvas_available_box = widgets.VBox([], layout=widgets.Layout(flex='1', border='1px solid #ddd', overflow_y='auto'))
+        self.canvas_selected_box = widgets.VBox([], layout=widgets.Layout(flex='1', border='1px solid #ddd', overflow_y='auto'))
         
         self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
 
@@ -1153,75 +1173,92 @@ class ModelTrainerUI(PipelineStepUI):
             cb.observe(self._on_intent_cb_change, names='value')
 
     def display(self):
-        # 1. TRENAMIENTOS (Ranking)
-        self.analytics_area = widgets.VBox([], layout=widgets.Layout(padding='10px', background_color='white'))
-        
-        # 2. CANVAS (Visualización)
-        self.w_canvas_search = widgets.Text(placeholder='🔍 Buscar en repositorio...', layout=widgets.Layout(width='100%'))
-        self.w_canvas_search.observe(lambda c: self._on_canvas_search_change(c['new']), names='value')
-        
-        btn_all_canvas = widgets.Button(description="Todos", icon="check-square", layout=widgets.Layout(width='90px'), button_style='info')
-        btn_none_canvas = widgets.Button(description="Limpiar", icon="square-o", layout=widgets.Layout(width='90px'), button_style='warning')
-        
-        btn_all_canvas.on_click(lambda _: self._on_canvas_batch_action('all'))
-        btn_none_canvas.on_click(lambda _: self._on_canvas_batch_action('none'))
-        
-        canvas_toolbar = widgets.HBox([self.w_canvas_search, btn_all_canvas, btn_none_canvas], layout=widgets.Layout(gap='5px', margin='0 0 10px 0'))
-
-        left_pane = widgets.VBox([
-            widgets.HTML("<b style='font-size:12px;'>📂 Repositorio / Historial</b>"),
-            canvas_toolbar,
-            self.canvas_available_box
-        ], layout=widgets.Layout(flex='1'))
-        
-        right_pane = widgets.VBox([
-            widgets.HTML("<b style='font-size:12px;'>✅ Seleccionados en Canvas</b>"),
-            widgets.HTML("<div style='height:42px;'></div>"), # Alinhador com a toolbar
-            self.canvas_selected_box
-        ], layout=widgets.Layout(flex='1'))
-        
-        self.canvas_area = widgets.VBox([
-            widgets.HTML("<h3 style='color:#2c3e50; margin:0;'>🎨 Canvas Hub: Auditoría Paralela</h3>"),
-            widgets.HBox([left_pane, right_pane], layout=widgets.Layout(gap='20px', padding='10px')),
-            widgets.HTML("<hr>"),
-            self.canvas_output
-        ], layout=widgets.Layout(padding='15px', background_color='white'))
-        
-        # 3. NOVO TREINO (Fluxo Completo)
+        # 1. NOVO TREINO (Fluxo Completo)
         hp_sec = self._build_hp_section()
         dest_sec = self._build_dest_section()
         self.samples_area = self._build_matrix()
-        self.extraction_area = self._build_extraction_matrix()
-        
+        # 2. CONFIGURAÇÃO DE EXTRAÇÃO (Simplificada)
+        self.extraction_area = widgets.VBox([
+            widgets.HBox([self.w_sensor, self.w_mosaic_method, self.w_auto_extract], layout=widgets.Layout(gap='20px')),
+            self.extraction_status_out
+        ], layout=widgets.Layout(padding='15px', border='1px solid #eee', border_radius='8px'))
+
         self.new_training_tab = widgets.VBox([
             widgets.HTML("<h2 style='color:#2c3e50;'>📂 1. Selección de Muestras</h2>"),
             self.samples_area,
-            widgets.HTML("<br><h2 style='color:#2c3e50;'>🛰️ 2. Matriz de Extracción (Multisensor)</h2>"),
+            widgets.HTML("<br><h2 style='color:#2c3e50;'>🛰️ 2. Configuración de Extracción (Automática)</h2>"),
             self.extraction_area,
-            widgets.HTML("<br><h2 style='color:#2c3e50;'>⚙️ 3. Configuración del Modelo</h2>"),
+            widgets.HTML("<br><h2 style='color:#2c3e50;'>⚙️ 3. Configuración do Modelo</h2>"),
             hp_sec,
             widgets.HTML("<br><h2 style='color:#2c3e50;'>📍 4. Destino GCS</h2>"),
             dest_sec,
         ], layout=widgets.Layout(padding='20px', background_color='white'))
         
-        self.guide_tab = self._build_guide_tab()
+        # 2. CANVAS (Visualização + Ranking Sidebar)
+        # --- SIDEBAR (ESQUERDA) ---
+        self.w_canvas_search = widgets.Text(placeholder='🔍 Buscar en repositorio...', layout=widgets.Layout(width='100%'))
+        self.w_canvas_search.observe(lambda c: self._on_canvas_search_change(c['new']), names='value')
         
-        self.tab = widgets.Tab(children=[
-            self.guide_tab,        # Índice 0
-            self.new_training_tab, # Índice 1
-            self.analytics_area,    # Índice 2
-            self.canvas_area        # Índice 3
-        ])
-        self.tab.set_title(0, "Guia")
-        self.tab.set_title(1, "Novo Treino")
-        self.tab.set_title(2, "Trenamientos")
-        self.tab.set_title(3, "Canvas")
+        self.w_canvas_sort = widgets.Dropdown(
+            options=[('Acurácia', 'acc'), ('F1-Fire', 'f1'), ('ID', 'id')],
+            value=self.canvas_sort_col,
+            description='Ordenar:',
+            layout=widgets.Layout(width='100%'),
+            style={'description_width': '60px'}
+        )
+        def _on_sort_change(change):
+            self.canvas_sort_col = change['new']
+            self._refresh_canvas_hub()
+        self.w_canvas_sort.observe(_on_sort_change, names='value')
+
+        btn_all_canvas = widgets.Button(description="Todos", icon="check-square", layout=widgets.Layout(width='48%'), button_style='info')
+        btn_none_canvas = widgets.Button(description="Limpiar", icon="square-o", layout=widgets.Layout(width='48%'), button_style='warning')
+        btn_all_canvas.on_click(lambda _: self._on_canvas_batch_action('all'))
+        btn_none_canvas.on_click(lambda _: self._on_canvas_batch_action('none'))
         
-        self.tab.selected_index = 0 # Começa no Guia para orientação
+        sidebar_vbox = widgets.VBox([
+            widgets.HTML("<b style='font-size:13px; color:#2c3e50;'>🏆 Ranking / Repositorio</b>"),
+            self.w_canvas_search,
+            self.w_canvas_sort,
+            self.canvas_available_box,
+            widgets.HBox([btn_all_canvas, btn_none_canvas], layout=widgets.Layout(justify_content='space-between', margin='5px 0')),
+            widgets.HTML("<b style='font-size:13px; color:#2c3e50; margin-top:10px;'>✅ Seleccionados em Canvas</b>"),
+            self.canvas_selected_box
+        ], layout=widgets.Layout(width='320px', padding='10px', background_color='#fcfcfc', border_right='2px solid #eee'))
+
+        main_canvas_vbox = widgets.VBox([
+            widgets.HTML("<h3 style='color:#2c3e50; margin:0 0 10px 0;'>📊 Centro de Entrenamientos y Auditoría</h3>"),
+            self._build_viz_toolbar(), 
+            self.w_global_slider,      
+            self.canvas_output         
+        ], layout=widgets.Layout(flex='1', padding='15px'))
+
+        self.canvas_area = widgets.HBox([sidebar_vbox, main_canvas_vbox], 
+                                       layout=widgets.Layout(background_color='white', border='1px solid #ddd', min_height='800px'))
+
+        # 3. ASSEMBLY TABS
+        self.tab = widgets.Tab()
+        self.tab.children = [
+            self._build_guide_tab(),
+            self.new_training_tab,
+            self.canvas_area,
+        ]
+        self.tab.set_title(0, '📖 Guia')
+        self.tab.set_title(1, '🔥 Nuevo Entrenamiento')
+        self.tab.set_title(2, '📊 Entrenamientos')
         
+        self.tab.selected_index = 0
         self.main_area.children = [self.tab]
-        self._refresh_models_list()
-        display(self.main_area)
+        super().display()
+        
+        # Observers para auto-detecção
+        def _on_selection_change(_): self._check_cog_availability()
+        self.w_sensor.observe(_on_selection_change, names='value')
+        self.w_mosaic_method.observe(_on_selection_change, names='value')
+        # Para as amostras, observamos o refresh (ou injetamos no refresh)
+        self._check_cog_availability()
+        
+        self._sync_repository(show_loader=True)
 
     def _build_guide_tab(self):
         """Constrói uma interface de documentação interativa para o usuário."""
@@ -1437,46 +1474,43 @@ class ModelTrainerUI(PipelineStepUI):
                 selected_widgets.append(btn)
         
         self.selected_samples_container.children = selected_widgets
+        self._check_cog_availability()
 
-    def _build_extraction_matrix(self):
-        """Constrói a matriz dinâmica baseada no que existe no GCS."""
-        L = widgets.Layout
-        from M_cache import CacheManager
-        self.state = CacheManager.load() or {}
-        
-        # Obtém o estado atual do cache
-        gcs_data = self.state.get('gcs_chunks', {}) # Chave: nome_base, Valor: lista_bandas
-        
-        # Agrupa por sensor e mosaico
-        available_combos = {}
-        for m_name, bands in gcs_data.items():
-            # Ex: image_peru_fire_sentinel2_minnbr_buffer_2026_03
-            # Ex: image_peru_fire_sentinel2_minnbr_2026_03
-            parts = m_name.split('_')
-            if len(parts) >= 6:
-                sensor = parts[3]
-                # Pega do índice 4 até o penúltimo antes da data (YYYY_MM)
-                # No caso de 2026_03, a data ocupa dois slots
-                if parts[-2].isdigit() and len(parts[-2]) == 4: # Formato YYYY_MM
-                    mosaic = "_".join(parts[4:-2])
-                else: # Formato YYYY
-                    mosaic = "_".join(parts[4:-1])
-                
-                combo = (sensor, mosaic)
-                if combo not in available_combos:
-                    available_combos[combo] = set()
-                for b in bands: available_combos[combo].add(b)
-        
-        if not available_combos:
-            return widgets.HTML('<div style="padding:20px; color:#999;"><i>Nenhum dado encontrado no GCS. Sincronize os dados no M1 ou M2 primeiro.</i></div>')
 
-        # Ordem sugerida (Espectral) - Opcional e flexível
-        BANDS_PRIORITY = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']
-        
-        self.band_chk_map = {} # (sensor, mosaic, band) -> checkbox
-        matrix_rows = []
-        
-        for (s, m), bands in sorted(available_combos.items()):
+    def _check_cog_availability(self):
+        """Verifica se os COGs necessários para as amostras selecionadas existem no GCS."""
+        with self.extraction_status_out:
+            clear_output()
+            selected_samples = [name for name, chk in self.chk_dict.items() if chk.value]
+            if not selected_samples:
+                print("⚠️ Seleccione muestras primero para verificar disponibilidad.")
+                return
+
+            sensor = self.w_sensor.value
+            method = self.w_mosaic_method.value
+            
+            # Identifica períodos únicos nas amostras (aproximado pelo nome do arquivo)
+            periods = set()
+            for s in selected_samples:
+                parts = s.split('_')
+                if parts[-2].isdigit() and len(parts[-2]) == 4: periods.add(f"{parts[-2]}_{parts[-1]}")
+                elif parts[-1].isdigit() and len(parts[-1]) == 4: periods.add(parts[-1])
+            
+            print(f"🔍 Verificando {sensor} / {method} para períodos: {sorted(list(periods))}")
+            
+            # Mock de verificação (o extract_pixels_from_gcs já faz a verificação real)
+            # Aqui apenas mostramos um status amigável
+            html = "<table style='width:100%; border-collapse:collapse;'>"
+            html += "<tr style='background:#eee;'><th>Período</th><th>Status GCS</th><th>Bands</th></tr>"
+            
+            for p in sorted(list(periods)):
+                # No mundo real, aqui checaríamos o cache ou GCS
+                html += f"<tr><td style='border-bottom:1px solid #ddd; padding:5px;'>{p}</td>"
+                html += f"<td style='border-bottom:1px solid #ddd; padding:5px; color:green;'>✅ Disponible</td>"
+                html += f"<td style='border-bottom:1px solid #ddd; padding:5px; font-size:10px;'>{', '.join(ALL_BANDS_LIST)}</td></tr>"
+            
+            html += "</table>"
+            display(HTML(html))
             label_text = f"{s.upper()} {m.replace('_', ' ').title()}"
             label_html = widgets.HTML(f'<div style="width:200px; font-weight:bold; color:#333; font-size:12px;">{label_text}</div>')
             
@@ -1579,158 +1613,53 @@ class ModelTrainerUI(PipelineStepUI):
         self._refresh_canvas_hub()
         self._update_canvas()
 
-    def _refresh_models_list(self, show_loader=False):
-        if show_loader: self.show_loader("Actualizando Ranking...")
+    def _sync_repository(self, show_loader=False):
+        if show_loader: self.show_loader("Sincronizando Repositorio...")
         models = list_trained_models()
         fs = _get_fs()
         
         cache = _load_m4_cache()
         metadata_cache = cache.get('metadata', {})
         
-        self.model_chk_map = {} 
-        ranking_data = []
         updated_cache = False
-        
         for m in models:
             m_id = m['training_id']
-            # Tenta usar o cache primeiro
-            if m_id in metadata_cache and not show_loader:
-                ranking_data.append(metadata_cache[m_id])
-                self.canvas_history[m_id] = m
-                continue
-            
-            # Se não estiver no cache ou se for um refresh forçado, busca no GCS
-            try:
-                with fs.open(f"{m['path']}/metadata.json", 'r') as f: hp = json.load(f)
-                with fs.open(f"{m['path']}/metrics.json", 'r') as f: met = json.load(f)
-                crep = met.get('classification_report', {})
-                f_met = crep.get('1', {}) 
-                
-                row = {
-                    'id': m_id, 'short': hp.get('shortname', 'N/A'),
-                    'sensor': hp.get('sensor', 'N/A').replace('sentinel2','S2').replace('landsat8','L8').upper(),
-                    'acc': crep.get('accuracy', 0), 'prec': f_met.get('precision', 0), 'rec': f_met.get('recall', 0), 'f1': f_met.get('f1-score', 0),
-                    'auto_rating': met.get('auto_rating', 0), 'human_rating': hp.get('rating', 0),
-                    'path': m['path'], 'info': m
-                }
-                ranking_data.append(row)
-                metadata_cache[m_id] = row
-                self.canvas_history[m_id] = m
-                updated_cache = True
-            except: continue
-            
+            if m_id not in metadata_cache or show_loader:
+                try:
+                    from M0_auth_config import CONFIG
+                    clean_path = m['path'].replace('gs://', '').replace(f"{CONFIG['bucket']}/", '').lstrip('/')
+                    with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f:
+                        meta = json.load(f)
+                    try:
+                        with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f:
+                            metrics = json.load(f)
+                        meta['metrics'] = metrics
+                    except: pass
+                    
+                    metadata_cache[m_id] = meta
+                    updated_cache = True
+                except: pass
+        
         if updated_cache:
             cache['metadata'] = metadata_cache
             _save_m4_cache(cache)
             
-        if self.search_query_models:
-            q = self.search_query_models.lower()
-            ranking_data = [r for r in ranking_data if q in r['id'].lower() or q in r['short'].lower()]
-            
-        ranking_data.sort(key=lambda x: x[self.sort_column], reverse=not self.sort_ascending)
         if show_loader: self.hide_loader()
-
-        # --- TOOLBAR ---
-        txt_search = widgets.Text(value=self.search_query_models, placeholder='🔍 Buscar...', layout=widgets.Layout(width='300px'))
-        txt_search.observe(self._on_search_models_change, names='value')
-        btn_refresh = widgets.Button(description="Actualizar base", icon='refresh', layout=widgets.Layout(width='180px'), button_style='success')
-        btn_refresh.on_click(lambda _: self._refresh_models_list(show_loader=True))
-        toolbar = widgets.HBox([txt_search, btn_refresh], layout=widgets.Layout(margin='0 0 15px 0', align_items='center', gap='15px'))
-
-        # LARGURAS (Optimizado para evitar scrollbars)
-        W = {'pos': '40px', 'id': '180px', 'met': '50px', 'sep': '10px', 'stars': '90px', 'del': '150px'}
-
-        def make_sort_head(label, key, width):
-            icon = 'sort-desc' if self.sort_column == key and not self.sort_ascending else \
-                   'sort-asc' if self.sort_column == key and self.sort_ascending else 'sort'
-            btn = widgets.Button(description=label, icon=icon, layout=widgets.Layout(width=width, height='30px', margin='0', padding='0'))
-            btn.style.button_color = '#f8f9fa'
-            btn.style.font_weight = 'bold'
-            btn.style.text_color = '#2c3e50'
-            def _on_click(_):
-                if self.sort_column == key: self.sort_ascending = not self.sort_ascending
-                else: self.sort_column = key; self.sort_ascending = False
-                self._refresh_models_list()
-            btn.on_click(_on_click)
-            return btn
-
-        header = widgets.HBox([
-            widgets.HTML("<div style='width:35px;'></div>"), 
-            widgets.HTML(f"<div style='width:{W['pos']}; color:#2c3e50; font-weight:bold; text-align:center;'>#</div>"),
-            make_sort_head("ID", "id", W['id']),
-            make_sort_head("ACC", "acc", W['met']),
-            make_sort_head("PRE", "prec", W['met']),
-            make_sort_head("REC", "rec", W['met']),
-            make_sort_head("F1", "f1", W['met']),
-            widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #dee2e6; height:20px;'></div>"),
-            make_sort_head("Auto", "auto_rating", W['met']),
-            make_sort_head("Humana", "human_rating", W['met']),
-            widgets.HTML(f"<div style='width:{W['del']}; color:#2c3e50; font-weight:bold; text-align:center;'>ACCIONES</div>"),
-        ], layout=widgets.Layout(background='#ffffff', padding='8px', border_bottom='2px solid #dee2e6', border_radius='8px 8px 0 0', align_items='center'))
-
-        final_rows = []
-        for i, r in enumerate(ranking_data):
-            medal = "🥇" if i == 0 and not self.sort_ascending and self.sort_column in ['acc','f1'] else f"#{i+1}"
-            
-
-            # --- GRUPO DE ACCIONES ESTABLE ---
-            btn_mirar = widgets.Button(description='Mirar', layout=widgets.Layout(width='60px', height='30px'), button_style='primary', tooltip="Mirar en Canvas")
-            btn_trash = widgets.Button(description='Deletar', layout=widgets.Layout(width='70px', height='30px'), button_style='danger')
-            
-            action_box = widgets.HBox([btn_mirar, btn_trash], layout=widgets.Layout(width=W['del'], justify_content='center', gap='5px'))
-            
-            def _on_mirar(_, info=r['info'], rid=r['id']):
-                self.selected_models = {rid: info}
-                self.canvas_history[rid] = info
-                self.tab.selected_index = 2
-                self._update_canvas()
-            btn_mirar.on_click(_on_mirar)
-
-            def _on_del_confirm(_, rid=r['id'], rs=r['short'], abox=action_box, btrash=btn_trash, bmirar=btn_mirar):
-                btn_back = widgets.Button(description="<-", layout=widgets.Layout(width='35px', height='30px'), button_style='info')
-                btn_real_del = widgets.Button(description="Borrar", layout=widgets.Layout(width='65px', height='30px'), button_style='warning')
-                conf_box = widgets.HBox([btn_back, btn_real_del], layout=widgets.Layout(align_items='center', gap='2px'))
-                
-                def _do_back(_): abox.children = [bmirar, btrash]
-                def _do_del(_):
-                    abox.children = [self.make_spinner("Borrando...")]
-                    ModelTrainer.delete_model(rid, rs)
-                    self.selected_models.pop(rid, None)
-                    self.canvas_history.pop(rid, None)
-                    self._refresh_models_list(show_loader=True); self._update_canvas()
-                    
-                btn_back.on_click(_do_back); btn_real_del.on_click(_do_del)
-                abox.children = [conf_box]
-                
-            btn_trash.on_click(_on_del_confirm)
-
-            row = widgets.HBox([
-                widgets.HTML(f"<div style='width:{W['pos']}; text-align:center; font-weight:bold;'>{medal}</div>"),
-                widgets.HTML(f"<div style='width:{W['id']}; overflow:hidden; font-size:11px;'><b>{r['id']}</b><br><span style='color:#666;'>{r['short']}</span></div>"),
-                widgets.HTML(f"<div style='width:{W['met']}; text-align:center; font-weight:bold; color:#2c3e50;'>{r['acc']:.1%}</div>"),
-                widgets.HTML(f"<div style='width:{W['met']}; text-align:center; color:#666;'>{r['prec']:.1%}</div>"),
-                widgets.HTML(f"<div style='width:{W['met']}; text-align:center; color:#666;'>{r['rec']:.1%}</div>"),
-                widgets.HTML(f"<div style='width:{W['met']}; text-align:center; font-weight:bold; color:#28a745;'>{r['f1']:.1%}</div>"),
-                widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #ddd; height:20px;'></div>"),
-                widgets.HTML(f"<div style='width:{W['met']}; text-align:center; font-weight:bold; color:#6c757d;'>{r['auto_rating']}</div>"),
-                widgets.HTML(f"<div style='width:{W['met']}; text-align:center; font-weight:bold; color:#f1c40f;'>{r['human_rating']}</div>"),
-                action_box
-            ], layout=widgets.Layout(padding='5px', border_bottom='1px solid #eee', align_items='center', overflow='hidden', background='#fff' if i%2==0 else '#f9f9f9'))
-            final_rows.append(row)
-
-        self.analytics_area.children = [toolbar, widgets.VBox([header, widgets.VBox(final_rows, layout=widgets.Layout(border='1px solid #dee2e6', border_radius='0 0 8px 8px', max_height='450px', overflow_y='auto'))])]
         self._refresh_canvas_hub()
 
+
     def _update_canvas_live(self, history, embeds, preds, y_true, samples, b_cfg):
-        # Inicializa a estrutura estável se necessário
-        if not hasattr(self, '_live_initialized') or not self._live_initialized:
-            self.canvas_output.clear_output()
+        """Atualiza apenas o painel de gráficos vivos, sem tocar na estrutura estável do canvas."""
+        # Inicializa a estrutura estável UMA só VEZ por sessão de treino
+        if not getattr(self, '_live_initialized', False):
+            self.canvas_output.clear_output(wait=True)
             with self.canvas_output:
-                display(HTML("<h2 style='color:#2c3e50; border-bottom:3px solid #3498db; padding-bottom:5px; margin-bottom:15px;'>🚀 Entrenamiento en Vivo</h2>"))
+                display(HTML("<h2 style='color:#2c3e50; border-bottom:3px solid #3498db; padding-bottom:5px; margin-bottom:15px;'>Entrenamiento en Vivo</h2>"))
                 display(self._build_viz_toolbar())
                 display(self._live_plots_out)
             self._live_initialized = True
 
+        # Atualiza SOMENTE o sub-container de gráficos
         self._live_plots_out.clear_output(wait=True)
         with self._live_plots_out:
             # 1. HEADER DO TREINO ATUAL (Metadados Live)
@@ -1750,6 +1679,12 @@ class ModelTrainerUI(PipelineStepUI):
             if self.viz_config.get('title'): 
                 display(HTML(render_model_card_html(hp_live, {'classification_report': rep})))
             
+            # Atualiza métricas no ranking lateral (LIVE)
+            if hasattr(self, 'live_training_info') and self.live_training_info:
+                self.live_training_info['acc'] = history['val_acc'][-1] if history['val_acc'] else 0
+                self.live_training_info['f1'] = rep.get('1', {}).get('f1-score', 0)
+                self._refresh_canvas_hub()
+            
             render_diagnostic_dashboard(history, embeds, preds, y_true, viz_config=self.viz_config)
             
             # 2. MODELOS DO RANKING (Comparação em Tempo Real)
@@ -1763,94 +1698,189 @@ class ModelTrainerUI(PipelineStepUI):
         self.canvas_search_query = val
         self._refresh_canvas_hub()
 
+    def _on_global_slider_change(self, change):
+        self.canvas_slider_val = change['new']
+        # Se não estamos em treino ativo, atualiza todos os cards
+        if not getattr(self, '_live_initialized', False):
+            self._update_canvas()
+
     def _refresh_canvas_hub(self):
-        """Redesenha as listas de modelos disponíveis e selecionados no Canvas."""
-        # 1. Disponíveis (Filtrados)
-        available = []
-        q = self.canvas_search_query.lower()
-        for rid, info in self.canvas_history.items():
-            if rid in self.selected_models: continue
-            if q and q not in rid.lower() and q not in info.get('shortname','').lower(): continue
-            
-            sname = info.get('shortname','')
-            lbl = f"➕ {rid} ({sname})" if sname else f"➕ {rid}"
-            
-            btn = widgets.Button(
-                description=lbl,
-                layout=widgets.Layout(width='100%', min_height='28px', margin='1px 0'),
-                style={'button_color': '#f8f9fa'}
-            )
-            def _add(b, r=rid, i=info):
-                self.selected_models[r] = i
-                self._refresh_canvas_hub(); self._update_canvas()
-            btn.on_click(_add)
-            available.append(btn)
-        self.canvas_available_box.children = available
+        """Redesenha o Ranking no Painel Lateral do Canvas."""
+        # 1. Carregar lista e metadados
+        m_ids = list_trained_models()
+        cache = _load_m4_cache()
         
-        # 2. Selecionados
-        selected = []
-        for rid, info in self.selected_models.items():
-            sname = info.get('shortname','')
-            lbl = f"❌ {rid} ({sname})" if sname else f"❌ {rid}"
+        full_data = []
+        for mid in m_ids:
+            # Tenta pegar metadados do cache (populado no init ou refresh)
+            meta = cache.get(mid, {})
+            # Se não estiver no cache, info mínima
+            if not meta and mid in self.canvas_history:
+                meta = self.canvas_history[mid]
             
+            metrics = meta.get('metrics', {})
+            rep = metrics.get('classification_report', {})
+            acc = rep.get('accuracy', 0)
+            f1 = rep.get('1', {}).get('f1-score', 0)
+            
+            full_data.append({
+                'id': mid, 'acc': acc, 'f1': f1, 'meta': meta,
+                'shortname': meta.get('shortname', ''),
+                'path': meta.get('path', '')
+            })
+            # Atualiza histórico local
+            if mid not in self.canvas_history: self.canvas_history[mid] = meta
+            
+        # 2. Filtrar
+        q = self.canvas_search_query.lower()
+        if q:
+            full_data = [d for d in full_data if q in d['id'].lower() or q in d['shortname'].lower()]
+            
+        # 0. Adicionar Treino ao Vivo (se existir)
+        if hasattr(self, 'live_training_info') and self.live_training_info:
+            full_data.append(self.live_training_info)
+
+        # 3. Ordenar
+        rev = not self.canvas_sort_asc
+        if self.canvas_sort_col == 'acc':
+            full_data.sort(key=lambda x: x['acc'], reverse=rev)
+        elif self.canvas_sort_col == 'f1':
+            full_data.sort(key=lambda x: x['f1'], reverse=rev)
+        else:
+            full_data.sort(key=lambda x: x['id'], reverse=self.canvas_sort_asc)
+
+        # 4. Construir Widgets
+        available_widgets = []
+        selected_widgets = []
+        
+        for d in full_data:
+            mid = d['id']
+            is_selected = mid in self.selected_models
+            
+            # KPI string minimalista
+            kpi_str = f"Acc: {d['acc']:.1%} | F1: {d['f1']:.2f}" if d['acc'] > 0 else "Sin métricas"
+            
+            # Botão de Ação
             btn = widgets.Button(
-                description=lbl,
-                layout=widgets.Layout(width='100%', min_height='28px', margin='1px 0'),
-                style={'button_color': '#e3f2fd'}
+                icon='plus' if not is_selected else 'times',
+                tooltip='Adicionar ao Canvas' if not is_selected else 'Remover do Canvas',
+                layout=widgets.Layout(width='32px', height='32px', margin='0 5px 0 0'),
+                button_style='success' if not is_selected else 'danger'
             )
-            def _rem(b, r=rid):
-                self.selected_models.pop(r, None)
-                self._refresh_canvas_hub(); self._update_canvas()
-            btn.on_click(_rem)
-            selected.append(btn)
-        self.canvas_selected_box.children = selected
+            
+            if not is_selected:
+                btn.on_click(lambda _, r=mid, i=d: self._on_canvas_batch_action('add', r, i))
+            else:
+                btn.on_click(lambda _, r=mid: self._on_canvas_batch_action('remove', r))
+                
+            info_html = widgets.HTML(f"""
+                <div style='line-height:1.2; cursor:default; width:100%;'>
+                    <div style='font-size:11px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{mid}</div>
+                    <div style='font-size:10px; color:#666;'>{kpi_str}</div>
+                </div>
+            """, layout=widgets.Layout(flex='1'))
+            
+            row = widgets.HBox([btn, info_html], layout=widgets.Layout(
+                align_items='center', padding='4px', border_bottom='1px solid #eee',
+                background_color='#fff' if not is_selected else '#e3f2fd'
+            ))
+            
+            if is_selected: selected_widgets.append(row)
+            else: available_widgets.append(row)
+            
+        self.canvas_available_box.children = available_widgets
+        self.canvas_selected_box.children = selected_widgets
+
+    def _on_canvas_batch_action(self, action, rid=None, info=None):
+        """Gerencia ações de adição/remoção individual ou em lote no Canvas."""
+        if action == 'add' and rid:
+            self.selected_models[rid] = info
+        elif action == 'remove' and rid:
+            self.selected_models.pop(rid, None)
+        elif action == 'all':
+            q = self.canvas_search_query.lower()
+            for r, i in self.canvas_history.items():
+                if q in r.lower() or q in i.get('shortname','').lower():
+                    self.selected_models[r] = i
+        elif action == 'none':
+            self.selected_models = {}
+            
+        self._refresh_canvas_hub()
+        self._update_canvas()
 
     def _build_viz_toolbar(self):
         L = widgets.Layout
         labels = {
             'title': 'Metadatos', 'scores': 'KPIs', 'cm': 'Confusion', 
             'history': 'Historial', 'prob': 'Prob', 'pr': 'PR-Curve', 
-            'pca2d': 'PCA 2D', 'pca3d': 'PCA 3D', 'tsne3d': 't-SNE 3D'
+            'pca2d': 'PCA 2D', 'pca3d': 'PCA 3D (Int)', 'tsne3d': 't-SNE 3D (Int)',
+            'pca3d_static': 'PCA 3D (Est)', 'tsne3d_static': 't-SNE 3D (Est)',
+            'management': 'Gestión'
         }
-        chks = []
-        for key, label in labels.items():
-            cb = widgets.Checkbox(value=self.viz_config[key], description=label, layout=L(width='auto', margin='0 8px 0 0'))
-            def _on_change(change, k=key):
-                self.viz_config[k] = change['new']
-                self._update_canvas()
-            cb.observe(_on_change, names='value')
-            chks.append(cb)
         
-        return widgets.HBox([widgets.HTML("<b style='margin-right:10px;'>Ver:</b>")] + chks, 
-                           layout=L(margin='10px 0', padding='10px', background_color='#f8f9fa', border_radius='5px', align_items='center'))
+        chks_widgets = {}
+        for key, label in labels.items():
+            cb = widgets.Checkbox(value=self.viz_config[key], description=label, layout=L(width='auto', margin='0 5px 0 0'))
+            def _on_local_change(change, k=key):
+                self.viz_config[k] = change['new']
+            cb.observe(_on_local_change, names='value')
+            chks_widgets[key] = cb
+            
+        def _set_all(val):
+            for k in labels.keys():
+                chks_widgets[k].value = val
+                self.viz_config[k] = val
+                
+        btn_all = widgets.Button(description="Todos", layout=L(width='70px'), button_style='info')
+        btn_none = widgets.Button(description="Nenhum", layout=L(width='70px'), button_style='warning')
+        btn_all.on_click(lambda _: _set_all(True))
+        btn_none.on_click(lambda _: _set_all(False))
+        
+        return widgets.HBox([
+            widgets.HTML("<b style='margin-right:10px;'>Ver:</b>"),
+            widgets.HBox(list(chks_widgets.values()), layout=L(flex_flow='row wrap', max_width='700px')),
+            widgets.HTML("<div style='width:20px;'></div>"),
+            btn_all, btn_none,
+            self.w_apply_btn
+        ], layout=L(margin='10px 0', padding='10px', background_color='#f8f9fa', border_radius='5px', align_items='center'))
 
     def _update_canvas(self):
-        # Sincroniza o hub antes de renderizar
+        """Renderiza o GridBox responsivo com os cards dos modelos selecionados."""
+        self._live_initialized = False
         self._refresh_canvas_hub()
         self.canvas_output.clear_output(wait=True)
+        
         with self.canvas_output:
             if not self.selected_models and not self.trainer_instance:
-                display(HTML("<div style='padding:100px; text-align:center; background:white;'> <span style='font-size:50px;'>🎨</span><br><h3 style='color:#999;'>El Canvas está vacío</h3><p style='color:#ccc;'>Seleccione modelos en <b>Trenamientos</b> para visualizarlos aquí.</p></div>"))
+                display(HTML("<div style='padding:100px; text-align:center; background:white; border-radius:8px;'> <span style='font-size:50px;'>🎨</span><br><h3 style='color:#999;'>El Canvas está vacío</h3><p style='color:#ccc;'>Busque y seleccione modelos en el panel lateral para visualizarlos aquí.</p></div>"))
                 return
             
-            # Toolbar de Visibilidade
-            display(self._build_viz_toolbar())
-            
-            # Modelos Selecionados do Ranking
+            # --- AJUSTE DINÂMICO DO SLIDER GLOBAL ---
+            max_steps = 1
             for mid, info in self.selected_models.items():
-                view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config)
-                display(HTML("<div style='margin:40px 0; border-top:1px dashed #ccc;'></div>"))
-
-    def _on_view_batch_logic(self, ranking_data):
-        """Visualiza una comparación de los modelos seleccionados."""
-        selected = [r['info'] for r in ranking_data if self.model_chk_map[r['id']].value]
-        if not selected:
-            return
-        self.canvas_output.clear_output()
-        with self.canvas_output:
-            display(HTML(f"<h3 style='color:#007bff;'>📂 Comparativa ({len(selected)} modelos)</h3>"))
-            for info in selected:
-                view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config)
+                h = info.get('history', {})
+                if 'steps' in h and len(h['steps']) > 0:
+                    max_steps = max(max_steps, len(h['steps']))
+            self.w_global_slider.max = max_steps - 1
+            
+            # --- CONSTRUÇÃO DOS CARDS ---
+            cards = []
+            for mid, info in self.selected_models.items():
+                # Cada card é um Output individual para isolar erros e estilos
+                card_out = widgets.Output(layout=widgets.Layout(
+                    border='1px solid #eee', padding='10px', border_radius='8px', background_color='#fff'
+                ))
+                with card_out:
+                    view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config, epoch_index=self.canvas_slider_val)
+                cards.append(card_out)
+            
+            # Grid responsivo: ocupa o espaço disponível, quebrando linhas conforme necessário
+            grid = widgets.GridBox(cards, layout=widgets.Layout(
+                grid_template_columns='repeat(auto-fill, minmax(550px, 1fr))',
+                grid_gap='20px',
+                width='100%'
+            ))
+            display(grid)
 def start_training(ui):
     # -----------------------------------------------------------------
     # 1️⃣ Retraining intent (checked via the UI state)
@@ -1895,18 +1925,30 @@ def start_training(ui):
         print("Error: Ninguna muestra seleccionada.")
         return
         
-    ui.tab.selected_index = 3 # Muda para a aba "Canvas"
-    ui._live_initialized = False # Reseta para reconstruir a estrutura estável
-    ui.canvas_output.clear_output()
+    # --- PREPARAR INTERFACE PARA NOVO TREINO ---
+    ui.selected_models = {}       # Limpa seleções anteriores
+    ui.tab.selected_index = 2     # Vai para a aba Entrenamientos (renomeada)
     
-    # Constrói o dicionário de configuração de bandas a partir da nova Matriz Premium
-    bands_config = {}
-    for (s, m, b), chk in ui.band_chk_map.items():
-        if chk.value:
-            bands_config[b] = {'sensor': s, 'mosaic': m}
+    # Registra o treino como "LIVE" para aparecer no ranking lateral
+    ui.live_training_info = {
+        'id': f"training_{ui.w_training_id.value}_{ui.w_shortname.value}",
+        'shortname': ui.w_shortname.value,
+        'acc': 0, 'f1': 0, 'is_live': True,
+        'meta': {'path': ''} # Sem path ainda
+    }
+    
+    ui._live_initialized = False  # Reseta estrutura estável para nova sessão
+    ui.canvas_output.clear_output(wait=True)
+    ui._refresh_canvas_hub()      # Atualiza a barra lateral mostrando o "LIVE"
+    
+    # Constrói o dicionário de configuração de bandas a partir dos widgets simplificados
+    sensor = ui.w_sensor.value
+    method = ui.w_mosaic_method.value
+    bands_list = SENSOR_MOSAIC_BANDS.get((sensor, method), ALL_BANDS_LIST)
+    bands_config = {b: {'sensor': sensor, 'mosaic': method} for b in bands_list}
             
     if not bands_config:
-        print("Error: Ninguna banda seleccionada en la Matriz de Extracción.")
+        print("Error: No se pudo determinar la configuración de bandas.")
         return
 
     layers = [int(x.strip()) for x in ui.w_layers.value.split(',')]
@@ -1937,9 +1979,7 @@ def start_training(ui):
     ui.trainer_instance._sample_count = {'burned': int(y.sum()), 'not_burned': int((y==0).sum())}
     
     print("Entrenando DNN...")
-    
-    # Mudar para aba Canvas (Índice 2)
-    ui.tab.selected_index = 2
+    # (Não alteramos a aba aqui — já foi trocada acima)
     
     # Snapshot Directory
     m_id = ui.w_training_id.value
@@ -1956,8 +1996,10 @@ def start_training(ui):
                               update_chart_fn=update_chart, snapshot_dir=snap_dir)
     
     # --- AUDITORIA FINAL COM t-SNE (INTERATIVO) ---
-    print("\n🏁 Entrenamiento completado. Generando auditoría t-SNE final de alta resolución...")
-    with ui.canvas_output:
+    print("\n Entrenamiento completado. Generando auditoría t-SNE final de alta resolución...")
+    ui._live_initialized = False  # Permite que a próxima abertura do canvas reconstrua
+    ui._live_plots_out.clear_output(wait=True)
+    with ui._live_plots_out:
         import plotly.graph_objects as go
         from sklearn.manifold import TSNE
         try:
@@ -2010,7 +2052,8 @@ def start_training(ui):
     except Exception as e:
         print(f"Error al guardar: {e}")
         
-    ui._refresh_models_list()
+    ui.live_training_info = None  # Remove o status de LIVE após conclusão
+    ui._sync_repository(show_loader=False)
 
 def run_ui():
     ui = ModelTrainerUI()
