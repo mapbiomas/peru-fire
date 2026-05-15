@@ -1884,6 +1884,7 @@ class ModelTrainerUI(PipelineStepUI):
                 width='100%'
             ))
             display(grid)
+
 def start_training(ui):
     # -----------------------------------------------------------------
     # 1️⃣ Retraining intent (checked via the UI state)
@@ -1893,7 +1894,6 @@ def start_training(ui):
         hp = intent.get('hp')
         
         # Determine training ID and shortname for the target model
-        # If hp is provided (from Canvas/Ranking), use it. Otherwise use widgets.
         target_id = hp['training_id'] if hp else ui.w_training_id.value
         target_short = hp['shortname'] if hp else ui.w_shortname.value
         
@@ -1906,7 +1906,6 @@ def start_training(ui):
         if hp:
             ui._load_config_into_widgets(hp)
             selected_samples = hp.get('sample_collections', [])
-            # Also extract other HPs if needed (though start_training reads widgets below)
             
         print(f"🔄 Modo '{intent['mode']}' activado para {target_id}")
         
@@ -1917,24 +1916,43 @@ def start_training(ui):
             cb.unobserve(ui._on_intent_cb_change, names='value')
             cb.value = False
             cb.observe(ui._on_intent_cb_change, names='value')
-            
-        # Continue to training...
     
-    # 2️⃣ Get parameters from UI (always up-to-date after intent load or manual edit)
+    # 2️⃣ Get parameters from UI
     if not intent.get('mode') or not hp:
         selected_samples = [name for name, chk in ui.chk_dict.items() if chk.value]
 
     if not selected_samples:
         print("Error: Ninguna muestra seleccionada.")
         return
+
+    # 3️⃣ Constrói o dicionário de configuração de bandas a partir da Matriz Dinâmica
+    bands_config = {}
+    sensors_used = set()
+    for (s, m, b), chk in ui.band_chk_map.items():
+        if chk.value:
+            # Em caso de conflito de nome de banda (ex: 'red' em dois sensores), 
+            # o último selecionado ganha. Isso é compatível com o extrator atual.
+            bands_config[b] = {'sensor': s, 'mosaic': m}
+            sensors_used.add(s)
+            
+    if not bands_config:
+        print("Error: No se han seleccionado bandas en la Matriz de Extracción.")
+        return
+        
+    # Atualiza o sensor global para refletir o que está sendo usado no treinamento
+    if len(sensors_used) == 1:
+        GLOBAL_OPTS['SENSOR'] = list(sensors_used)[0]
+    elif len(sensors_used) > 1:
+        GLOBAL_OPTS['SENSOR'] = 'multisensor'
         
     # --- PREPARAR INTERFACE PARA NOVO TREINO ---
     ui.selected_models = {}       # Limpa seleções anteriores
     ui.tab.selected_index = 2     # Vai para a aba Entrenamientos (renomeada)
     
     # Registra o treino como "LIVE" para aparecer no ranking lateral
+    sensor_suffix = GLOBAL_OPTS['SENSOR'].lower()
     ui.live_training_info = {
-        'id': f"training_{ui.w_training_id.value}_{ui.w_shortname.value}",
+        'id': f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{sensor_suffix}",
         'shortname': ui.w_shortname.value,
         'acc': 0, 'f1': 0, 'is_live': True,
         'meta': {'path': ''} # Sem path ainda
@@ -1943,16 +1961,6 @@ def start_training(ui):
     ui._live_initialized = False  # Reseta estrutura estável para nova sessão
     ui.canvas_output.clear_output(wait=True)
     ui._refresh_canvas_hub()      # Atualiza a barra lateral mostrando o "LIVE"
-    
-    # Constrói o dicionário de configuração de bandas a partir dos widgets simplificados
-    sensor = ui.w_sensor.value
-    method = ui.w_mosaic_method.value
-    bands_list = SENSOR_MOSAIC_BANDS.get((sensor, method), ALL_BANDS_LIST)
-    bands_config = {b: {'sensor': sensor, 'mosaic': method} for b in bands_list}
-            
-    if not bands_config:
-        print("Error: No se pudo determinar la configuración de bandas.")
-        return
 
     layers = [int(x.strip()) for x in ui.w_layers.value.split(',')]
     iters = int(ui.w_iters.value)
@@ -1982,7 +1990,6 @@ def start_training(ui):
     ui.trainer_instance._sample_count = {'burned': int(y.sum()), 'not_burned': int((y==0).sum())}
     
     print("Entrenando DNN...")
-    # (Não alteramos a aba aqui — já foi trocada acima)
     
     # Snapshot Directory
     m_id = ui.w_training_id.value
@@ -2000,7 +2007,7 @@ def start_training(ui):
     
     # --- AUDITORIA FINAL COM t-SNE (INTERATIVO) ---
     print("\n Entrenamiento completado. Generando auditoría t-SNE final de alta resolución...")
-    ui._live_initialized = False  # Permite que a próxima abertura do canvas reconstrua
+    ui._live_initialized = False
     ui._live_plots_out.clear_output(wait=True)
     with ui._live_plots_out:
         import plotly.graph_objects as go
@@ -2020,7 +2027,6 @@ def start_training(ui):
             tsne = TSNE(n_components=3, perplexity=30, random_state=42, max_iter=1000)
             coords_tsne = tsne.fit_transform(emb_v)
             
-            # SALVAR SNAPSHOT NO TRAINER PARA O SAVE()
             ui.trainer_instance.tsne_snapshot = coords_tsne.tolist()
             
             print("  - Generando figura interactiva...")
@@ -2034,7 +2040,6 @@ def start_training(ui):
                 margin=dict(l=0, r=0, b=0, t=30),
                 scene=dict(xaxis_title='t-SNE 1', yaxis_title='t-SNE 2', zaxis_title='t-SNE 3')
             )
-            # Injeção pesada (include_plotlyjs=True) para máxima compatibilidade
             display(HTML(fig_tsne.to_html(include_plotlyjs=True, full_html=False)))
             print("✅ Auditoría t-SNE lista.")
         except Exception as e:
@@ -2057,6 +2062,7 @@ def start_training(ui):
         
     ui.live_training_info = None  # Remove o status de LIVE após conclusão
     ui._sync_repository(show_loader=False)
+
 
 def run_ui():
     ui = ModelTrainerUI()
