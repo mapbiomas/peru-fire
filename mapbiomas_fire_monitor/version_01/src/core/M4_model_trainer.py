@@ -1080,6 +1080,8 @@ class ModelTrainerUI(PipelineStepUI):
         self.canvas_history = {} # ID -> info (Ever viewed in session)
         self.canvas_search_query = ""
         self.canvas_output = widgets.Output(layout=widgets.Layout(background_color='white', padding='20px'))
+        self.analytics_dashboard_output = widgets.Output() # Para carregar card após treino
+        self._live_plots_out = widgets.Output()            # Para evitar "piscar" no treino
         
         # --- CONFIGURACIÓN DE VISIBILIDAD ---
         self.viz_config = {
@@ -1178,20 +1180,83 @@ class ModelTrainerUI(PipelineStepUI):
             dest_sec,
         ], layout=widgets.Layout(padding='20px', background_color='white'))
         
-        self.tab = widgets.Tab(children=[
-            self.new_training_tab, # Índice 0
-            self.analytics_area,    # Índice 1
-            self.canvas_area        # Índice 2
-        ])
-        self.tab.set_title(0, "⚙️ Novo Treino")
-        self.tab.set_title(1, "📊 Trenamientos")
-        self.tab.set_title(2, "🎨 Canvas")
+        self.guide_tab = self._build_guide_tab()
         
-        self.tab.selected_index = 1 # Começa no Ranking
+        self.tab = widgets.Tab(children=[
+            self.guide_tab,        # Índice 0
+            self.new_training_tab, # Índice 1
+            self.analytics_area,    # Índice 2
+            self.canvas_area        # Índice 3
+        ])
+        self.tab.set_title(0, "Guia")
+        self.tab.set_title(1, "Novo Treino")
+        self.tab.set_title(2, "Trenamientos")
+        self.tab.set_title(3, "Canvas")
+        
+        self.tab.selected_index = 0 # Começa no Guia para orientação
         
         self.main_area.children = [self.tab]
         self._refresh_models_list()
         display(self.main_area)
+
+    def _build_guide_tab(self):
+        """Constrói uma interface de documentação interativa para o usuário."""
+        html = """
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #fdfdfd; color: #2c3e50; line-height: 1.6;">
+            <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">Guia de Operación: M4 Model Trainer</h1>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px;">
+                <!-- Seção 1: Fluxo de Trabalho -->
+                <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                    <h3 style="color: #3498db; margin-top:0;">Estructura de la Plataforma</h3>
+                    <ul style="padding-left: 20px; font-size:13px;">
+                        <li><b>Guia:</b> Esta pantalla de orientación y documentación.</li>
+                        <li><b>Novo Treino:</b> Configuración de nuevos experimentos, selección de muestras y bandas.</li>
+                        <li><b>Trenamientos:</b> Ranking histórico con métricas detalladas y gestión de modelos (favoritos/borrar).</li>
+                        <li><b>Canvas:</b> Mesa de auditoría paralela para comparar múltiples modelos en profundidad.</li>
+                    </ul>
+                </div>
+
+                <!-- Seção 2: Hiperparâmetros -->
+                <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                    <h3 style="color: #e67e22; margin-top:0;">Hiperparámetros (DNN)</h3>
+                    <ul style="padding-left: 20px; font-size:13px;">
+                        <li><b>Layers:</b> Define la profundidad de la red (neuronas por capa). Arquitecturas más grandes aprenden más pero son más lentas.</li>
+                        <li><b>Learning Rate (LR):</b> La velocidad de ajuste de los pesos. Si es muy alto, el modelo diverge; si es muy bajo, no aprende.</li>
+                        <li><b>Epochs:</b> Cuántas veces el modelo verá todo el dataset.</li>
+                        <li><b>Batch Size:</b> Cuántas muestras se procesan antes de cada actualización.</li>
+                    </ul>
+                </div>
+
+                <!-- Seção 3: Métricas de Qualidade -->
+                <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                    <h3 style="color: #27ae60; margin-top:0;">Métricas de Calidad</h3>
+                    <ul style="padding-left: 20px; font-size:13px;">
+                        <li><b>Accuracy:</b> Precisión global de aciertos. Cuidado: puede engañar en datasets desbalanceados.</li>
+                        <li><b>Precision:</b> Capacidad de NO clasificar como fuego algo que no lo es (evita falsos positivos).</li>
+                        <li><b>Recall:</b> Capacidad de encontrar TODO el fuego real (evita omisiones).</li>
+                        <li><b>F1-Score:</b> El equilibrio perfecto. Es la media armónica entre Precision y Recall.</li>
+                    </ul>
+                </div>
+
+                <!-- Seção 4: Auditoría Visual -->
+                <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                    <h3 style="color: #9b59b6; margin-top:0;">Auditoría de Espacio Latente</h3>
+                    <ul style="padding-left: 20px; font-size:13px;">
+                        <li><b>PCA y t-SNE:</b> Proyectan datos de 100+ dimensiones a 3D.</li>
+                        <li><b>Interpretación:</b> Buscamos "nubes" de colores bien separadas.</li>
+                        <li><b>Colores:</b> <b>Azul Petróleo</b> (No Fogo) vs <b>Laranja/Rojo</b> (Fuego).</li>
+                        <li><b>Puntos Intermedios (Gris):</b> Muestras donde el modelo tiene baja confianza (duda).</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div style="margin-top: 30px; padding: 15px; background: #e8f4fd; border-left: 5px solid #3498db; border-radius: 4px; font-size:14px;">
+                <b>💡 Pro-Tip del Auditor:</b> Use el <b>Canvas</b> para cargar un modelo antiguo (benchmark) y su modelo nuevo. Compare si la separación de clases en t-SNE 3D ha mejorado o si hay nuevas zonas de confusión.
+            </div>
+        </div>
+        """
+        return widgets.HTML(html)
 
     def _on_select_all_samples(self, _):
         """Seleciona apenas as amostras que estão visíveis pelo filtro."""
@@ -1641,12 +1706,18 @@ class ModelTrainerUI(PipelineStepUI):
         self._refresh_canvas_hub()
 
     def _update_canvas_live(self, history, embeds, preds, y_true, samples, b_cfg):
-        self.canvas_output.clear_output(wait=True)
-        with self.canvas_output:
-            # Toolbar de Visibilidade
-            display(self._build_viz_toolbar())
-            
-            # 1. HEADER DO TREINO ATUAL
+        # Inicializa a estrutura estável se necessário
+        if not hasattr(self, '_live_initialized') or not self._live_initialized:
+            self.canvas_output.clear_output()
+            with self.canvas_output:
+                display(HTML("<h2 style='color:#2c3e50; border-bottom:3px solid #3498db; padding-bottom:5px; margin-bottom:15px;'>🚀 Entrenamiento en Vivo</h2>"))
+                display(self._build_viz_toolbar())
+                display(self._live_plots_out)
+            self._live_initialized = True
+
+        self._live_plots_out.clear_output(wait=True)
+        with self._live_plots_out:
+            # 1. HEADER DO TREINO ATUAL (Metadados Live)
             from sklearn.metrics import classification_report
             try:
                 rep = classification_report(y_true, (preds > 0.5).astype(int), output_dict=True, zero_division=0)
@@ -1659,18 +1730,18 @@ class ModelTrainerUI(PipelineStepUI):
                 'sample_count': self.trainer_instance._sample_count, 'comment': self.w_comment.value,
                 'training_date': '🚀 Entrenamiento en curso...'
             }
-            display(HTML("<h2 style='color:#2c3e50; border-bottom:3px solid #3498db; padding-bottom:5px; margin-bottom:15px;'>🚀 Entrenamiento en Vivo</h2>"))
             
-            if self.viz_config.get('title'): display(HTML(render_model_card_html(hp_live, {'classification_report': rep})))
+            if self.viz_config.get('title'): 
+                display(HTML(render_model_card_html(hp_live, {'classification_report': rep})))
             
             render_diagnostic_dashboard(history, embeds, preds, y_true, viz_config=self.viz_config)
             
-            display(HTML("<div style='margin:50px 0; border-top:3px solid #3498db;'></div>"))
-            
-            # 2. MODELOS DO RANKING (PARALELO)
-            for mid, info in self.selected_models.items():
-                view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config)
-                display(HTML("<div style='margin:40px 0; border-top:1px dashed #ccc;'></div>"))
+            # 2. MODELOS DO RANKING (Comparação em Tempo Real)
+            if self.selected_models:
+                display(HTML("<div style='margin:50px 0; border-top:3px solid #3498db;'></div>"))
+                for mid, info in self.selected_models.items():
+                    view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config)
+                    display(HTML("<div style='margin:40px 0; border-top:1px dashed #ccc;'></div>"))
 
     def _on_canvas_search_change(self, val):
         self.canvas_search_query = val
@@ -1808,7 +1879,8 @@ def start_training(ui):
         print("Error: Ninguna muestra seleccionada.")
         return
         
-    ui.tab.selected_index = 1 # Muda para a aba "Canvas"
+    ui.tab.selected_index = 3 # Muda para a aba "Canvas"
+    ui._live_initialized = False # Reseta para reconstruir a estrutura estável
     ui.canvas_output.clear_output()
     
     # Constrói o dicionário de configuração de bandas a partir da nova Matriz Premium
@@ -1870,7 +1942,7 @@ def start_training(ui):
     
     # --- AUDITORIA FINAL COM t-SNE (INTERATIVO) ---
     print("\n🏁 Entrenamiento completado. Generando auditoría t-SNE final de alta resolución...")
-    with ui.training_chart_output:
+    with ui.canvas_output:
         import plotly.graph_objects as go
         from sklearn.manifold import TSNE
         try:
