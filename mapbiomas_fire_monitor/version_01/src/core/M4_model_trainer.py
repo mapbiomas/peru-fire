@@ -57,9 +57,26 @@ def list_sample_collections_gcs():
     except Exception:
         return []
 
+def _load_m4_cache():
+    """Lê o cache local de modelos para evitar chamadas excessivas ao GCS."""
+    cache_path = "m4_ranking_cache.json"
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, 'r') as f: return json.load(f)
+        except: return {}
+    return {}
+
+def _save_m4_cache(data):
+    """Salva o estado atual no cache local."""
+    try:
+        with open("m4_ranking_cache.json", 'w') as f:
+            json.dump(data, f, indent=2)
+    except: pass
+
 def list_trained_models():
-    """Lista modelos já treinados no GCS."""
-    from M0_auth_config import _gcs_models_base
+    """Lista modelos já treinados no GCS com fallback para cache local."""
+    from M0_auth_config import _gcs_models_base, CONFIG
+    cache = _load_m4_cache()
     try:
         fs = _get_fs()
         path = f"{CONFIG['bucket']}/{_gcs_models_base()}"
@@ -70,9 +87,13 @@ def list_trained_models():
                 t_name = t_dir.split('/')[-1]
                 if t_name.startswith('training_'):
                     models.append({'training_id': t_name, 'path': t_dir})
+        # Atualiza a lista de IDs conhecidos no cache
+        cache['known_ids'] = models
+        _save_m4_cache(cache)
         return models
-    except Exception:
-        return []
+    except Exception as e:
+        print(f"⚠️ Aviso: Usando cache local de modelos (Erro GCS: {e})")
+        return cache.get('known_ids', [])
 
 def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
     """
@@ -1560,24 +1581,44 @@ class ModelTrainerUI(PipelineStepUI):
         models = list_trained_models()
         fs = _get_fs()
         
+        cache = _load_m4_cache()
+        metadata_cache = cache.get('metadata', {})
+        
         self.model_chk_map = {} 
         ranking_data = []
+        updated_cache = False
+        
         for m in models:
+            m_id = m['training_id']
+            # Tenta usar o cache primeiro
+            if m_id in metadata_cache and not show_loader:
+                ranking_data.append(metadata_cache[m_id])
+                self.canvas_history[m_id] = m
+                continue
+            
+            # Se não estiver no cache ou se for um refresh forçado, busca no GCS
             try:
                 with fs.open(f"{m['path']}/metadata.json", 'r') as f: hp = json.load(f)
                 with fs.open(f"{m['path']}/metrics.json", 'r') as f: met = json.load(f)
                 crep = met.get('classification_report', {})
                 f_met = crep.get('1', {}) 
-                ranking_data.append({
-                    'id': m['training_id'], 'short': hp.get('shortname', 'N/A'),
+                
+                row = {
+                    'id': m_id, 'short': hp.get('shortname', 'N/A'),
                     'sensor': hp.get('sensor', 'N/A').replace('sentinel2','S2').replace('landsat8','L8').upper(),
                     'acc': crep.get('accuracy', 0), 'prec': f_met.get('precision', 0), 'rec': f_met.get('recall', 0), 'f1': f_met.get('f1-score', 0),
                     'auto_rating': met.get('auto_rating', 0), 'human_rating': hp.get('rating', 0),
                     'path': m['path'], 'info': m
-                })
-                # Sync all models to canvas history for repo-wide search
-                self.canvas_history[m['training_id']] = m
+                }
+                ranking_data.append(row)
+                metadata_cache[m_id] = row
+                self.canvas_history[m_id] = m
+                updated_cache = True
             except: continue
+            
+        if updated_cache:
+            cache['metadata'] = metadata_cache
+            _save_m4_cache(cache)
             
         if self.search_query_models:
             q = self.search_query_models.lower()
