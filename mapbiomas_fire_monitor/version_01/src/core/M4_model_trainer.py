@@ -957,14 +957,20 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
             if viz_config.get('title'):
                 body_html = HTML(render_model_card_html(hp, metrics))
                 
-                # Painel de Ciclo de Vida integrado (sem emojis no texto)
+                # Painel de Ciclo de Vida integrado
                 lifecycle_box = widgets.VBox([
                     widgets.HTML("<div style='font-size:11px; color:#6c757d; font-weight:bold; margin-bottom:5px; text-transform:uppercase;'>Ciclo de Vida</div>"),
                     widgets.HBox([btn_retr, btn_reex, btn_borr], layout=widgets.Layout(gap='10px'))
-                ], layout=widgets.Layout(background='#fdfdfd', padding='15px', border='1px solid #dee2e6', border_top='none', border_radius='0 0 8px 8px', margin='-20px 0 20px 0'))
+                ], layout=widgets.Layout(background='#fdfdfd', padding='15px', border='1px solid #dee2e6', border_top='none', border_radius='0 0 8px 8px', flex='2'))
+
+                # Painel de Controle Integrado (Rating + Ciclo de Vida)
+                control_panel = widgets.HBox([
+                    user_panel, 
+                    lifecycle_box
+                ], layout=widgets.Layout(margin='-20px 0 20px 0', align_items='stretch', gap='0px'))
                 
                 display(body_html)
-                display(lifecycle_box)
+                display(control_panel)
             else:
                 # Se os metadados estiverem ocultos, adicionamos um espaçador pequeno para o header não ficar colado
                 display(HTML("<div style='margin-bottom:15px;'></div>"))
@@ -1218,32 +1224,30 @@ class ModelTrainerUI(PipelineStepUI):
                 <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
                     <h3 style="color: #e67e22; margin-top:0;">Hiperparámetros (DNN)</h3>
                     <ul style="padding-left: 20px; font-size:13px;">
-                        <li><b>Layers:</b> Define la profundidad de la red (neuronas por capa). Arquitecturas más grandes aprenden más pero son más lentas.</li>
-                        <li><b>Learning Rate (LR):</b> La velocidad de ajuste de los pesos. Si es muy alto, el modelo diverge; si es muy bajo, no aprende.</li>
-                        <li><b>Epochs:</b> Cuántas veces el modelo verá todo el dataset.</li>
-                        <li><b>Batch Size:</b> Cuántas muestras se procesan antes de cada actualización.</li>
+                        <li><b>Layers:</b> Define la profundidad de la red (neuronas por capa). Arquitecturas más grandes aprenden patrones más complejos.</li>
+                        <li><b>Learning Rate (LR):</b> La velocidad de ajuste. Un valor ideal permite que el modelo converja sin oscilar.</li>
+                        <li><b>Epochs:</b> Cantidad de ciclos completos de entrenamiento sobre el dataset.</li>
+                        <li><b>Batch Size:</b> Bloque de datos procesados antes de actualizar los pesos internos.</li>
                     </ul>
                 </div>
 
                 <!-- Seção 3: Métricas de Qualidade -->
                 <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                    <h3 style="color: #27ae60; margin-top:0;">Métricas de Calidad</h3>
+                    <h3 style="color: #27ae60; margin-top:0;">Métricas de Calidad y Notas</h3>
                     <ul style="padding-left: 20px; font-size:13px;">
-                        <li><b>Accuracy:</b> Precisión global de aciertos. Cuidado: puede engañar en datasets desbalanceados.</li>
-                        <li><b>Precision:</b> Capacidad de NO clasificar como fuego algo que no lo es (evita falsos positivos).</li>
-                        <li><b>Recall:</b> Capacidad de encontrar TODO el fuego real (evita omisiones).</li>
-                        <li><b>F1-Score:</b> El equilibrio perfecto. Es la media armónica entre Precision y Recall.</li>
+                        <li><b>Nota Automática:</b> Cálculo interno basado en el equilibrio entre F1-Score y Omissões. Premia modelos balanceados que no pierden fuego real.</li>
+                        <li><b>Nota Humana:</b> Calificación (1-5★) dada por el auditor tras analizar el Espacio Latente y la consistencia de los clústeres.</li>
+                        <li><b>F1-Score:</b> Métrica principal de desempeño que equilibra Precisión y Recall.</li>
                     </ul>
                 </div>
 
-                <!-- Seção 4: Auditoría Visual -->
+                <!-- Seção 4: Conceptos Técnicos -->
                 <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                    <h3 style="color: #9b59b6; margin-top:0;">Auditoría de Espacio Latente</h3>
+                    <h3 style="color: #9b59b6; margin-top:0;">Conceptos Técnicos</h3>
                     <ul style="padding-left: 20px; font-size:13px;">
-                        <li><b>PCA y t-SNE:</b> Proyectan datos de 100+ dimensiones a 3D.</li>
-                        <li><b>Interpretación:</b> Buscamos "nubes" de colores bien separadas.</li>
-                        <li><b>Colores:</b> <b>Azul Petróleo</b> (No Fogo) vs <b>Laranja/Rojo</b> (Fuego).</li>
-                        <li><b>Puntos Intermedios (Gris):</b> Muestras donde el modelo tiene baja confianza (duda).</li>
+                        <li><b>TensorFlow:</b> Motor de inteligencia artificial desarrollado por Google que permite cálculos matemáticos masivos.</li>
+                        <li><b>DNN (Deep Neural Network):</b> Red neuronal profunda que imita el procesamiento de información del cerebro para encontrar patrones.</li>
+                        <li><b>Neuronas:</b> Unidades básicas de procesamiento que reciben señales, las pesan y deciden qué información pasar a la siguiente capa.</li>
                     </ul>
                 </div>
             </div>
@@ -1615,8 +1619,8 @@ class ModelTrainerUI(PipelineStepUI):
             make_sort_head("REC", "rec", W['met']),
             make_sort_head("F1", "f1", W['met']),
             widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #dee2e6; height:20px;'></div>"),
-            make_sort_head("IA", "auto_rating", W['stars']),
-            make_sort_head("IH", "human_rating", W['stars']),
+            make_sort_head("Auto", "auto_rating", W['met']),
+            make_sort_head("Humana", "human_rating", W['met']),
             widgets.HTML(f"<div style='width:{W['del']}; color:#2c3e50; font-weight:bold; text-align:center;'>ACCIONES</div>"),
         ], layout=widgets.Layout(background='#ffffff', padding='8px', border_bottom='2px solid #dee2e6', border_radius='8px 8px 0 0', align_items='center'))
 
@@ -1624,35 +1628,6 @@ class ModelTrainerUI(PipelineStepUI):
         for i, r in enumerate(ranking_data):
             medal = "🥇" if i == 0 and not self.sort_ascending and self.sort_column in ['acc','f1'] else f"#{i+1}"
             
-            def make_star_row(val, color, is_human=False):
-                btns_container = widgets.HBox([], layout=widgets.Layout(width=W['stars'], justify_content='center'))
-                
-                def _show_stars_row():
-                    btns = []
-                    for s_idx in range(1, 6):
-                        char = "★" if s_idx <= val else "☆"
-                        b = widgets.Button(description=char, layout=widgets.Layout(width='18px', height='20px', margin='0', padding='0'))
-                        b.style.button_color = color if s_idx <= val else '#fff'
-                        if is_human:
-                            def _on_click_star(btn, v=s_idx):
-                                # Mostrar confirmação compacta
-                                btn_b = widgets.Button(description="<", layout=widgets.Layout(width='20px', height='20px', padding='0'), button_style='info')
-                                btn_o = widgets.Button(description="OK", layout=widgets.Layout(width='30px', height='20px', padding='0'), button_style='success')
-                                def _ok(_):
-                                    btns_container.children = [self.make_spinner("Votando...")]
-                                    if ModelTrainer.update_model_metadata(r['id'], r['short'], {'rating': v}): 
-                                        self._refresh_models_list()
-                                    else:
-                                        _show_stars_row()
-                                def _back(_): _show_stars_row()
-                                btn_b.on_click(_back); btn_o.on_click(_ok)
-                                btns_container.children = [btn_b, btn_o]
-                            b.on_click(_on_click_star)
-                        btns.append(b)
-                    btns_container.children = btns
-                
-                _show_stars_row()
-                return btns_container
 
             # --- GRUPO DE ACCIONES ESTABLE ---
             btn_mirar = widgets.Button(description='Mirar', layout=widgets.Layout(width='60px', height='30px'), button_style='primary', tooltip="Mirar en Canvas")
@@ -1693,8 +1668,8 @@ class ModelTrainerUI(PipelineStepUI):
                 widgets.HTML(f"<div style='width:{W['met']}; text-align:center; color:#666;'>{r['rec']:.1%}</div>"),
                 widgets.HTML(f"<div style='width:{W['met']}; text-align:center; font-weight:bold; color:#28a745;'>{r['f1']:.1%}</div>"),
                 widgets.HTML(f"<div style='width:{W['sep']}; border-right:1px solid #ddd; height:20px;'></div>"),
-                make_star_row(r['auto_rating'], '#bdc3c7'),
-                make_star_row(r['human_rating'], '#f1c40f', True),
+                widgets.HTML(f"<div style='width:{W['met']}; text-align:center; font-weight:bold; color:#6c757d;'>{r['auto_rating']}</div>"),
+                widgets.HTML(f"<div style='width:{W['met']}; text-align:center; font-weight:bold; color:#f1c40f;'>{r['human_rating']}</div>"),
                 action_box
             ], layout=widgets.Layout(padding='5px', border_bottom='1px solid #eee', align_items='center', overflow='hidden', background='#fff' if i%2==0 else '#f9f9f9'))
             final_rows.append(row)
