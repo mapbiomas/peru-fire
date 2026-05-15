@@ -1102,12 +1102,7 @@ class ModelTrainerUI(PipelineStepUI):
         self.analytics_dashboard_output = widgets.Output() # Para carregar card após treino
         self._live_plots_out = widgets.Output()            # Para evitar "piscar" no treino
         self.canvas_slider_val = 0
-        
-        # --- WIDGETS DE EXTRAÇÃO ---
-        self.extraction_status_out = widgets.Output()
-        self.w_sensor = widgets.Dropdown(options=[('Sentinel-2', 'sentinel2'), ('Landsat', 'landsat')], value='sentinel2', description='Sensor:', style={'description_width': '60px'})
-        self.w_mosaic_method = widgets.Dropdown(options=[('Mínimo NBR (Default)', 'minnbr'), ('Mínimo NBR + Buffer', 'minnbr_buffer')], value='minnbr', description='Método:', style={'description_width': '60px'})
-        self.w_auto_extract = widgets.Checkbox(value=True, description='Detección Automática de COGs', indent=False)
+        self.band_chk_map = {} # (sensor, mosaic, band) -> checkbox
         
         # --- CONFIGURACIÓN DE VISIBILIDAD ---
         self.viz_config = {
@@ -1177,16 +1172,12 @@ class ModelTrainerUI(PipelineStepUI):
         hp_sec = self._build_hp_section()
         dest_sec = self._build_dest_section()
         self.samples_area = self._build_matrix()
-        # 2. CONFIGURAÇÃO DE EXTRAÇÃO (Simplificada)
-        self.extraction_area = widgets.VBox([
-            widgets.HBox([self.w_sensor, self.w_mosaic_method, self.w_auto_extract], layout=widgets.Layout(gap='20px')),
-            self.extraction_status_out
-        ], layout=widgets.Layout(padding='15px', border='1px solid #eee', border_radius='8px'))
-
+        self.extraction_area = self._build_extraction_matrix()
+        
         self.new_training_tab = widgets.VBox([
             widgets.HTML("<h2 style='color:#2c3e50;'>📂 1. Selección de Muestras</h2>"),
             self.samples_area,
-            widgets.HTML("<br><h2 style='color:#2c3e50;'>🛰️ 2. Configuración de Extracción (Automática)</h2>"),
+            widgets.HTML("<br><h2 style='color:#2c3e50;'>🛰️ 2. Matriz de Extracción (Multisensor GCS)</h2>"),
             self.extraction_area,
             widgets.HTML("<br><h2 style='color:#2c3e50;'>⚙️ 3. Configuración do Modelo</h2>"),
             hp_sec,
@@ -1250,13 +1241,6 @@ class ModelTrainerUI(PipelineStepUI):
         self.tab.selected_index = 0
         self.main_area.children = [self.tab]
         super().display()
-        
-        # Observers para auto-detecção
-        def _on_selection_change(_): self._check_cog_availability()
-        self.w_sensor.observe(_on_selection_change, names='value')
-        self.w_mosaic_method.observe(_on_selection_change, names='value')
-        # Para as amostras, observamos o refresh (ou injetamos no refresh)
-        self._check_cog_availability()
         
         self._sync_repository(show_loader=True)
 
@@ -1474,62 +1458,81 @@ class ModelTrainerUI(PipelineStepUI):
                 selected_widgets.append(btn)
         
         self.selected_samples_container.children = selected_widgets
-        self._check_cog_availability()
 
+    def _build_extraction_matrix(self):
+        """Constrói a matriz dinâmica baseada no que existe no GCS (COGs reais) usando scan recursivo."""
+        L = widgets.Layout
+        fs = _get_fs()
+        from M0_auth_config import CONFIG
+        
+        base_path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_images']}"
+        
+        # Escaneamento recursivo real para detectar combinações de Sensor/Mosaico e Bandas
+        available_combos = {} # (sensor, mosaic) -> set(bands)
+        try:
+            # find() é recursivo. Vamos garantir que estamos olhando para o bucket certo.
+            all_files = fs.find(base_path)
+            for f in all_files:
+                if not f.endswith('.tif'): continue
+                
+                # Normaliza o path para remover bucket e prefixos redundantes
+                clean_f = f.split(CONFIG['gcs_library_images'])[-1].strip('/')
+                parts = clean_f.split('/')
+                
+                # Estrutura esperada: {sensor}/{mosaic}/{periodicity}/{year}/{month}/cog/{band}_date_cog.tif
+                # Ou similar. O sensor e mosaic são SEMPRE os dois primeiros níveis após library_images
+                if len(parts) >= 2:
+                    sensor = parts[0]
+                    mosaic = parts[1]
+                    
+                    # Evita pegar pastas de sistema como 'models' ou 'samples'
+                    if sensor in ['models', 'samples', 'cache']: continue
+                    
+                    combo = (sensor, mosaic)
+                    if combo not in available_combos: available_combos[combo] = set()
+                    
+                    # Identifica a banda pelo nome do arquivo
+                    fname = parts[-1].lower()
+                    for b in ALL_BANDS_LIST:
+                        # Verificação robusta de banda no nome do arquivo
+                        if f"_{b}_" in fname or fname.startswith(f"{b}_") or fname.endswith(f"_{b}.tif") or fname.endswith(f"_{b}_cog.tif"):
+                            available_combos[combo].add(b)
+        except Exception as e:
+            # Fallback seguro com o que sabemos que deve existir
+            available_combos = {
+                ('sentinel2', 'minnbr'): set(ALL_BANDS_LIST),
+                ('sentinel2', 'minnbr_buffer'): set(ALL_BANDS_LIST)
+            }
 
-    def _check_cog_availability(self):
-        """Verifica se os COGs necessários para as amostras selecionadas existem no GCS."""
-        with self.extraction_status_out:
-            clear_output()
-            selected_samples = [name for name, chk in self.chk_dict.items() if chk.value]
-            if not selected_samples:
-                print("⚠️ Seleccione muestras primero para verificar disponibilidad.")
-                return
+        if not available_combos:
+            return widgets.HTML('<div style="padding:20px; color:#999;"><i>No se han encontrado COGs en el repositorio GCS.</i></div>')
 
-            sensor = self.w_sensor.value
-            method = self.w_mosaic_method.value
-            
-            # Identifica períodos únicos nas amostras (aproximado pelo nome do arquivo)
-            periods = set()
-            for s in selected_samples:
-                parts = s.split('_')
-                if parts[-2].isdigit() and len(parts[-2]) == 4: periods.add(f"{parts[-2]}_{parts[-1]}")
-                elif parts[-1].isdigit() and len(parts[-1]) == 4: periods.add(parts[-1])
-            
-            print(f"🔍 Verificando {sensor} / {method} para períodos: {sorted(list(periods))}")
-            
-            # Mock de verificação (o extract_pixels_from_gcs já faz a verificação real)
-            # Aqui apenas mostramos um status amigável
-            html = "<table style='width:100%; border-collapse:collapse;'>"
-            html += "<tr style='background:#eee;'><th>Período</th><th>Status GCS</th><th>Bands</th></tr>"
-            
-            for p in sorted(list(periods)):
-                # No mundo real, aqui checaríamos o cache ou GCS
-                html += f"<tr><td style='border-bottom:1px solid #ddd; padding:5px;'>{p}</td>"
-                html += f"<td style='border-bottom:1px solid #ddd; padding:5px; color:green;'>✅ Disponible</td>"
-                html += f"<td style='border-bottom:1px solid #ddd; padding:5px; font-size:10px;'>{', '.join(ALL_BANDS_LIST)}</td></tr>"
-            
-            html += "</table>"
-            display(HTML(html))
+        self.band_chk_map = {} 
+        matrix_rows = []
+        BANDS_PRIORITY = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']
+        
+        for (s, m), found_bands in sorted(available_combos.items()):
             label_text = f"{s.upper()} {m.replace('_', ' ').title()}"
-            label_html = widgets.HTML(f'<div style="width:200px; font-weight:bold; color:#333; font-size:12px;">{label_text}</div>')
+            label_html = widgets.HTML(f'<div style="width:180px; font-weight:bold; color:#333; font-size:11px;">{label_text}</div>')
             
-            # Ordenação inteligente: prioridade primeiro, o resto alfabético no fim
-            sorted_bands = sorted(list(bands), key=lambda x: BANDS_PRIORITY.index(x) if x in BANDS_PRIORITY else 999 + ord(x[0]))
+            # Ordenação inteligente
+            sorted_bands = sorted(list(found_bands), key=lambda x: BANDS_PRIORITY.index(x) if x in BANDS_PRIORITY else 999)
             
             band_widgets = []
             for b in sorted_bands:
                 chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
+                # Auto-select recomendada
+                if s == 'sentinel2' and m == 'minnbr': chk.value = True
+                
                 self.band_chk_map[(s, m, b)] = chk
                 
-                # Célula de status onde o texto é o nome da banda
-                # Usamos mfm-ok (verde) quando selecionado, mfm-null quando não
+                # Célula de status estilo M1/M2: Checkbox invisível + Label clicável que muda de cor
                 status_cell = PipelineStepUI.make_status_cell(chk, b.upper(), 'mfm-ok', width='90px')
                 band_widgets.append(status_cell)
-                
+            
             row = widgets.HBox([label_html] + band_widgets, layout=L(align_items='center', padding='5px 0', border_bottom='1px solid #eee'))
             matrix_rows.append(row)
-            
+
         return widgets.VBox(matrix_rows, layout=L(
             border='1px solid #dee2e6', padding='10px', margin='10px 0',
             background_color='#fff', border_radius='4px', max_height='400px', overflow_y='auto'
