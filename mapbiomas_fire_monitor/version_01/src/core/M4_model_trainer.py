@@ -1236,39 +1236,42 @@ class ModelTrainerUI(PipelineStepUI):
                     <ul style="padding-left: 20px; font-size:13px;">
                         <li><b>Guia:</b> Esta pantalla de orientación y documentación.</li>
                         <li><b>Novo Treino:</b> Configuración de nuevos experimentos, selección de muestras y bandas.</li>
-                        <li><b>Trenamientos:</b> Ranking histórico con métricas detalladas y gestión de modelos (favoritos/borrar).</li>
+                        <li><b>Trenamientos:</b> Ranking histórico con métricas detalladas y gestión de modelos.</li>
                         <li><b>Canvas:</b> Mesa de auditoría paralela para comparar múltiples modelos en profundidad.</li>
                     </ul>
                 </div>
 
-                <!-- Seção 2: Hiperparâmetros -->
-                <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                    <h3 style="color: #e67e22; margin-top:0;">Hiperparámetros (DNN)</h3>
-                    <ul style="padding-left: 20px; font-size:13px;">
-                        <li><b>Layers:</b> Define la profundidad de la red (neuronas por capa). Arquitecturas más grandes aprenden patrones más complejos.</li>
-                        <li><b>Learning Rate (LR):</b> La velocidad de ajuste. Un valor ideal permite que el modelo converja sin oscilar.</li>
-                        <li><b>Epochs:</b> Cantidad de ciclos completos de entrenamiento sobre el dataset.</li>
-                        <li><b>Batch Size:</b> Bloque de datos procesados antes de actualizar los pesos internos.</li>
-                    </ul>
-                </div>
-
-                <!-- Seção 3: Métricas de Qualidade -->
-                <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                    <h3 style="color: #27ae60; margin-top:0;">Métricas de Calidad y Notas</h3>
-                    <ul style="padding-left: 20px; font-size:13px;">
-                        <li><b>Nota Automática:</b> Cálculo interno basado en el equilibrio entre F1-Score y Omissões. Premia modelos balanceados que no pierden fuego real.</li>
-                        <li><b>Nota Humana:</b> Calificación (1-5★) dada por el auditor tras analizar el Espacio Latente y la consistencia de los clústeres.</li>
-                        <li><b>F1-Score:</b> Métrica principal de desempeño que equilibra Precisión y Recall.</li>
-                    </ul>
-                </div>
-
-                <!-- Seção 4: Conceptos Técnicos -->
+                <!-- Seção 2: Conceptos Técnicos -->
                 <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
                     <h3 style="color: #9b59b6; margin-top:0;">Conceptos Técnicos</h3>
                     <ul style="padding-left: 20px; font-size:13px;">
-                        <li><b>TensorFlow:</b> Motor de inteligencia artificial desarrollado por Google que permite cálculos matemáticos masivos.</li>
-                        <li><b>DNN (Deep Neural Network):</b> Red neuronal profunda que imita el procesamiento de información del cerebro para encontrar patrones.</li>
-                        <li><b>Neuronas:</b> Unidades básicas de procesamiento que reciben señales, las pesan y deciden qué información pasar a la siguiente capa.</li>
+                        <li><b>TensorFlow:</b> Motor de IA de Google para cálculos matemáticos masivos.</li>
+                        <li><b>DNN (Deep Neural Network):</b> Red profunda que imita el aprendizaje humano.</li>
+                        <li><b>Neuronas:</b> Unidades que procesan señales y activan patrones de aprendizaje.</li>
+                    </ul>
+                </div>
+
+                <!-- Seção 3: Hiperparámetros -->
+                <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                    <h3 style="color: #e67e22; margin-top:0;">Hiperparámetros (DNN)</h3>
+                    <ul style="padding-left: 20px; font-size:13px;">
+                        <li><b>Layers:</b> Arquitectura de la red. Más capas captan detalles más finos.</li>
+                        <li><b>Learning Rate (LR):</b> Controla qué tan rápido se ajusta el modelo.</li>
+                        <li><b>Epochs:</b> Ciclos de entrenamiento completos sobre el set de muestras.</li>
+                        <li><b>Batch Size:</b> Bloques de datos procesados antes de cada actualización.</li>
+                    </ul>
+                </div>
+
+                <!-- Seção 4: Métricas de Calidad -->
+                <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                    <h3 style="color: #27ae60; margin-top:0;">Diccionario de Calidad</h3>
+                    <ul style="padding-left: 20px; font-size:13px;">
+                        <li><b>Accuracy:</b> Porcentaje total de aciertos globales.</li>
+                        <li><b>Precision:</b> Fidelidad: ¿Cuánto del fuego marcado es real? (Evita falsos).</li>
+                        <li><b>Recall:</b> Cobertura: ¿Cuánto del fuego real se encontró? (Evita omisiones).</li>
+                        <li><b>F1-Score:</b> Media armónica. El mejor balance entre Precision y Recall.</li>
+                        <li><b>Nota IA:</b> Auditoría automática que castiga severamente las omisiones.</li>
+                        <li><b>Nota Humana:</b> Evaluación subjetiva (1-5★) sobre el Espacio Latente.</li>
                     </ul>
                 </div>
             </div>
