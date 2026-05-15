@@ -753,15 +753,12 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
             except: pass
 
     plt.tight_layout()
-    plt.show()
+    display(fig)
+    plt.close(fig)
 
-    plt.tight_layout()
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=100, bbox_inches='tight')
-        plt.close(fig)
-    else:
-        plt.show()
+        fig.savefig(save_path, dpi=100, bbox_inches='tight')
 
 def render_model_card_html(hp, metrics, only_header=False):
     """Gera o HTML do card de metadados sem emojis."""
@@ -1932,8 +1929,7 @@ def start_training(ui):
     os.makedirs(snap_dir, exist_ok=True)
 
     def update_chart(history, embeds=None, preds=None, y_true=None):
-        with ui.canvas_output:
-            ui._update_canvas_live(history, embeds, preds, y_true, selected_samples, bands_config)
+        ui._update_canvas_live(history, embeds, preds, y_true, selected_samples, bands_config)
 
     # Iniciar Treino
     ui.trainer_instance.train(X_train, y_train, X_val=X_val, y_val=y_val, 
