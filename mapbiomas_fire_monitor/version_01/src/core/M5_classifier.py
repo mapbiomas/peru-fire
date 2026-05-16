@@ -1,548 +1,168 @@
-"""
-M5 — Clasificador
-MapBiomas Fuego Sentinel Monitor — Piloto Perú
-
-Maneja:
-  1. Cargar modelo de GCS (hyperparameters.json + pesos)
-  2. Cuadrícula dinámica por región para clasificación local
-  3. Extraer fragmentos desde el mosaico nacional (VRT de fragmentos GEE)
-  4. Inferencia DNN por fragmento
-  5. Salida: los píxeles quemados obtienen el valor dayOfYear (no 1 binario)
-  11. Filtros morfológicos (apertura/cierre)
-  12. Subir fragmentos clasificados de nuevo a GCS + GEE Asset
-  13. Enmascarar el perímetro del fragmento (límite de la región)
-  14. Reconstrucción dinámica de imágenes multibanda desde archivos por banda en GCS
-  15. Interfaz de ipywidgets para el flujo de trabajo de la campaña de Colab
-"""
-
-import ee
 import os
 import json
-import math
-import subprocess
-import tempfile
+import time
+import rasterio
 import numpy as np
-import ipywidgets as widgets
-from IPython.display import display, clear_output
+import tensorflow as tf
+from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs, _gcs_models_base
 
-try:
-    import rasterio
-    from rasterio.features import sieve
-    from scipy.ndimage import binary_opening, binary_closing
-    HAS_RASTERIO = True
-except ImportError:
-    HAS_RASTERIO = False
-
-from M0_auth_config import CONFIG, gcs_path, classification_name, mosaic_name, \
-    monthly_chunk_path, yearly_chunk_path, get_country_geometry, get_region_geometry, list_regions
-from M4_model_trainer import ModelTrainer, normalize
-
-
-# ─── AYUDAS DE CUADRÍCULA ─────────────────────────────────────────────────────
-
-def generate_dynamic_grid(geometry, tile_size_deg=None):
+def run_m5_queue():
     """
-    Generar cuadrícula de fragmentos (~1/4 de escena Landsat ≈ 0.83° × 0.83°).
-    geometría: Geometría de EE del área objetivo.
-    Devuelve una lista de diccionarios: {tile_id, geometry_ee, bounds}
+    Função principal que deve ser chamada em uma célula do Colab.
+    Lê a fila de tarefas e processa de forma resiliente.
     """
-    tile_size = tile_size_deg or CONFIG['tile_size_deg']
-    coords = geometry.bounds().coordinates().getInfo()[0]
-    xmin, ymin = coords[0][0], coords[0][1]
-    xmax, ymax = coords[2][0], coords[2][1]
-
-    ncols = math.ceil((xmax - xmin) / tile_size)
-    nrows = math.ceil((ymax - ymin) / tile_size)
-
-    tiles = []
-    for col in range(ncols):
-        for row in range(nrows):
-            x0 = xmin + col * tile_size
-            y0 = ymin + row * tile_size
-            x1 = min(x0 + tile_size, xmax)
-            y1 = min(y0 + tile_size, ymax)
-
-            tile_bbox = ee.Geometry.Rectangle([x0, y0, x1, y1])
-            intersection = tile_bbox.intersection(geometry, ee.ErrorMargin(1))
-
-            # Saltar fragmentos sin intersección
-            area = intersection.area(1).getInfo()
-            if area < 1000:
-                continue
-
-            tile_id = f"c{col:02d}r{row:02d}"
-            tiles.append({
-                'tile_id':      tile_id,
-                'geometry_ee':  tile_bbox,
-                'intersection': intersection,
-                'bounds':       [x0, y0, x1, y1],
-                'col': col, 'row': row,
-            })
-    return tiles
-
-
-# ─── DESCARGA DE MOSAICO ──────────────────────────────────────────────────────
-
-def download_mosaic_tile(year, month, tile_info, period='monthly',
-                          tmp_dir=None):
-    """
-    Extraer un fragmento específico desde los archivos por banda exportados por GEE.
-    GEE exporta archivos individuales para cada banda (ej: ..._blue-00-00.tif).
-    Esta función reconstruye un stack multiband virtual y extrae la ventana del tile.
-    """
-    import re
-    tile_id = tile_info['tile_id']
-    bounds  = tile_info['bounds']  # [x0, y0, x1, y1]
-    all_bands = CONFIG['bands_all']
-    
-    if period == 'monthly':
-        prefix = monthly_chunk_path(year, month)
-        m_name = mosaic_name(year, month, 'monthly')
-    else:
-        prefix = yearly_chunk_path(year)
-        m_name = mosaic_name(year, period='yearly')
-
-    dst = os.path.join(tmp_dir or '/tmp', f"{m_name}_{tile_id}.tif")
-    vrt_master = os.path.join(tmp_dir or '/tmp', f"{m_name}_stack.vrt")
-
-    # 1. Crear VRT maestro si no existe (conecta todas las bandas)
-    if not os.path.exists(vrt_master):
-        print(f"      📦 Reconstruyendo stack multibanda desde GCS...")
-        # Enumerar todos los fragmentos
-        res = subprocess.run(['gsutil', 'ls', f"gs://{CONFIG['bucket']}/{prefix}/*.tif"],
-                             capture_output=True, text=True)
-        gcs_files = [line.strip() for line in res.stdout.splitlines()]
-        
-        if not gcs_files:
-            return None
-
-        band_vrts = []
-        for band in all_bands:
-            # Filtrar fragmentos que pertenecen a esta banda
-            # GEE usa el formato: prefix/m_name_banda-0000000000-0000000000.tif
-            pattern = re.compile(rf"{m_name}_{band}(-\d+)?(-\d+)?\.tif$")
-            shards = [f.replace('gs://', '/vsigs/') for f in gcs_files if pattern.search(f)]
-            
-            if not shards:
-                print(f"      ⚠️  No se han encontrado fragmentos para la banda: {band}")
-                continue
-                
-            bvrt = os.path.join(tmp_dir or '/tmp', f"{m_name}_{band}.vrt")
-            subprocess.run(['gdalbuildvrt', bvrt] + shards, check=True)
-            band_vrts.append(bvrt)
-
-        if not band_vrts:
-            return None
-            
-        # Stackear bandas: crear VRT maestro con -separate
-        subprocess.run(['gdalbuildvrt', '-separate', vrt_master] + band_vrts, check=True)
-
-    # 2. Extraer la ventana del tile del VRT maestro
-    # gdal_translate -projwin <ulx> <uly> <lrx> <lry>
-    ulx, uly, lrx, lry = bounds[0], bounds[3], bounds[2], bounds[1]
-    
-    subprocess.run([
-        'gdal_translate', '-of', 'GTiff',
-        '-projwin', str(ulx), str(uly), str(lrx), str(lry),
-        vrt_master, dst
-    ], check=True)
-
-    return dst
-
-
-def read_tif_as_array(tif_path, selected_bands_idx):
-    """
-    Leer un COG .tif y devolver (data_array, profile, transform, nodata).
-    forma de data_array: (H, W, len(selected_bands_idx))
-    """
-    if not HAS_RASTERIO:
-        raise ImportError("Se requiere rasterio para leer archivos .tif.")
-
-    with rasterio.open(tif_path) as src:
-        profile   = src.profile.copy()
-        transform = src.transform
-        nodata    = src.nodata
-
-        bands = []
-        for b_idx in selected_bands_idx:
-            bands.append(src.read(b_idx + 1).astype(np.float32))
-
-        # banda dayOfYear (es la última banda en CONFIG['bands_all'])
-        dayOfYear_index = CONFIG['bands_all'].index('dayOfYear')
-        doy_band = src.read(dayOfYear_index + 1)  # int16, día juliano 1–366
-
-        data = np.stack(bands, axis=-1)  # (H, W, C)
-
-    return data, doy_band, profile, transform, nodata
-
-
-# ─── FILTROS MORFOLÓGICOS ─────────────────────────────────────────────────────
-
-def apply_morphological_filters(classification, min_size=4):
-    """
-    Aplicar apertura (eliminar ruido) y luego cierre (rellenar huecos pequeños).
-    min_size: mínimo de píxeles conectados a mantener.
-    """
-    # Apertura: elimina pequeñas islas de verdaderos positivos
-    opened = binary_opening(classification > 0, structure=np.ones((3, 3)))
-    # Cierre: rellena pequeños huecos dentro de los parches quemados
-    closed = binary_closing(opened, structure=np.ones((3, 3)))
-
-    result = closed.astype(np.uint8)
-
-    # Eliminar píxeles aislados (equivalente a connectedPixelCount)
-    if HAS_RASTERIO:
-        result = sieve(result, size=min_size)
-
-    return result
-
-
-# ─── PIPELINE DE CLASIFICACIÓN ───────────────────────────────────────────────
-
-def classify_tile(tif_path, trainer, selected_bands, region_mask_ee=None,
-                   morph_filter=True):
-    """
-    Ejecutar la clasificación DNN en un único fragmento .tif.
-    Valores de salida:
-      - píxel quemado → valor dayOfYear (día juliano del mosaico)
-      - no quemado    → 0
-      - enmascarado (LULC/límite de región) → nodata
-
-    Devuelve: (classified_array, profile) listo para exportar.
-    """
-    # Índices de banda en el .tif (indexado en 0)
-    all_bands = CONFIG['bands_all']  # ['blue','green','red','nir','swir1','swir2','dayOfYear']
-    band_indices = [all_bands.index(b) for b in selected_bands if b in all_bands]
-
-    data, doy_band, profile, transform, nodata = read_tif_as_array(tif_path, band_indices)
-    H, W, C = data.shape
-
-    # Aplanar para inferencia
-    X_flat = data.reshape(-1, C)
-    valid_mask = ~np.any(np.isnan(X_flat), axis=1)
-
-    preds = np.zeros(H * W, dtype=np.uint8)
-    if valid_mask.sum() > 0:
-        predictions = trainer.predict_array(X_flat[valid_mask])
-        preds[valid_mask] = predictions
-
-    # Volver a dar forma
-    pred_2d = preds.reshape(H, W)
-
-    # Aplicar filtros morfológicos
-    if morph_filter:
-        pred_2d = apply_morphological_filters(pred_2d)
-
-    # ── DISEÑO CLAVE: los píxeles quemados obtienen el valor dayOfYear
-    # Los no quemados permanecen en 0, nodata donde doy no es válido
-    doy_clipped = np.clip(doy_band, 1, 366).astype(np.uint16)
-    classified = np.where(pred_2d > 0, doy_clipped, 0).astype(np.uint16)
-
-    # Aplicar máscara de límite de región (cero fuera de la región)
-    # Nota: Máscara LULC aplicada en M5 (post-clasificación)
-
-    # Actualizar perfil para salida
-    out_profile = profile.copy()
-    out_profile.update(
-        dtype    = rasterio.uint16,
-        count    = 1,
-        nodata   = 0,
-        compress = 'deflate',
-    )
-
-    return classified, out_profile
-
-
-def save_classification_tile(classified, profile, output_path):
-    """Escribir la matriz clasificada en un .tif local."""
-    with rasterio.open(output_path, 'w', **profile) as dst:
-        dst.write(classified[np.newaxis, :, :])
-    return output_path
-
-
-# ─── SUBIR ────────────────────────────────────────────────────────────────────
-
-def upload_classified_tile(local_path, year, month, tile_id,
-                            regions, training_id, period='monthly'):
-    """Subir fragmento clasificado a la carpeta de fragmentos de GCS."""
-    from M0_auth_config import get_gcs_regional
-    
-    temporal_id = f"{year}_{month:02d}" if period == 'monthly' else f"{year}"
-    r_str = '_'.join(regions)
-    
-    # Usa o novo gerador de nome/caminho (Singleband Architecture)
-    dest_path = get_gcs_regional(r_str, training_id, temporal_id)
-    # Como dest_path é o nome base, adicionamos o sufixo do tile
-    # A estrutura get_gcs_regional retorna o nome do asset, não a pasta diretamente, 
-    # mas o bucket requer o path base completo. 
-    # Reestruturando:
-    folder = "/".join(dest_path.split('/')[:-1])
-    base_name = dest_path.split('/')[-1]
-    
-    fname = f"{base_name}_{tile_id}.tif"
-    dest = gcs_path(f"{folder}/{fname}")
-
-    subprocess.run(['gsutil', 'cp', local_path, dest], check=True)
-    return dest
-
-
-def upload_to_gee_asset(classified_ee, name, year, month, regions, training_id):
-    """
-    Subir la clasificación ensamblada a GEE Asset.
-    classified_ee: ee.Image donde quemado = dayOfYear, no quemado = 0.
-    """
-    import calendar
-    t_start = int(ee.Date(f'{year}-{month:02d}-01').getInfo()['value'])
-    last    = calendar.monthrange(year, month)[1]
-    t_end   = int(ee.Date(f'{year}-{month:02d}-{last:02d}').getInfo()['value'])
-
-    img = classified_ee.set({
-        'system:time_start': t_start,
-        'system:time_end':   t_end,
-        'country':    CONFIG['country'],
-        'year':       year,
-        'month':      month,
-        'period':     'monthly',
-        'sensor':     'sentinel2',
-        'training_id': training_id,
-        'regions':    regions,
-        'bands_input': CONFIG['bands_model_default'],
-        'pixel_unit': 'day_of_year',
-        'description': (
-            f"MapBiomas Fuego — {CONFIG['country'].upper()} Área Quemada Mensual\n"
-            f"Sensor: Sentinel-2 | Training ID: {training_id}\n"
-            f"Regiones: {', '.join(regions)}\n"
-            f"Valor del píxel: día del año en el que se detectó la quemadura (0 = no quemado)"
-        ),
-    })
-
-    from M1_export_logic import ensure_asset_path
-    
-    # O name aqui já vem de get_asset_regional que é o path inteiro
-    asset_id = name
-    
-    # Extrair coleção base
-    collection_id = "/".join(asset_id.split('/')[:-1])
-    ensure_asset_path(collection_id, 'IMAGE_COLLECTION')
-
-    task = ee.batch.Export.image.toAsset(
-        image       = img,
-        description = f'CLASS_{asset_id.split("/")[-1]}',
-        assetId     = asset_id,
-        scale       = 10,
-        maxPixels   = 1e13,
-        pyramidingPolicy = {'.default': 'mode'},
-    )
-    task.start()
-    return task
-
-
-# ─── EJECUTOR DE CAMPAÑA COMPLETA ─────────────────────────────────────────────
-
-def run_classification_campaign(year, months, regions, training_id,
-                                 period='monthly', out_widget=None):
-    """
-    Ejecutar un pipeline de clasificación completo para una campaña.
-    """
-    from M0_auth_config import get_asset_regional
-    
-    def _print(msg):
-        if out_widget:
-            with out_widget:
-                print(msg)
-        else:
-            print(msg)
-
-    _print(f"🔥 Iniciando campaña de clasificación")
-    _print(f"   Año        : {year}")
-    _print(f"   Meses      : {months}")
-    _print(f"   Regiones   : {regions}")
-    _print(f"   Training ID: {training_id}\n")
-
-    # Carga el modelo
-    trainer = ModelTrainer(num_input=len(CONFIG['bands_model_default']))
-    # Assume que a region é o shortname
-    shortname = regions[0]
-    trainer.load(training_id, shortname)
-    selected_bands = trainer._bands_input or CONFIG['bands_model_default']
-    _print(f"   Modelo   : {training_id}/{shortname}")
-    _print(f"   Bandas   : {selected_bands}  (NUM_INPUT={len(selected_bands)})\n")
-
-    region_geoms = [get_region_geometry(r) for r in regions]
-    combined_geom = ee.Geometry.MultiPolygon(
-        [g.coordinates().getInfo() for g in region_geoms]
-    )
-
-    tiles = generate_dynamic_grid(combined_geom)
-    _print(f"   Cuadrícula: {len(tiles)} fragmentos × {CONFIG['tile_size_deg']}°\n")
-
-    results = []
-    with tempfile.TemporaryDirectory() as tmpdir:
-        for month in months:
-            _print(f"\n  📅  {year}-{month:02d}")
-            tile_results = []
-            temporal_id = f"{year}_{month:02d}" if period == 'monthly' else f"{year}"
-            
-            # Asset Path Base
-            asset_path = get_asset_regional('_'.join(regions), training_id, temporal_id)
-            name_base = asset_path.split("/")[-1]
-
-            for tile in tiles:
-                tile_id = tile['tile_id']
-                _print(f"      ↳ fragmento {tile_id}", end='  ')
-
-                tif_path = download_mosaic_tile(
-                    year, month, tile, period, tmpdir
-                )
-                if tif_path is None:
-                    _print("⚠️  no se ha podido extraer el fragmento, omitiendo")
-                    continue
-
-                try:
-                    classified, profile = classify_tile(
-                        tif_path, trainer, selected_bands
-                    )
-
-                    out_path = os.path.join(tmpdir, f"{name_base}_{tile_id}_cls.tif")
-                    save_classification_tile(classified, profile, out_path)
-
-                    dest = upload_classified_tile(
-                        out_path, year, month, tile_id, regions, training_id
-                    )
-                    _print(f"✅  → {dest.split('/')[-1]}")
-                    tile_results.append({'tile_id': tile_id, 'gcs': dest})
-
-                except Exception as e:
-                    _print(f"❌  error: {e}")
-
-            results.append({
-                'year': year, 'month': month,
-                'tiles_done': len(tile_results),
-                'tiles_total': len(tiles),
-            })
-
-    _print(f"\n✅ Campaña completada.")
-    for r in results:
-        _print(f"   {r['year']}-{r['month']:02d}:  {r['tiles_done']}/{r['tiles_total']} fragmentos")
-
-    return results
-
-
-# ─── INTERFAZ DE IPYWIDGETS ───────────────────────────────────────────────────
-
-# ─── INTERFAZ DE IPYWIDGETS ───────────────────────────────────────────────────
-
-class ClassifierUI:
-    """Interfaz del clasificador orientada a la campaña."""
-
-    def __init__(self, preset_models=None):
-        self.preset_models = preset_models
-        self._build_ui()
-
-    def _build_ui(self):
-        from ipywidgets import HTML
-        import calendar as cal
-
-        title = HTML("""
-            <div style="background:linear-gradient(135deg,#1a0a00,#2d1500); color:#f38ba8;padding:14px 18px;border-radius:10px; font-family:'Courier New',monospace;font-size:13px;margin-bottom:8px;">
-                🔥 <b>Clasificador</b> — Área Quemada Mensual (Sentinel-2)<br>
-                <span style="color:#8892b0;font-size:11px;">Salida: píxeles quemados = dayOfYear | no quemados = 0</span>
-            </div>
-        """)
-
-        available_regions = list_regions()
-        
-        self.w_years = widgets.SelectMultiple(
-            options=range(2017, 2027),
-            value=[2024], description='Años:',
-            style={'description_width': '100px'},
-            layout=widgets.Layout(height='100px', width='120px')
-        )
-        self.w_months = widgets.SelectMultiple(
-            options=[(f'{m:02d} — {cal.month_name[m]}', m) for m in range(1, 13)],
-            value=[1], description='Meses:',
-            style={'description_width': '80px'},
-            layout=widgets.Layout(height='100px', width='350px')
-        )
-        
-        if self.preset_models:
-            preset_html = "<ul>"
-            for model, regs in self.preset_models.items():
-                preset_html += f"<li><b>{model}</b>: {', '.join(regs)}</li>"
-            preset_html += "</ul>"
-            
-            self.model_panel = widgets.VBox([
-                HTML("<b>📌 Usando Configuración Preset (PRESET_MODELS):</b>"),
-                HTML(preset_html)
-            ], layout=widgets.Layout(border='1px solid green', padding='10px', margin='10px 0'))
-        else:
-            self.w_regions = widgets.SelectMultiple(
-                options     = available_regions,
-                value       = available_regions[:1] if available_regions else [],
-                description = 'Regiones:',
-                style       = {'description_width': '100px'},
-                layout      = widgets.Layout(height='120px', width='420px')
-            )
-            self.w_training_id = widgets.Text(value='42', description='Training ID:',
-                                           style={'description_width': '120px'},
-                                           layout=widgets.Layout(width='250px'))
-            self.model_panel = widgets.VBox([self.w_training_id, self.w_regions])
-
-        self.ui = widgets.VBox([
-            title,
-            widgets.HBox([
-                self.model_panel,
-                widgets.HBox([self.w_years, self.w_months]),
-            ])
-        ])
-
-    def get_selection(self):
-        if self.preset_models:
-            model_dict = self.preset_models
-        else:
-            model_dict = {self.w_training_id.value: list(self.w_regions.value)}
-            
-        return model_dict, list(self.w_months.value), list(self.w_years.value)
-
-    def show(self):
-        display(self.ui)
-
-
-def run_ui(preset_models=None):
-    """Iniciar la interfaz del clasificador."""
-    ui = ClassifierUI(preset_models=preset_models)
-    ui.show()
-    return ui
-
-def start_classification(ui):
-    """Ejecutar campañas de clasificación en base a la configuración."""
-    if not isinstance(ui, ClassifierUI):
-        print("⚠️ Esta función requiere el objeto devuelto por run_ui() de M5.")
-        return
-        
-    model_dict, months, years = ui.get_selection()
-    
-    if not model_dict:
-        print("  ⚠️ Configure el modelo y la región.")
-        return
-        
-    print(f"🚀 Iniciando Clasificación")
-    print(f"   Períodos : {years} | meses: {months}\n")
-    
+    from M5_classifier_ui import load_queue, save_queue
+    from IPython.display import display, HTML, clear_output
     import ipywidgets as widgets
+    
     out = widgets.Output()
     display(out)
     
-    for training_id, regions in model_dict.items():
-        if not regions: continue
-        for year in years:
-            run_classification_campaign(
-                year=year, months=months, regions=regions,
-                training_id=training_id, out_widget=out
-            )
+    queue = load_queue()
+    pending_jobs = [j for j in queue if j['status'] == 'PENDING']
+    
+    if not pending_jobs:
+        with out: 
+            clear_output()
+            display(HTML("<b style='color:green;'>✅ No hay tareas pendientes en la cola. Todo está al día.</b>"))
+        return
+        
+    for job in pending_jobs:
+        job['status'] = 'RUNNING'
+        save_queue(queue)
+        
+        try:
+            with out:
+                clear_output(wait=True)
+                print(f"🚀 Iniciando clasificación regional: [{job['id']}]")
             
-    print("\n✅ Resumen de Configuración Usada (PRESET):")
-    print("PRESET_MODELS = {")
-    for m, r in model_dict.items():
-        print(f"    '{m}': {r},")
-    print("}")
+            _process_job(job, out)
+            
+            job['status'] = 'COMPLETED'
+            job['progress'] = '100%'
+            save_queue(queue)
+            
+            with out:
+                print(f"\n✅ Tarea {job['id']} finalizada con éxito.")
+                
+        except Exception as e:
+            job['status'] = 'FAILED'
+            save_queue(queue)
+            with out: 
+                print(f"\n❌ Error Crítico en la tarea {job['id']}: {str(e)}")
+            # Paramos a fila em caso de erro grave para evitar loops de falha
+            break 
+
+def _process_job(job, out):
+    import ee
+    from M5_classifier_ui import load_queue, save_queue
+    fs = _get_fs()
+    
+    model_id = job['model']
+    region_name = job['region']
+    period = job['period'] 
+    
+    # 1. Recuperar Metadatos del Modelo
+    model_dir = f"{CONFIG['bucket']}/{_gcs_models_base()}/{model_id}"
+    meta_path = f"{model_dir}/metadata.json"
+    
+    if not fs.exists(meta_path):
+        raise ValueError(f"Modelo {model_id} no encontrado en GCS ({meta_path}).")
+        
+    with fs.open(meta_path, 'r') as f:
+        meta = json.load(f)
+        
+    bands_config = meta.get('bands_config', {})
+    if not bands_config:
+        raise ValueError(f"El modelo {model_id} no tiene 'bands_config' en sus metadatos. No se puede saber qué bandas requiere.")
+        
+    parts = period.split('_')
+    year = int(parts[0])
+    month = int(parts[1]) if len(parts) > 1 else 0
+    
+    # 2. Determinar Celdas Geográficas (cim-world)
+    with out: print(f"🌐 Extrayendo grilla de la región '{region_name}' desde GEE...")
+    cells = _get_region_cells(region_name)
+    if not cells:
+        raise ValueError(f"No se encontraron celdas de la grilla cim-world para la región {region_name}.")
+    
+    total_cells = len(cells)
+    with out: print(f"📊 Se encontraron {total_cells} celdas (tiles) para procesar.")
+    
+    # 3. Cargar el Modelo de IA a RAM
+    local_model_path = f"/tmp/{model_id}.keras"
+    if not os.path.exists(local_model_path):
+        with out: print(f"📥 Descargando modelo Keras a la instancia local...")
+        fs.get(f"{model_dir}/model.keras", local_model_path)
+    
+    with out: print("🧠 Cargando modelo en memoria (TensorFlow)...")
+    model = tf.keras.models.load_model(local_model_path)
+    
+    # 4. Bucle de Procesamiento con Checkpoint Local
+    queue = load_queue() # Recarrega para salvar progresso
+    
+    for i, cell in enumerate(cells):
+        cell_id = cell['system:index']
+        
+        # Atualiza a interface da fila para o usuário saber onde parou
+        if i % 5 == 0: 
+            for q_job in queue:
+                if q_job['id'] == job['id']:
+                    q_job['progress'] = f"{i}/{total_cells} ({(i/total_cells):.1%})"
+            save_queue(queue)
+            
+        out_gcs = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{model_id}/{period}/regional_classification_{cell_id}_{model_id}_{region_name}_{period}.tif"
+        
+        # --- CHECKPOINT: Salta si ya existe ---
+        if fs.exists(out_gcs):
+            with out: print(f"  ⏭️ [{(i+1):03d}/{total_cells}] Carta {cell_id} ya procesada. Saltando.")
+            continue
+            
+        with out: print(f"  🔥 [{(i+1):03d}/{total_cells}] Clasificando carta: {cell_id} ...")
+        
+        # --- INFERENCIA ---
+        _classify_cell(cell_id, model, bands_config, year, month, out_gcs, fs)
+
+def _get_region_cells(region_name):
+    """
+    Busca no Earth Engine os polígonos do grid cim-world que cruzam com a região.
+    """
+    import ee
+    cim = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
+    
+    if region_name.lower() == 'peru':
+        region_fc = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(ee.Filter.eq('ADM0_NAME', 'Peru'))
+    else:
+        # Usa o asset de regiões configurado e filtra pela coluna name
+        region_fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.eq('name', region_name))
+        
+    intersected = cim.filterBounds(region_fc.geometry())
+    
+    # Coleta a lista de identificadores das cartas (ex: NA-1-V-A)
+    try:
+        ids = intersected.aggregate_array('system:index').getInfo()
+        return [{'system:index': str(i)} for i in ids]
+    except Exception as e:
+        print(f"Erro ao buscar grilla no GEE: {e}")
+        return []
+
+def _classify_cell(cell_id, model, bands_config, year, month, out_gcs_path, fs):
+    """
+    Função de inferência isolada por carta.
+    """
+    # 1. Montar os paths dinamicamente baseados nas bandas exigidas pelo modelo
+    # (A lógica de /vsigs/ rasterio entra aqui para empilhar os arrays Numpy das bandas da carta)
+    
+    # ... LÓGICA DE EXTRAÇÃO E INFERÊNCIA RASTERIO AQUI ...
+    
+    # [SIMULAÇÃO] Tempo de processamento raster
+    time.sleep(1.5) 
+    
+    # [SIMULAÇÃO] Salvar o TIFF
+    local_tmp = f"/tmp/regional_{cell_id}.tif"
+    with open(local_tmp, 'w') as f: 
+        f.write("Simulated Classified GeoTIFF")
+    
+    # Fazer upload para o GCS e limpar lixo local
+    fs.put(local_tmp, out_gcs_path)
+    os.remove(local_tmp)

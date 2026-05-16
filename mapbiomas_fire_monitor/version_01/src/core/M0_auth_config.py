@@ -39,6 +39,8 @@ def get_config(country='peru'):
             # NOVOS CAMINHOS GCS (Arquitetura Singleband)
             'gcs_library_images': 'sudamerica/peru/CATALOG_01/LIBRARY_IMAGES',
             'gcs_library_samples': 'sudamerica/peru/CATALOG_01/LIBRARY_SAMPLES',
+            'gcs_library_models': 'sudamerica/peru/CATALOG_01/LIBRARY_MODELS',
+            'gcs_library_classifications': 'sudamerica/peru/CATALOG_01/LIBRARY_CLASSIFICATIONS',
             'gcs_cache': 'sudamerica/peru/CATALOG_01/.CACHE',
             'gcs_chunks': 'sudamerica/peru/CATALOG_01/CHUNKS',
             
@@ -158,7 +160,7 @@ def _gcs_library_base():
 
 def _gcs_models_base():
     """Base folder for trained models in GCS (centralizado)."""
-    return f"{CONFIG['gcs_library_images']}/MODELS"
+    return f"{CONFIG['gcs_library_models']}"
 
 def _gcs_mosaic_path(periodicity, temporal_id, mosaic=None):
     """
