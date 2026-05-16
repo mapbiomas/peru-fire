@@ -6,25 +6,9 @@ import geopandas as gpd
 from shapely.geometry import shape
 import rasterio
 from rasterio.mask import mask
-from rasterio.io import MemoryFile
-import gcsfs
-TF_AVAILABLE = None
-TF_ERROR = None
-import ipywidgets as widgets
-from IPython.display import display, clear_output, HTML
-import matplotlib.pyplot as plt
-from datetime import datetime
-import time
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
-from M_ui_components import PipelineStepUI
-SENSOR_MOSAIC_BANDS = {
-    ('sentinel2', 'minnbr'):        ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'],
-    ('sentinel2', 'minnbr_buffer'): ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'],
-    ('landsat',   'minnbr'):        ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'],
-    ('hls',       'minnbr'):        ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'],
-}
-ALL_BANDS_LIST = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']
+
 
 def list_sample_collections_gcs(force_refresh=False):
     """Lista amostras com prioridade TOTAL offline. Só toca no GCS se force_refresh=True."""

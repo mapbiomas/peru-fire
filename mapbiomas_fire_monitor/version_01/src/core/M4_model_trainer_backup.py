@@ -1,18 +1,1174 @@
+"""
+M4 — Entrenador del Modelo (DNN)
+MapBiomas Fuego Sentinel Monitor
+
+Maneja:
+  1. Seleção múltipla de amostras via Matriz (estilo M1/M2).
+  2. Extração de píxeis de mosaicos GCS (COG) salvando em numpy.
+  3. Divisão de treino / validação e normalização explícita.
+  4. Persistência rica (pesos, amostras, píxeis, metadados).
+  5. Análises complementares postergadas (Monitoramento).
+"""
+
 import os
 import json
 import numpy as np
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import shape
+import rasterio
+from rasterio.mask import mask
+from rasterio.io import MemoryFile
+import gcsfs
+
+# TensorFlow movido para dentro dos métodos para evitar travamento de DLL no import global.
 TF_AVAILABLE = None
 TF_ERROR = None
+
+def _get_tf():
+    """Carrega o TensorFlow apenas quando necessário (Lazy Load)."""
+    global TF_AVAILABLE, TF_ERROR
+    if TF_AVAILABLE is not None: return tf if TF_AVAILABLE else None
+    
+    try:
+        import tensorflow.compat.v1 as _tf
+        _tf.compat.v1.disable_v2_behavior()
+        globals()['tf'] = _tf
+        TF_AVAILABLE = True
+        return _tf
+    except Exception as e:
+        TF_AVAILABLE = False
+        TF_ERROR = str(e)
+        return None
+
 import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML
+import matplotlib.pyplot as plt
+from datetime import datetime
+
+import time
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
 from M_ui_components import PipelineStepUI
 
-from M4_data_extractor import extract_pixels_from_gcs, list_sample_collections_gcs, list_campaigns_gcs
-from M4_algorithms_dnn import ModelTrainer
-from M4_analytics import view_analytics, render_diagnostic_dashboard, render_model_card_html
-from M4_hub_manager import list_trained_models, _load_m4_cache, _save_m4_cache
+# ─── EXTRAÇÃO DE DADOS (GCS) ──────────────────────────────────────────────────
+
+# Mapeamento de bandas permitidas por combinação Sensor+Mosaico
+# Isso garante que a interface mostre apenas o que existe no GCS
+SENSOR_MOSAIC_BANDS = {
+    ('sentinel2', 'minnbr'):        ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'],
+    ('sentinel2', 'minnbr_buffer'): ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'],
+    ('landsat',   'minnbr'):        ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'],
+    ('hls',       'minnbr'):        ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'],
+}
+
+ALL_BANDS_LIST = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']
+
+def list_sample_collections_gcs(force_refresh=False):
+    """Lista amostras com prioridade TOTAL offline. Só toca no GCS se force_refresh=True."""
+    cache = _load_m4_cache()
+    if cache.get('known_samples') and not force_refresh:
+        return cache['known_samples']
+    
+    try:
+        from M0_auth_config import CONFIG, GLOBAL_OPTS
+        # Timeout curtíssimo para não travar a UI se a rede estiver lenta
+        fs = _get_fs()
+        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
+        path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{campaign}"
+        
+        if not fs.exists(path):
+            return []
+            
+        files = fs.ls(path) # ls simples não costuma travar tanto quanto find
+        samples = sorted([f.split('/')[-1].replace('.csv', '') for f in files if f.endswith('.csv')], reverse=True)
+        
+        cache['known_samples'] = samples
+        _save_m4_cache(cache)
+        return samples
+    except Exception:
+        # Se falhar qualquer coisa (rede, timeout), usa o que tem no cache ou vazio
+        return cache.get('known_samples', [])
+
+def list_campaigns_gcs():
+    """Lista as campanhas (subpastas) disponíveis em LIBRARY_SAMPLES no GCS."""
+    try:
+        from M0_auth_config import CONFIG
+        fs = _get_fs()
+        path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}"
+        if not fs.exists(path):
+            return ['monitor_01']
+        
+        items = fs.ls(path)
+        campaigns = []
+        for item in items:
+            name = item['name'] if isinstance(item, dict) else item
+            if not name.endswith('.csv') and not name.endswith('.json') and not name.endswith('.npz'):
+                c_name = name.split('/')[-1]
+                if c_name and not c_name.startswith('.'):
+                    campaigns.append(c_name)
+        
+        if not campaigns: return ['monitor_01']
+        return sorted(list(set(campaigns)))
+    except:
+        return ['monitor_01']
+
+def _load_m4_cache():
+    """Lê o cache local com busca em múltiplos níveis de diretório."""
+    filename = "m4_ranking_cache.json"
+    candidates = [filename, os.path.join("..", filename), os.path.join("..", "..", filename)]
+    
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                with open(path, 'r') as f: return json.load(f)
+            except: continue
+    return {}
+
+def _save_m4_cache(data):
+    """Salva o estado no arquivo local mais próximo."""
+    try:
+        with open("m4_ranking_cache.json", 'w') as f:
+            json.dump(data, f, indent=2)
+    except: pass
+
+def list_trained_models(force_refresh=False):
+    """Lista modelos já treinados priorizando o cache local para velocidade."""
+    from M0_auth_config import _gcs_models_base, CONFIG
+    cache = _load_m4_cache()
+    
+    # Se temos cache e não forçamos refresh, retorna instantaneamente
+    if cache.get('known_ids') and not force_refresh:
+        return cache['known_ids']
+        
+    try:
+        fs = _get_fs()
+        path = f"{CONFIG['bucket']}/{_gcs_models_base()}"
+        models = []
+        if fs.exists(path):
+            trainings = fs.ls(path)
+            for t_dir in trainings:
+                t_name = t_dir.split('/')[-1]
+                if t_name.startswith('training_'):
+                    models.append(t_name)
+                    # Guarda o path no cache em vez de poluir a lista de IDs
+                    if 'meta' not in cache: cache['meta'] = {}
+                    if t_name not in cache['meta']: cache['meta'][t_name] = {}
+                    cache['meta'][t_name]['path'] = t_dir
+        
+        # Atualiza a lista de IDs conhecidos no cache
+        cache['known_ids'] = models
+        _save_m4_cache(cache)
+        return models
+    except Exception as e:
+        return cache.get('known_ids', [])
+
+def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
+    """
+    Extrai píxeis do GCS baseado em uma configuração flexível de bandas.
+    Validando existência prévia para evitar erros silenciosos.
+    """
+    from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name
+    from M_cache import CacheManager
+    
+    fs = _get_fs()
+    state = CacheManager.load() or {}
+    cogs_avail = state.get('cogs_monthly', []) + state.get('cogs_annually', [])
+    
+    dfs = []
+    for group in sample_groups:
+        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
+        sample_path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{campaign}/{group}.csv"
+        if logger: logger(f"Leyendo muestras: {group}.csv", "info")
+        try:
+            with fs.open(sample_path, 'r') as f:
+                temp_df = pd.read_csv(f)
+                
+                # --- CORREÇÃO DE DATA (PERIOD) ---
+                # Extrai a data do nome do arquivo (ex: ..._2025_10.csv)
+                # O padrão é que os últimos dois campos (ou um) sejam a data
+                file_parts = group.split('_')
+                file_date = ""
+                if file_parts[-2].isdigit() and len(file_parts[-2]) == 4: # YYYY_MM
+                    file_date = f"{file_parts[-2]}_{file_parts[-1]}"
+                elif file_parts[-1].isdigit() and len(file_parts[-1]) == 4: # YYYY
+                    file_date = file_parts[-1]
+                
+                if not temp_df.empty and 'period' in temp_df.columns:
+                    p_found = temp_df['period'].unique().tolist()
+                    
+                    # Se encontrarmos uma data absurda (como 2026_04) mas o arquivo diz outra coisa,
+                    # forçamos a data do arquivo para que a extração funcione.
+                    if file_date and any(int(p.split('_')[0]) > 2025 for p in p_found):
+                        if logger: logger(f"  [AVISO] Se ha detectado una fecha futura {p_found} no CSV. Corrigiendo para {file_date}...", "warning")
+                        temp_df['period'] = file_date
+                        p_found = [file_date]
+                    
+                    if logger: logger(f"  [Buscar] Contenido: {len(temp_df)} puntos | Períodos: {p_found}", "info")
+                dfs.append(temp_df)
+        except Exception as e:
+            if logger: logger(f"Error al leer {group}: {e}", "error")
+            
+    if not dfs: return np.array([]), np.array([])
+        
+    df = pd.concat(dfs, ignore_index=True)
+    df['geometry'] = df['.geo'].apply(lambda x: shape(json.loads(x)))
+    gdf = gpd.GeoDataFrame(df, geometry='geometry', crs="EPSG:4326")
+    
+    X_all, y_all = [], []
+    periods = gdf['period'].unique()
+    bands_sorted = sorted(bands_config.keys())
+    
+    for p in periods:
+        subset = gdf[gdf['period'] == p]
+        
+        # --- INTELIGÊNCIA: VALIDAR SE A DATA FAZ SENTIDO ---
+        # Se as amostras vieram de um arquivo chamado ..._2025_10.csv, 
+        # mas o 'p' (period) dentro dele é 2026_04, priorizamos a data do arquivo
+        # se ela for detectada.
+        
+        # Buscamos a data no nome do grupo/arquivo original (via subset['_source_group'])
+        # Nota: vamos injetar essa info na leitura do CSV
+        
+        geometries = subset.geometry.tolist()
+        labels = subset['fire'].tolist()
+        
+        parts = str(p).split('_')
+        y = int(parts[0]); m = int(parts[1]) if len(parts) > 1 else None
+        periodicity = 'monthly' if m else 'annually'
+        
+        # --- VERIFICAÇÃO PRÉVIA DE DISPONIBILIDADE ---
+        missing_bands = []
+        band_paths = {}
+        
+        for b in bands_sorted:
+            s_name = bands_config[b].get('sensor').lower()
+            m_type = bands_config[b].get('mosaic').lower()
+            
+            # Constrói o ID único do COG (ex: image_peru_fire_sentinel2_minnbr_2025_10_blue)
+            cog_id = f"{mosaic_name(y, m, periodicity, band=b, mosaic=m_type, sensor=s_name)}".lower()
+            
+            if cog_id not in cogs_avail:
+                missing_bands.append(f"{s_name}/{m_type}/{b}")
+                continue
+            
+            # Constrói o path real do COG usando os auxiliares do M0
+            from M0_auth_config import monthly_cog_path, yearly_cog_path
+            if periodicity == 'monthly':
+                rel_folder = monthly_cog_path(y, m, mosaic=m_type, sensor=s_name)
+            else:
+                rel_folder = yearly_cog_path(y, mosaic=m_type, sensor=s_name)
+            
+            # O arquivo real no GCS é sensível a maiúsculas (Case Sensitive)
+            b_correct = 'dayOfYear' if b.lower() == 'dayofyear' else b
+            m_file_name = f"{mosaic_name(y, m, periodicity, band=b_correct, mosaic=m_type, sensor=s_name)}_cog.tif"
+            band_paths[b] = f"gs://{CONFIG['bucket']}/{rel_folder}/{m_file_name}"
+
+        if missing_bands:
+            if logger: logger(f"[AVISO] Saltar período {p}: Faltan {len(missing_bands)} bandas ({', '.join(missing_bands)})", "warning")
+            continue
+
+        if logger: logger(f"[OK] Mosaicos OK para {p}: {len(band_paths)} bandas listas para la extracción.", "info")
+        if logger: logger(f"[GCS] Extrayendo {len(geometries)} muestras de {p}...", "info")
+        
+        # --- LEITURA REAL DAS BANDAS ---
+        if logger: logger(f"[OK] Mosaicos OK para {p}: {len(band_paths)} bandas listas para la extracción.", "info")
+        if logger: logger(f"[GCS] Extrayendo {len(geometries)} muestras de {p}...", "info")
+        
+        sources = {}
+        local_files = []
+        
+        try:
+            # 1. Abrir todos os datasets para o período
+            for b in bands_sorted:
+                cog_path = band_paths[b]
+                is_colab = 'COLAB_RELEASE_TAG' in os.environ
+                src_path = f"/vsigs/{cog_path.replace('gs://', '')}" if is_colab else None
+                
+                if not is_colab:
+                    from M0_auth_config import get_temp_dir
+                    local_file = os.path.join(get_temp_dir(), os.path.basename(cog_path))
+                    if logger: logger(f"  [Baixar] Bajando banda {b}...", "info")
+                    fs.get(cog_path, local_file)
+                    src_path = local_file
+                    local_files.append(local_file)
+                
+                sources[b] = rasterio.open(src_path)
+
+            # 2. Extração Síncrona (Garante que cada pixel tenha todas as bandas)
+            band_pixels_acc = [[] for _ in bands_sorted]
+            labels_acc = []
+            
+            for geom, label in zip(geometries, labels):
+                try:
+                    temp_data = {}
+                    combined_mask = None
+                    
+                    # Lemos todas as bandas para esta geometria
+                    valid_geom = True
+                    for b in bands_sorted:
+                        out_image, _ = mask(sources[b], [geom], crop=True, filled=False)
+                        if out_image.mask.all():
+                            valid_geom = False; break
+                        
+                        # Acumulamos a máscara (OR lógico nos bits de NoData)
+                        if combined_mask is None:
+                            combined_mask = out_image.mask[0]
+                        else:
+                            combined_mask = combined_mask | out_image.mask[0]
+                        
+                        temp_data[b] = out_image.data[0]
+                    
+                    if valid_geom and combined_mask is not None:
+                        final_valid_mask = ~combined_mask
+                        num_valid = np.sum(final_valid_mask)
+                        
+                        if num_valid > 0:
+                            for i, b in enumerate(bands_sorted):
+                                band_pixels_acc[i].extend(temp_data[b][final_valid_mask])
+                            labels_acc.extend([label] * num_valid)
+                except:
+                    continue
+            
+            # 3. Empilhar dados do período
+            if labels_acc:
+                X_period = np.column_stack([np.array(b_px) for b_px in band_pixels_acc])
+                X_all.append(X_period)
+                y_all.append(np.array(labels_acc))
+                
+        except Exception as e:
+            if logger: logger(f"[ERRO] Error crítico en período {p}: {e}", "error")
+        finally:
+            for s in sources.values(): s.close()
+            for f in local_files:
+                if os.path.exists(f): os.remove(f)
+
+    if not X_all: return np.array([]), np.array([])
+    return np.concatenate(X_all, axis=0), np.concatenate(y_all, axis=0)
+
+
+# ─── NORMALIZACIÓN E DNN ──────────────────────────────────────────────────────
+
+def compute_normalizer(X):
+    stats = {}
+    for i in range(X.shape[1]):
+        col = X[:, i]
+        stats[i] = (float(col.mean()), float(col.std() + 1e-8))
+    return stats
+
+def normalize(X, stats):
+    X_norm = X.copy().astype(np.float32)
+    for i, (mean, std) in stats.items():
+        X_norm[:, i] = (X_norm[:, i] - mean) / std
+    return X_norm
+
+class ModelTrainer:
+    def __init__(self, num_input, layers=None, lr=None, seed=42):
+        _get_tf()
+        self.num_input  = num_input
+        self.layers     = layers or CONFIG['model_layers']
+        self.lr         = lr     or CONFIG['model_lr']
+        self.seed       = seed
+        self.graph      = None
+        self.session    = None
+        self.norm_stats = None
+
+    def _build_graph(self):
+        tf.reset_default_graph()
+        tf.set_random_seed(self.seed)
+
+        self.x   = tf.placeholder(tf.float32, [None, self.num_input], name='x')
+        self.y   = tf.placeholder(tf.float32, [None, 1],              name='y')
+        self.keep_prob = tf.placeholder(tf.float32, name='keep_prob')
+
+        layer = self.x
+        for i, n_units in enumerate(self.layers):
+            layer = tf.keras.layers.Dense(
+                n_units,
+                activation=tf.nn.relu,
+                kernel_initializer=tf.keras.initializers.glorot_uniform(seed=self.seed),
+                name=f'fc_{i}'
+            )(layer)
+            layer = tf.nn.dropout(layer, rate=1 - self.keep_prob)
+        
+        self.latent_tensor = layer # Captura para visualização ao vivo
+        self.logits = tf.keras.layers.Dense(1, name='output')(layer)
+        self.pred   = tf.nn.sigmoid(self.logits)
+
+        self.loss = tf.reduce_mean(
+            tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=self.logits)
+        )
+        self.train_op = tf.train.AdamOptimizer(self.lr).minimize(self.loss)
+        self.saver    = tf.train.Saver()
+
+    def train(self, X_train, y_train, X_val=None, y_val=None, batch_size=None, n_iters=None, keep_prob=0.8, logger=None, update_chart_fn=None, snapshot_dir=None):
+        self._X_raw = X_train
+        self._y_raw = y_train
+        
+        batch_size = batch_size or CONFIG.get('model_batch', 1000)
+        n_iters    = n_iters    or CONFIG.get('model_iters', 5000)
+
+        # Normalização baseada SEMPRE no conjunto de treino para evitar data leakage
+        self.norm_stats = compute_normalizer(X_train)
+        X_tr = normalize(X_train, self.norm_stats)
+        y_tr = y_train.reshape(-1, 1)
+
+        if X_val is not None and y_val is not None:
+            X_te = normalize(X_val, self.norm_stats)
+            y_te = y_val.reshape(-1, 1)
+        else:
+            # Fallback para split interno se não for provido
+            n = len(X_tr)
+            idx = np.random.permutation(n)
+            n_split = int(n * 0.8)
+            X_te = X_tr[idx[n_split:]]
+            y_te = y_tr[idx[n_split:]]
+            X_tr = X_tr[idx[:n_split]]
+            y_tr = y_tr[idx[:n_split]]
+
+        n_train = len(X_tr)
+
+        # Amostra fixa para visualização ao vivo (Playground Style)
+        viz_idx = np.random.choice(len(X_te), min(500, len(X_te)), replace=False)
+        X_viz, y_viz = X_te[viz_idx], y_te[viz_idx]
+
+        self._build_graph()
+        history = {'loss': [], 'acc': [], 'val_acc': [], 'steps': []}
+        # Data accumulation for time-travel
+        snapshots_data = {'y_true': y_viz.flatten()}
+
+        with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
+            self.session = sess
+
+            for i in range(1, n_iters + 1):
+                b_idx = np.random.randint(0, n_train, batch_size)
+                _, loss_val = sess.run(
+                    [self.train_op, self.loss],
+                    feed_dict={self.x: X_tr[b_idx], self.y: y_tr[b_idx], self.keep_prob: keep_prob}
+                )
+
+                if i % max(1, n_iters // 20) == 0 or i == n_iters:
+                    pred_tr = sess.run(self.pred, feed_dict={self.x: X_tr, self.y: y_tr, self.keep_prob: 1.0})
+                    acc_tr = ((pred_tr > 0.5).astype(int) == y_tr.astype(int)).mean()
+
+                    pred_te = sess.run(self.pred, feed_dict={self.x: X_te, self.y: y_te, self.keep_prob: 1.0})
+                    acc_te = ((pred_te > 0.5).astype(int) == y_te.astype(int)).mean()
+
+                    history['steps'].append(i)
+                    history['loss'].append(float(loss_val))
+                    history['acc'].append(float(acc_tr))
+                    history['val_acc'].append(float(acc_te))
+
+                    # Extração de dados para o Playground Live
+                    embeds, preds_viz = sess.run(
+                        [self.latent_tensor, self.pred], 
+                        feed_dict={self.x: X_viz, self.keep_prob: 1.0}
+                    )
+                    
+                    # Accumulate for time-travel
+                    step_idx = len(history['steps']) - 1
+                    snapshots_data[f'embeds_{step_idx}'] = embeds
+                    snapshots_data[f'preds_{step_idx}'] = preds_viz.flatten()
+
+                    if logger:
+                        logger(f"Iter {i:5d}/{n_iters} | Loss: {loss_val:.4f} | Acc Treino: {acc_tr:.3f} | Validação: {acc_te:.3f}", "info")
+                    
+                    if update_chart_fn:
+                        update_chart_fn(history, embeds, preds_viz.flatten(), y_viz)
+
+            self._saved_vars = {v.name: sess.run(v) for v in tf.global_variables()}
+            self._history = history
+            self.snapshot_dir = snapshot_dir
+            
+            # Salva o arquivo de dados de snapshots se o diretório existir
+            if snapshot_dir:
+                np.savez_compressed(os.path.join(snapshot_dir, "snapshots_data.npz"), **snapshots_data)
+
+        return history
+
+    def evaluate(self):
+        from sklearn.metrics import confusion_matrix, classification_report
+        
+        X_norm = normalize(self._X_raw, self.norm_stats)
+        layer = X_norm
+        for i in range(len(self.layers)):
+            W = self._saved_vars[f'fc_{i}/kernel:0']
+            b = self._saved_vars[f'fc_{i}/bias:0']
+            layer = np.maximum(0, np.dot(layer, W) + b)
+            
+        W_out = self._saved_vars['output/kernel:0']
+        b_out = self._saved_vars['output/bias:0']
+        logits = np.dot(layer, W_out) + b_out
+        # Sigmoid robusta para evitar overflow
+        preds = (1 / (1 + np.exp(-np.clip(logits, -20, 20)))).flatten() > 0.5
+        
+        cm = confusion_matrix(self._y_raw, preds)
+        rep = classification_report(self._y_raw, preds, output_dict=True, zero_division=0)
+        return cm, rep
+
+    def load(self, training_id, shortname):
+        import subprocess, tempfile
+        from M0_auth_config import GLOBAL_OPTS, model_path
+        base_path = model_path(training_id, shortname)
+        fs = _get_fs()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for fname in ['weights.npz', 'metadata.json']:
+                src = gcs_path(f"{base_path}/{fname}")
+                dest = os.path.join(tmpdir, fname)
+                subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            with open(os.path.join(tmpdir, 'metadata.json')) as f:
+                hp = json.load(f)
+                
+            self.num_input = hp['num_input']
+            self.layers = hp['layers']
+            self.lr = hp.get('lr', 0.001)
+            self._bands_input = hp.get('bands_input')
+            self.norm_stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
+            
+            self._saved_vars = dict(np.load(os.path.join(tmpdir, 'weights.npz')))
+            
+    def predict(self, X_raw):
+        """Aplica a inferência (forward pass manual usando os pesos numpy)."""
+        if not hasattr(self, '_saved_vars'):
+            raise RuntimeError("Modelo não treinado/carregado.")
+            
+        layer = normalize(X_raw, self.norm_stats)
+        for i in range(len(self.layers)):
+            W = self._saved_vars[f'fc_{i}/kernel:0']
+            b = self._saved_vars[f'fc_{i}/bias:0']
+            layer = np.maximum(0, np.dot(layer, W) + b)
+            
+        W_out = self._saved_vars['output/kernel:0']
+        b_out = self._saved_vars['output/bias:0']
+        logits = np.dot(layer, W_out) + b_out
+        
+        # Sigmoid robusta para evitar overflow
+        preds = 1 / (1 + np.exp(-np.clip(logits, -20, 20)))
+        return preds.flatten()
+
+    def get_embeddings(self, X_raw):
+        """Extrai os embeddings (penúltima camada) usando os pesos numpy."""
+        if not hasattr(self, '_saved_vars'):
+            raise RuntimeError("Modelo não treinado/carregado.")
+            
+        layer = normalize(X_raw, self.norm_stats)
+        # Passa por todas as camadas ocultas
+        for i in range(len(self.layers)):
+            W = self._saved_vars[f'fc_{i}/kernel:0']
+            b = self._saved_vars[f'fc_{i}/bias:0']
+            layer = np.maximum(0, np.dot(layer, W) + b)
+            
+        return layer
+
+    @staticmethod
+    def delete_model(training_id, shortname):
+        """Deleta recursivamente a pasta do modelo no GCS usando GCSFS."""
+        from M_cache import _get_fs
+        from M0_auth_config import CONFIG
+        fs = _get_fs()
+        base_uri = model_path(training_id, shortname)
+        # Caminho completo para o gcsfs (ex: bucket/models/...)
+        full_path = f"{CONFIG['bucket']}/{base_uri}"
+        
+        print(f" Eliminando carpeta del modelo (GCSFS): {full_path}")
+        try:
+            if fs.exists(full_path):
+                fs.rm(full_path, recursive=True)
+            return True
+        except Exception as e:
+            raise RuntimeError(f"No se pudo eliminar de GCS: {e}")
+
+    def save_projector_files(self, training_id, shortname, X, y, logger=None):
+        """Gera e salva arquivos .tsv para o TensorBoard Projector no GCS."""
+        import tempfile, subprocess
+        from M0_auth_config import GLOBAL_OPTS
+        base_path = model_path(training_id, shortname)
+        
+        if logger: logger("Generando embeddings para visualización (Projector)...", "info")
+        embeddings = self.get_embeddings(X)
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # 1. Vectors file (.tsv)
+            vec_file = os.path.join(tmpdir, 'vectors.tsv')
+            np.savetxt(vec_file, embeddings, delimiter='\t', fmt='%.6f')
+            
+            # 2. Metadata file (.tsv)
+            meta_file = os.path.join(tmpdir, 'metadata.tsv')
+            with open(meta_file, 'w', encoding='utf-8') as f:
+                f.write("Index\tClass\tLabel\n")
+                for i, val in enumerate(y):
+                    label = "Fuego" if val == 1 else "No-Fuego"
+                    f.write(f"{i}\t{val}\t{label}\n")
+            
+            # Upload to GCS
+            dest_dir = f"{base_path}/projector"
+            fs = _get_fs()
+            for fname in ['vectors.tsv', 'metadata.tsv']:
+                src = os.path.join(tmpdir, fname)
+                dest = f"{CONFIG['bucket']}/{dest_dir}/{fname}"
+                if logger: logger(f"  [Enviar] Subiendo {fname} a GCS...", "info")
+                fs.put(src, dest)
+            
+            if logger: 
+                logger(f"[OK] Arquivos do Projector salvos em: {dest_dir}", "info")
+                logger(f"[Dica] Dica: Baixe-os e suba em https://projector.tensorflow.org/", "info")
+
+    def save(self, training_id, shortname, comment="", logger=None):
+        import subprocess, tempfile
+        from M0_auth_config import GLOBAL_OPTS
+        base_path = model_path(training_id, shortname)
+        fs = _get_fs()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # 1. Weights
+            np.savez(os.path.join(tmpdir, 'weights.npz'), **self._saved_vars)
+
+            # 2. Metadata
+            hp = {
+                'training_id':  training_id,
+                'shortname':    shortname,
+                'country':      CONFIG['country'],
+                'sensor':       GLOBAL_OPTS['SENSOR'],
+                'bands_input':  getattr(self, '_bands_input', CONFIG['bands_model_default']),
+                'bands_config': getattr(self, '_bands_config', {}), # Nova configuração multisensor
+                'num_input':    self.num_input,
+                'layers':       self.layers,
+                'lr':           self.lr,
+                'training_date': datetime.now().isoformat(),
+                'norm_stats':   {str(k): list(v) for k, v in self.norm_stats.items()},
+                'history':      self._history,
+                'sample_collections': getattr(self, '_sample_collections', []),
+                'sample_count': getattr(self, '_sample_count', {}),
+                'comment':      comment,
+                'rating':       0, 
+            }
+            with open(os.path.join(tmpdir, 'metadata.json'), 'w') as f:
+                json.dump(hp, f, indent=2)
+
+            for fname in ['weights.npz', 'metadata.json']:
+                src  = os.path.join(tmpdir, fname)
+                dest = f"{CONFIG['bucket']}/{base_path}/{fname}"
+                fs.put(src, dest)
+            
+            # 2.5 Metrics
+            if logger: logger("Generación y guardado de métricas de evaluación...", "info")
+            cm, rep = self.evaluate()
+            
+            # --- NOTA IA AUTOMÁTICA (Baseada em regras técnicas) ---
+            acc = rep.get('accuracy', 0)
+            f1_fire = rep.get('1', {}).get('f1-score', 0)
+            auto_rating = 1
+            if f1_fire > 0.90 and acc > 0.95: auto_rating = 5
+            elif f1_fire > 0.80 and acc > 0.90: auto_rating = 4
+            elif f1_fire > 0.70 and acc > 0.85: auto_rating = 3
+            elif f1_fire > 0.50: auto_rating = 2
+
+            # --- SNAPSHOT DE DIAGNÓSTICO E t-SNE PARA CARGA INSTANTÂNEA ---
+            try:
+                from sklearn.decomposition import PCA
+                idx_snap = np.random.choice(len(self._X_raw), min(800, len(self._X_raw)), replace=False)
+                emb_snap = self.get_embeddings(self._X_raw[idx_snap])
+                prd_snap = self.predict(self._X_raw[idx_snap])
+                pca_snap = PCA(n_components=3); coords_pca = pca_snap.fit_transform(emb_snap)
+                diag_snapshot = {
+                    'pca_coords': coords_pca.tolist(),
+                    'tsne_coords': getattr(self, 'tsne_snapshot', None), 
+                    'preds': prd_snap.flatten().tolist(),
+                    'y_true': self._y_raw[idx_snap].flatten().tolist()
+                }
+            except Exception as e_snap:
+                if logger: logger(f"[AVISO] No se pudo generar snapshot: {e_snap}", "info")
+                diag_snapshot = None
+
+            metrics = {
+                'confusion_matrix': cm.tolist(),
+                'classification_report': rep,
+                'diagnostic_snapshot': diag_snapshot,
+                'auto_rating': auto_rating, # Nova Nota IA
+                'generated_at': datetime.now().isoformat()
+            }
+            with open(os.path.join(tmpdir, 'metrics.json'), 'w') as f:
+                json.dump(metrics, f, indent=2)
+            fs.put(os.path.join(tmpdir, 'metrics.json'), f"{CONFIG['bucket']}/{base_path}/metrics.json")
+            
+            # --- 2.7 TensorBoard Projector Files (Auto-Snapshot) ---
+            try:
+                # Gerar arquivos do Projector usando a última amostra de treino (X_raw)
+                self.save_projector_files(training_id, shortname, self._X_raw, self._y_raw, logger=logger)
+            except Exception as e_proj:
+                if logger: logger(f"[AVISO] Nota: No se pudo gerar archivos del Projector: {e_proj}", "info")
+
+            # --- 2.8 Iteration History (Snapshots) ---
+            if hasattr(self, 'snapshot_dir') and self.snapshot_dir and os.path.exists(self.snapshot_dir):
+                if logger: logger("Sincronizando historial de iteraciones com GCS...", "info")
+                # Sincroniza PNGs (legado/preview) e o novo snapshots_data.npz
+                all_files = [f for f in os.listdir(self.snapshot_dir) if f.endswith('.png') or f == 'snapshots_data.npz']
+                for sf in all_files:
+                    src_sf = os.path.join(self.snapshot_dir, sf)
+                    dest_sf = f"{CONFIG['bucket']}/{base_path}/history/{sf}"
+                    fs.put(src_sf, dest_sf)
+
+            # 3. Extracted Pixels
+            if logger: logger("Guardar una matriz de píxeles en GCS...", "info")
+            np.save(os.path.join(tmpdir, 'X_data.npy'), self._X_raw)
+            np.save(os.path.join(tmpdir, 'y_data.npy'), self._y_raw)
+            
+            for fname in ['X_data.npy', 'y_data.npy']:
+                src  = os.path.join(tmpdir, fname)
+                dest = f"{CONFIG['bucket']}/{base_path}/extracted_pixels/{fname}"
+                fs.put(src, dest)
+                
+        # 4. Copy samples
+        if logger: logger("Copiar archivos CSV de las muestras para su almacenamiento...", "info")
+        collections = getattr(self, '_sample_collections', [])
+        for coll in collections:
+            campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
+            src = gcs_path(f"{CONFIG['gcs_library_samples']}/{campaign}/{coll}.csv")
+            dest = gcs_path(f"{base_path}/samples/{coll}.csv")
+            subprocess.run(['gsutil', 'cp', src, dest], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        return hp
+
+    @staticmethod
+    def update_model_metadata(training_id, shortname, updates):
+        """Atualiza campos específicos do metadata.json no GCS."""
+        import json, subprocess, tempfile
+        from M0_auth_config import gcs_path
+        base_path = model_path(training_id, shortname)
+        fs = _get_fs()
+        
+        try:
+            # 1. Download atual
+            path = f"{base_path}/metadata.json"
+            with fs.open(path, 'r') as f:
+                hp = json.load(f)
+            
+            # 2. Aplicar updates
+            hp.update(updates)
+            
+            # 3. Upload novo
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_file = os.path.join(tmpdir, 'metadata.json')
+                with open(tmp_file, 'w') as f:
+                    json.dump(hp, f, indent=2)
+                fs.put(tmp_file, f"{CONFIG['bucket']}/{path}")
+            return True
+        except Exception as e:
+            print(f"[ERRO] Erro ao atualizar metadados: {e}")
+            return False
+
+
+# ─── INTERFAZ PREMIUM ─────────────────────────────────────────────────────────
+
+# --- VIEW_ANALYTICS UNIFICADA ---
+        
+def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=None, save_path=None, viz_config=None):
+    """
+    Motor gráfico unificado para o grid 2x3 (Treino e Histórico).
+    viz_config: dict com flags de visibilidade.
+    """
+    if viz_config is None:
+        viz_config = {k: True for k in ['cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d', 'pca3d_static', 'tsne3d_static']}
+    from sklearn.metrics import confusion_matrix, precision_recall_curve, average_precision_score
+    from sklearn.decomposition import PCA
+    import matplotlib.pyplot as plt
+
+    try:
+        y_true_f = y_true.flatten() if len(y_true) > 0 else np.array([])
+        preds_f = preds.flatten() if len(preds) > 0 else np.array([])
+        if len(y_true_f) > 0:
+            cm = confusion_matrix(y_true_f, (preds_f > 0.5).astype(int))
+            cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        else:
+            cm = np.zeros((2,2)); cm_norm = np.zeros((2,2))
+    except:
+        cm = np.zeros((2,2)); cm_norm = np.zeros((2,2))
+
+    # Determina quais subplots mostrar
+    active_plots = []
+    for k in ['cm', 'history', 'pca2d', 'prob', 'pr']:
+        if viz_config.get(k): active_plots.append(k)
+    
+    # Expandir para 4 ângulos estáticos se solicitado
+    for k in ['pca3d_static', 'tsne3d_static']:
+        if viz_config.get(k):
+            for i in range(4): active_plots.append(f"{k}_{i}")
+    
+    if not active_plots: return
+
+    n = len(active_plots)
+    
+    # --- MATRIZ AUTO-AJUSTÁVEL (Lógica Progressiva) ---
+    if n == 1:
+        rows, cols = 1, 1
+    else:
+        for r in range(1, 10):
+            # 2 gráficos = 1x2, 5-6 gráficos = 2x3, etc.
+            if r * (r + 1) >= n:
+                rows, cols = r, r + 1
+                break
+            # 3-4 gráficos = 2x2, 7-9 gráficos = 3x3, etc.
+            if (r + 1) * (r + 1) >= n:
+                rows, cols = r + 1, r + 1
+                break
+    
+    fig = plt.figure(figsize=(18, 4.5 * rows))
+    
+    for idx, ptype in enumerate(active_plots):
+        if ptype == 'cm':
+            ax = fig.add_subplot(rows, cols, idx + 1)
+            ax.matshow(cm_norm, cmap='Blues', alpha=0.8, vmin=0, vmax=1)
+            for (i, j), z in np.ndenumerate(cm):
+                ax.text(j, i, f"{z:,}\n({cm_norm[i,j]:.1%})", ha='center', va='center', weight='bold', color='black' if cm_norm[i,j] < 0.5 else 'white')
+            ax.set_title('Matriz de Confusión (%)', pad=15, weight='bold')
+            ax.set_xticks([0, 1]); ax.set_yticks([0, 1])
+            ax.set_xticklabels(['No-fuego', 'Fuego']); ax.set_yticklabels(['No-fuego', 'Fuego'])
+
+        elif ptype == 'history':
+            if history and 'steps' in history and len(history['steps']) > 0:
+                ax = fig.add_subplot(rows, cols, idx + 1)
+                ax.plot(history['steps'], history['acc'], color='#28a745', label='Acc', linewidth=2)
+                if 'val_acc' in history: ax.plot(history['steps'], history['val_acc'], color='#28a745', label='Val', linestyle='--', alpha=0.6)
+                ax.set_ylabel('Acurácia', color='#28a745', weight='bold')
+                axb = ax.twinx()
+                axb.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
+                axb.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
+                ax.set_title('Evolución Histórica', weight='bold')
+                ax.grid(True, linestyle='--', alpha=0.3)
+
+        elif ptype == 'pca2d':
+            coords2 = None
+            if coords_override is not None: coords2 = coords_override[:, :2]
+            elif embeds is not None:
+                try: pca = PCA(n_components=2); coords2 = pca.fit_transform(embeds)
+                except: pass
+            if coords2 is not None:
+                ax = fig.add_subplot(rows, cols, idx + 1)
+                ax.scatter(coords2[:, 0], coords2[:, 1], c=preds_f, cmap='RdYlBu_r', s=25, alpha=0.7, edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
+                ax.set_title('Proyección Latente 2D', weight='bold', fontsize=10)
+                ax.set_xticks([]); ax.set_yticks([])
+
+        elif ptype == 'prob':
+            ax = fig.add_subplot(rows, cols, idx + 1)
+            if len(preds_f) > 0 and len(y_true_f) > 0:
+                ax.hist(preds_f[y_true_f==0], bins=30, alpha=0.5, color='#007bff', label='No-Fuego', density=True)
+                ax.hist(preds_f[y_true_f==1], bins=30, alpha=0.5, color='#ff4d4d', label='Fuego', density=True)
+            ax.set_title('Distribución de Probabilidades', weight='bold', fontsize=10)
+            ax.set_xlabel('Confianza'); ax.legend(fontsize=8); ax.grid(True, alpha=0.2)
+
+        elif ptype == 'pr':
+            try:
+                precision, recall, _ = precision_recall_curve(y_true_f, preds_f)
+                ap_score = average_precision_score(y_true_f, preds_f)
+                ax = fig.add_subplot(rows, cols, idx + 1)
+                ax.plot(recall, precision, color='#17a2b8', linewidth=2, label=f'AP={ap_score:.3f}')
+                ax.fill_between(recall, precision, alpha=0.2, color='#17a2b8')
+                ax.set_title('Curva Precision-Recall', weight='bold', fontsize=10)
+                ax.set_xlabel('Recall'); ax.legend(loc='lower left', fontsize=8); ax.grid(True, alpha=0.3)
+            except: pass
+
+        elif '3d_static' in ptype:
+            from mpl_toolkits.mplot3d import Axes3D
+            is_pca = 'pca' in ptype
+            angle_idx = int(ptype.split('_')[-1])
+            angles = [(20, 45), (20, 135), (20, 225), (20, 315)]
+            elev, azim = angles[angle_idx]
+            
+            coords3 = None
+            if coords_override is not None and coords_override.shape[1] >= 3: 
+                coords3 = coords_override[:, :3]
+            elif is_pca and embeds is not None:
+                try: pca = PCA(n_components=3); coords3 = pca.fit_transform(embeds)
+                except: pass
+            
+            if coords3 is not None:
+                ax = fig.add_subplot(rows, cols, idx + 1, projection='3d')
+                ax.scatter(coords3[:, 0], coords3[:, 1], coords3[:, 2], c=preds_f, cmap='RdYlBu_r', s=10, alpha=0.6)
+                ax.view_init(elev=elev, azim=azim)
+                t = "PCA 3D" if is_pca else "t-SNE 3D"
+                ax.set_title(f"{t} (Ang {azim}°)", fontsize=9, weight='bold')
+                ax.set_xticks([]); ax.set_yticks([]); ax.set_zticks([])
+
+    plt.tight_layout()
+    if not save_path:
+        display(fig)
+    plt.close(fig)
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, dpi=100, bbox_inches='tight')
+
+def render_model_card_html(hp, metrics, only_header=False):
+    """Gera o HTML do card de metadados sem emojis."""
+    style = """
+    <style>
+        .dash-card-header { background: #2c3e50; color: white; padding: 10px 15px; font-size: 14px; font-weight: bold; border-radius: 8px 8px 0 0; border: 1px solid #2c3e50; }
+        .dash-card-body { border: 1px solid #dee2e6; border-top: none; background: white; padding: 15px; font-family: sans-serif; }
+        .meta-text { margin: 3px 0; font-size: 12px; color: #444; }
+        .meta-label { font-weight: bold; color: #222; width: 110px; display: inline-block; }
+    </style>
+    """
+    if only_header:
+        return f"{style}<div class='dash-card-header'>Ficha del modelo: {hp.get('training_id')} / {hp.get('shortname')}</div>"
+    
+    date_str = hp.get('training_date', 'Entrenando...')
+    if date_str and 'T' in date_str: date_str = date_str[:16].replace('T', ' ')
+    
+    html_content = f"""
+    {style}
+    <div class="dash-card-body">
+        <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+            <div style="flex: 2; min-width: 300px;">
+                <p class="meta-text"><span class="meta-label">Estado/Fecha:</span> {date_str}</p>
+                <p class="meta-text"><span class="meta-label">Muestras:</span> {', '.join(hp.get('sample_collections', []))}</p>
+                <p class="meta-text"><span class="meta-label">Bandas:</span> {', '.join([f"{b} ({hp.get('bands_config', {}).get(b, {}).get('sensor', 'N/A').upper()})" for b in hp.get('bands_input', [])])}</p>
+                <p class="meta-text"><span class="meta-label">Capas:</span> {hp.get('layers')} | <b>LR:</b> {hp.get('lr')}</p>
+                <p class="meta-text"><span class="meta-label">Píxeles:</span> {hp.get('sample_count', {}).get('burned', 0)} (F) | {hp.get('sample_count', {}).get('not_burned', 0)} (NF)</p>
+                <div style="margin-top:8px; padding:8px; background:#fff3cd; border-radius:4px; border:1px solid #ffeeba;">
+                    <p class="meta-text" style="color:#856404; font-weight:bold; margin-bottom:3px;">Comentario:</p>
+                    <p class="meta-text" style="color:#856404; font-style:italic;">{hp.get('comment', 'Sin comentarios.')}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+    return html_content
+
+def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=None, epoch_index=None):
+    """
+    Visualiza as métricas e o card de um modelo salvo no GCS.
+    viz_config: dict opcional com flags de visibilidade.
+    epoch_index: índice da época para renderizar dados passados (Time Machine).
+    """
+    if viz_config is None:
+        viz_config = {k: True for k in ['title', 'scores', 'cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d', 'tsne3d']}
+    
+    fs = _get_fs()
+    from M0_auth_config import CONFIG
+    try:
+        import urllib.parse
+        m_path = model_info['path']
+        m_path = urllib.parse.unquote(m_path)
+        clean_path = m_path.replace('gs://', '').replace('mapbiomas-fire/', '').lstrip('/')
+        if 'b/' in clean_path and '/o/' in clean_path: clean_path = clean_path.split('/o/')[-1]
+        
+        # 1. Carrega Metadados e Métricas Base
+        with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f: hp = json.load(f)
+        try:
+            with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
+        except: metrics = {}
+
+        # 2. Carrega Dados de Snapshots para o Time Machine se solicitado
+        snap_data = None
+        if epoch_index is not None:
+            try:
+                with fs.open(f"{CONFIG['bucket']}/{clean_path}/history/snapshots_data.npz", 'rb') as f:
+                    snap_data = dict(np.load(f, allow_pickle=True))
+            except:
+                pass # Se não existir, usa os dados finais das métricas
+
+        def _render_content():
+            try:
+                import __main__
+                ui = getattr(__main__, 'ui', None)
+            except: ui = None
+
+            # --- SISTEMA DE RATINGS (KPIs COMPACTOS) ---
+            h_rating = hp.get('rating', 0)
+            a_rating = metrics.get('auto_rating', 0)
+            rep = metrics.get('classification_report', {})
+            
+            # --- OVERRIDE DE DADOS SE EPOCH_INDEX ATIVO ---
+            preds_final = np.array(metrics.get('diagnostic_snapshot', {}).get('preds', []))
+            y_true_final = np.array(metrics.get('diagnostic_snapshot', {}).get('y_true', []))
+            pca_coords_final = np.array(metrics.get('diagnostic_snapshot', {}).get('pca_coords', []))
+            tsne_coords_final = np.array(metrics.get('diagnostic_snapshot', {}).get('tsne_coords', []))
+            
+            if snap_data and f'preds_{epoch_index}' in snap_data:
+                preds_final = snap_data[f'preds_{epoch_index}']
+                y_true_final = snap_data['y_true']
+                embeds_step = snap_data[f'embeds_{epoch_index}']
+                # Re-calcula PCA simples para o Time Machine (CPU-bound mas rápido para poucas amostras)
+                from sklearn.decomposition import PCA
+                pca_tmp = PCA(n_components=3)
+                pca_coords_final = pca_tmp.fit_transform(embeds_step)
+                tsne_coords_final = None # t-SNE é muito lento para recalcular no slider
+            
+            # --- KPI BUILDER ---
+            def make_kpi_card(title, value, color, icon=None):
+                icon_html = f"<i class='fa fa-{icon}' style='margin-right:5px; opacity:0.5;'></i>" if icon else ""
+                return widgets.HTML(f"""
+                <div class="kpi-box" style="border-left: 5px solid {color}; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); flex: 1; min-width: 120px;">
+                    <div style="font-size: 10px; color: #7f8c8d; text-transform: uppercase; font-weight: bold; margin-bottom: 2px;">{title}</div>
+                    <div style="font-size: 18px; font-weight: bold; color: #2c3e50;">{icon_html}{value}</div>
+                </div>
+                """)
+
+            kpi_acc = make_kpi_card("Accuracy", f"{rep.get('accuracy', 0):.1%}", "#2c3e50", icon="crosshairs")
+            kpi_prec = make_kpi_card("Precision", f"{rep.get('1', {}).get('precision', 0):.1%}", "#8e44ad", icon="bullseye")
+            kpi_rec = make_kpi_card("Recall", f"{rep.get('1', {}).get('recall', 0):.1%}", "#e67e22", icon="search-plus")
+            kpi_f1 = make_kpi_card("F1-Score", f"{rep.get('1', {}).get('f1-score', 0):.1%}", "#16a085", icon="balance-scale")
+            kpi_auto = make_kpi_card("Nota IA", f"{a_rating}/5", "#34495e", icon="flash")
+
+            # Nota Humana Interativa no KPI
+            user_stars_container = widgets.HBox([], layout=widgets.Layout(margin='0', align_items='center'))
+            def _show_stars():
+                btns = []
+                for i in range(1, 6):
+                    btn = widgets.Button(description="" if i <= h_rating else "", 
+                                       layout=widgets.Layout(width='22px', height='22px', margin='0', padding='0'),
+                                       style={'button_color': '#f1c40f' if i <= h_rating else '#fff'})
+                    def _hnd_click(b, val=i):
+                        btn_ok = widgets.Button(description="OK", layout=widgets.Layout(width='35px', height='22px'), button_style='success')
+                        btn_no = widgets.Button(description="X", layout=widgets.Layout(width='25px', height='22px'), button_style='danger')
+                        def _do_ok(_):
+                            user_stars_container.children = [widgets.HTML("<i class='fa fa-spinner fa-spin'></i>")]
+                            if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
+                                if ui: ui._refresh_models_list()
+                                hp['rating'] = val; _show_stars()
+                            else: _show_stars()
+                        btn_ok.on_click(_do_ok); btn_no.on_click(lambda _: _show_stars())
+                        user_stars_container.children = [btn_no, btn_ok]
+                    btn.on_click(_hnd_click); btns.append(btn)
+                user_stars_container.children = btns
+
+            _show_stars()
+            kpi_human_box = widgets.VBox([
+                widgets.HTML("<div style='font-size: 10px; color: #7f8c8d; text-transform: uppercase; font-weight: bold; margin-bottom: 2px;'>Nota Humana</div>"),
+                user_stars_container
+            ], layout=widgets.Layout(background='white', padding='10px', border_left='5px solid #f1c40f', border_radius='4px', box_shadow='0 2px 4px rgba(0,0,0,0.08)', flex='1.5'))
+
+            unified_grid = widgets.HBox(
+                [kpi_acc, kpi_prec, kpi_rec, kpi_f1, kpi_auto, kpi_human_box],
+                layout=widgets.Layout(gap='8px', margin='10px 0', width='100%', flex_wrap='wrap')
+            )
+
+            # --- CARD HEADER & BODY ---
+            display(HTML(render_model_card_html(hp, metrics, only_header=True)))
+            if viz_config.get('title'):
+                display(HTML(render_model_card_html(hp, metrics)))
+            
+            if viz_config.get('scores'):
+                display(unified_grid)
+
+            # --- CICLO DE VIDA (GESTÃO OPCIONAL) ---
+            if viz_config.get('management'):
+                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'> Gestión del Ciclo de Vida</h4>"))
+                def _set_intent(mode):
+                    def __h(_):
+                        if ui:
+                            ui.retrain_intent = {'mode': mode, 'hp': hp}
+                            ui._load_config_into_widgets(hp)
+                            ui.tab.selected_index = 1 # Novo Treino
+                    return __h
+
+                btn_retr = widgets.Button(description="Retreinar", icon="refresh", layout=widgets.Layout(width='120px'), button_style='info')
+                btn_reex = widgets.Button(description="Re-extraer", icon="database", layout=widgets.Layout(width='120px'), button_style='info')
+                btn_borr = widgets.Button(description="Limpiar&Ret", icon="trash", layout=widgets.Layout(width='130px'), button_style='danger')
+                btn_retr.on_click(_set_intent('retrain')); btn_reex.on_click(_set_intent('re-extract')); btn_borr.on_click(_set_intent('borrar'))
+
+                # Botão de Deletar com Countdown
+                del_out = widgets.Output()
+                def _show_del_btn():
+                    del_out.clear_output()
+                    btn_del = widgets.Button(description="Deletar Modelo", icon="trash", layout=widgets.Layout(width='140px'), button_style='danger')
+                    def _on_del_click(_):
+                        import threading
+                        btn_conf = widgets.Button(description="Confirmar!", button_style='warning', layout=widgets.Layout(width='100px'))
+                        btn_canc = widgets.Button(description="X", button_style='info', layout=widgets.Layout(width='30px'))
+                        msg = widgets.HTML("<span style='color:red; font-size:10px; margin-left:5px;'>5s</span>")
+                        del_out.clear_output()
+                        with del_out: display(widgets.HBox([btn_conf, btn_canc, msg]))
+                        stop = [False]
+                        def _do_conf(_):
+                            stop[0] = True
+                            del_out.clear_output()
+                            with del_out: display(widgets.HTML("<i>Borrando...</i>"))
+                            ModelTrainer.delete_model(hp['training_id'], hp['shortname'])
+                            if ui: 
+                                ui.selected_models.pop(hp['training_id'], None)
+                                ui._update_canvas()
+                        btn_conf.on_click(_do_conf); btn_canc.on_click(lambda _: _show_del_btn())
+                        def _timer():
+                            for i in range(5, 0, -1):
+                                if stop[0]: return
+                                msg.value = f"<span style='color:red; font-size:10px; margin-left:5px;'>{i}s</span>"; time.sleep(1)
+                            if not stop[0]: _do_conf(None)
+                        threading.Thread(target=_timer, daemon=True).start()
+                    btn_del.on_click(_on_del_click)
+                    with del_out: display(btn_del)
+                _show_del_btn()
+
+                display(widgets.HBox([btn_retr, btn_reex, btn_borr, widgets.HTML("<div style='width:20px'></div>"), del_out], 
+                                    layout=widgets.Layout(margin='5px 0 15px 0', align_items='center')))
+
+            # --- GRUPOS DE GRÁFICOS ---
+            # 1. MÉTRICAS CLÁSSICAS (Incluindo Estáticas 3D)
+            classic_keys = ['cm', 'history', 'prob', 'pr', 'pca3d_static', 'tsne3d_static']
+            if any(viz_config.get(k) for k in classic_keys):
+                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px;'> Métricas Clásicas y Proyecciones Estáticas</h4>"))
+                
+                # Trunca o histórico caso o slider de tempo esteja ativado
+                history_data = hp.get('history', {})
+                if history_data and epoch_index is not None and 'steps' in history_data:
+                    try:
+                        limit = epoch_index + 1
+                        history_data = {k: v[:limit] for k, v in history_data.items()}
+                    except: pass
+                    
+                render_diagnostic_dashboard(history_data, None, preds_final, y_true_final, 
+                                          coords_override=tsne_coords_final if viz_config.get('tsne3d_static') else (pca_coords_final if viz_config.get('pca3d_static') or viz_config.get('pca2d') else None), 
+                                          viz_config=viz_config)
+
+            # 2. ESPAÇO LATENTE (INTERATIVO SIDE-BY-SIDE)
+            latent_keys = ['pca3d', 'tsne3d']
+            if any(viz_config.get(k) for k in latent_keys):
+                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'> Espacio Latente Interactivo</h4>"))
+                import plotly.graph_objects as go
+                fire_colorscale = [[0, '#2c3e50'], [0.5, '#bdc3c7'], [1, '#e67e22']]
+                
+                out_pca = widgets.Output(layout=widgets.Layout(width='50%'))
+                out_tsne = widgets.Output(layout=widgets.Layout(width='50%'))
+                display(widgets.HBox([out_pca, out_tsne], layout=widgets.Layout(width='100%')))
+
+                if viz_config.get('pca3d') and pca_coords_final is not None and len(pca_coords_final) > 0:
+                    fig_pca = go.Figure(data=[go.Scatter3d(
+                        x=pca_coords_final[:,0], y=pca_coords_final[:,1], z=pca_coords_final[:,2], mode='markers',
+                        marker=dict(size=3, color=preds_final, colorscale=fire_colorscale, opacity=0.7),
+                        text=[f"Real: {l}<br>Pred: {p:.2%}" for l, p in zip(y_true_final, preds_final)]
+                    )])
+                    fig_pca.update_layout(title="PCA 3D Interactive", margin=dict(l=0, r=0, b=0, t=30), height=400)
+                    with out_pca: display(HTML(fig_pca.to_html(include_plotlyjs=True, full_html=False)))
+
+                if viz_config.get('tsne3d') and tsne_coords_final is not None and len(tsne_coords_final) > 0:
+                    fig_tsne = go.Figure(data=[go.Scatter3d(
+                        x=tsne_coords_final[:,0], y=tsne_coords_final[:,1], z=tsne_coords_final[:,2], mode='markers',
+                        marker=dict(size=3, color=preds_final, colorscale=fire_colorscale, opacity=0.7),
+                        text=[f"Real: {l}<br>Pred: {p:.2%}" for l, p in zip(y_true_final, preds_final)]
+                    )])
+                    fig_tsne.update_layout(title="t-SNE 3D Interactive", margin=dict(l=0, r=0, b=0, t=30), height=400)
+                    with out_tsne: display(HTML(fig_tsne.to_html(include_plotlyjs=True, full_html=False)))
+
+            # --- TENSORBOARD PROJECTOR ---
+            # (Opcional: Adicionar links se necessário)
+
+        if out_widget:
+            if clear_before: out_widget.clear_output(wait=True)
+            with out_widget: _render_content()
+        else:
+            _render_content()
+    except Exception as e:
+        msg = f"[ERRO] Erro ao carregar analíticos: {e}"
+        if out_widget:
+            with out_widget: print(msg)
+        else: print(msg)
+
+
+
+
 class ModelTrainerUI(PipelineStepUI):
     def __init__(self):
         super().__init__(
@@ -1204,8 +2360,8 @@ def start_training(ui):
     except Exception as e:
         print(f"Error al guardar: {e}")
 
+
 def run_ui():
     ui = ModelTrainerUI()
     ui.display()
     return ui
-
