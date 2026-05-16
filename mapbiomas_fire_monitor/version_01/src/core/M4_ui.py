@@ -8,7 +8,7 @@ from M_cache import _get_fs
 from M_ui_components import PipelineStepUI
 
 from M4_data_extractor import extract_pixels_from_gcs, list_sample_collections_gcs, list_campaigns_gcs
-from M4_algorithms_dnn import ModelTrainer, _get_tf, TF_AVAILABLE, TF_ERROR
+from M4_algorithms_dnn import ModelTrainer, _get_tf
 from M4_analytics import view_analytics, render_diagnostic_dashboard, render_model_card_html
 from M4_hub_manager import list_trained_models, _load_m4_cache, _save_m4_cache
 class ModelTrainerUI(PipelineStepUI):
@@ -1010,13 +1010,12 @@ class ModelTrainerUI(PipelineStepUI):
             display(grid)
 
 def start_training(ui):
-    _get_tf() # Garante que TF_AVAILABLE foi definido
-    if not TF_AVAILABLE:
+    tf_avail = _get_tf()
+    if tf_avail is None:
         print("\n" + "="*70)
         print(" [AVISO] AMBIENTE LOCAL INCOMPATIBLE")
         print(" O seu processador não possui as instruções AVX/AVX2 requeridas pelo TensorFlow.")
         print(" POR FAVOR: Execute este treinamento no Google Colab.")
-        if TF_ERROR: print(f" Detalhes: {TF_ERROR}")
         print("="*70 + "\n")
         return
     # -----------------------------------------------------------------
