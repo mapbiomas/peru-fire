@@ -15,7 +15,10 @@ def _get_tf():
     
     try:
         import tensorflow.compat.v1 as _tf
-        _tf.compat.v1.disable_v2_behavior()
+        try:
+            _tf.compat.v1.disable_v2_behavior()
+        except Exception:
+            pass
         globals()['tf'] = _tf
         TF_AVAILABLE = True
         return _tf
