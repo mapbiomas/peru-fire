@@ -46,8 +46,7 @@ def run_m5_queue(send=None):
             
             try:
                 with out:
-                    print(f"
-Iniciando clasificación regional: [{job['id']}]")
+                    print(f"Iniciando clasificación regional: [{job['id']}]")
                 
                 _process_job(job, out)
                 
@@ -67,13 +66,11 @@ Iniciando clasificación regional: [{job['id']}]")
 
     # --- FASE 2: UPLOAD GEE ---
     if upload_jobs and 'upload' in send:
-        with out: print("
---- INICIANDO FASE DE UPLOAD AL GEE ---")
+        with out: print("--- INICIANDO FASE DE UPLOAD AL GEE ---")
         queue = load_queue() # Recarrega caso a fase 1 tenha alterado
         for job in upload_jobs:
             try:
-                with out: print(f"
-Iniciando subida al GEE: [{job['id']}]")
+                with out: print(f"Iniciando subida al GEE: [{job['id']}]")
                 _upload_job_to_gee(job, out)
                 
                 # Desmarca a flag para não subir novamente atoa na próxima
