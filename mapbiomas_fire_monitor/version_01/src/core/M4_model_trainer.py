@@ -1712,7 +1712,9 @@ class ModelTrainerUI(PipelineStepUI):
         used_ids = set()
         import re
         for m in models:
-            match = re.search(r'training_(\d{3})', m['training_id'])
+            # Garante compatibilidade caso o cache ainda tenha o formato antigo
+            m_id = m if isinstance(m, str) else m.get('training_id', '')
+            match = re.search(r'training_(\d{3})', m_id)
             if match:
                 used_ids.add(int(match.group(1)))
         
