@@ -164,7 +164,7 @@ def _get_region_cells(region_name):
         region_fc = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(ee.Filter.eq('ADM0_NAME', 'Peru'))
     else:
         # Usa o asset de regiões configurado e filtra pela coluna name
-        region_fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.eq('name', region_name))
+        region_fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.eq('region_nam', region_name))
         
     intersected = cim.filterBounds(region_fc.geometry())
     
