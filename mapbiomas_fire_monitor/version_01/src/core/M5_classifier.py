@@ -2,7 +2,6 @@ import os
 import json
 import time
 import rasterio
-import numpy as np
 import tensorflow as tf
 from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs, _gcs_models_base
 
@@ -119,28 +118,14 @@ def _process_job(job, out):
     total_cells = len(cells)
     with out: print(f"Se encontraron {total_cells} celdas (tiles) para procesar.")
     
-    # 3. Cargar el Modelo de IA a RAM (desde pesos numpy + metadata)
-    local_weights = f"/tmp/{model_id}.npz"
-    if not os.path.exists(local_weights):
-        with out: print(f"Descargando pesos del modelo desde GCS...")
-        fs.get(f"{model_dir}/weights.npz", local_weights)
+    # 3. Cargar el Modelo de IA a RAM (.keras exportado por M4)
+    local_model = f"/tmp/{model_id}.keras"
+    if not os.path.exists(local_model):
+        with out: print(f"Descargando modelo Keras desde GCS...")
+        fs.get(f"{model_dir}/model.keras", local_model)
     
     with out: print("Cargando modelo en memoria (TensorFlow)...")
-    layers = meta.get('layers', [64, 32])
-    num_input = meta.get('num_input', len(bands_config))
-    
-    model = tf.keras.Sequential(name=model_id)
-    model.add(tf.keras.layers.Input(shape=(num_input,), name='x'))
-    for i, n_units in enumerate(layers):
-        model.add(tf.keras.layers.Dense(n_units, activation='relu', name=f'fc_{i}'))
-    model.add(tf.keras.layers.Dense(1, activation='sigmoid', name='output'))
-    
-    weights_dict = dict(np.load(local_weights))
-    layer_names = [f'fc_{i}' for i in range(len(layers))] + ['output']
-    for ln in layer_names:
-        kernel = weights_dict[f'{ln}/kernel:0']
-        bias = weights_dict[f'{ln}/bias:0']
-        model.get_layer(ln).set_weights([kernel, bias])
+    model = tf.keras.models.load_model(local_model)
     
     # 4. Bucle de Procesamiento con Checkpoint Local
     queue = load_queue() # Recarrega para salvar progresso
