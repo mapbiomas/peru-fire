@@ -259,7 +259,9 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
             else:
                 rel_folder = yearly_cog_path(y, mosaic=m_type, sensor=s_name)
             
-            m_file_name = f"{mosaic_name(y, m, periodicity, band=b, mosaic=m_type, sensor=s_name)}_cog.tif"
+            # O arquivo real no GCS é sensível a maiúsculas (Case Sensitive)
+            b_correct = 'dayOfYear' if b.lower() == 'dayofyear' else b
+            m_file_name = f"{mosaic_name(y, m, periodicity, band=b_correct, mosaic=m_type, sensor=s_name)}_cog.tif"
             band_paths[b] = f"gs://{CONFIG['bucket']}/{rel_folder}/{m_file_name}"
 
         if missing_bands:
