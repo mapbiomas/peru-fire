@@ -25,18 +25,16 @@ class M5QueueUI:
         
         # --- WIDGETS ---
         self.w_model = widgets.Dropdown(description='Modelo:', style={'description_width': '80px'}, layout=widgets.Layout(width='300px'))
-        self.w_region = widgets.Combobox(
-            placeholder='Ej: Peru, Amazonia, Cerrado',
+        self.w_region = widgets.SelectMultiple(
             options=['Peru', 'Amazonia', 'Cerrado', 'Pantanal'],
-            description='Región:',
-            ensure_option=False,
+            description='Regiones:',
             style={'description_width': '80px'},
-            layout=widgets.Layout(width='300px')
+            layout=widgets.Layout(width='300px', height='120px')
         )
-        self.w_year = widgets.Dropdown(description='Año:', style={'description_width': '80px'}, layout=widgets.Layout(width='150px'))
-        self.w_month = widgets.Dropdown(description='Mes:', options=[('Anual', 0)] + [(str(m), m) for m in range(1, 13)], style={'description_width': '80px'}, layout=widgets.Layout(width='150px'))
+        self.w_year = widgets.SelectMultiple(description='Años:', style={'description_width': '80px'}, layout=widgets.Layout(width='150px', height='120px'))
+        self.w_month = widgets.SelectMultiple(description='Meses:', options=[('Anual', 0)] + [(str(m), m) for m in range(1, 13)], style={'description_width': '80px'}, layout=widgets.Layout(width='150px', height='120px'))
         
-        self.btn_add = widgets.Button(description='Añadir a la Cola', button_style='primary', icon='plus', layout=widgets.Layout(width='180px'))
+        self.btn_add = widgets.Button(description='Añadir Lote a la Cola', button_style='primary', icon='plus', layout=widgets.Layout(width='200px'))
         self.btn_add.on_click(self._on_add_click)
         
         self.btn_refresh = widgets.Button(description='Actualizar Vista', icon='refresh', layout=widgets.Layout(width='150px'))
@@ -65,40 +63,50 @@ class M5QueueUI:
 
     def _on_add_click(self, b):
         model = self.w_model.value
-        region = self.w_region.value
-        year = self.w_year.value
-        month = self.w_month.value
+        regions = self.w_region.value
+        years = self.w_year.value
+        months = self.w_month.value
         
-        if not model or not region:
+        if not model or not regions or not years or not months:
             with self.out_msg:
                 clear_output()
-                display(HTML("<b style='color:red;'>⚠️ Seleccione Modelo y Región.</b>"))
+                display(HTML("<b style='color:red;'>⚠️ Seleccione Modelo y al menos una Región, un Año y un Mes.</b>"))
             return
             
-        period = f"{year}_{month:02d}" if month > 0 else f"{year}"
-        job_id = f"{model} | {region} | {period}"
-        
-        # Check if already in queue
-        for job in self.queue:
-            if job['id'] == job_id:
-                with self.out_msg:
-                    clear_output()
-                    display(HTML(f"<b style='color:orange;'>⚠️ La tarea [{job_id}] ya está en la cola.</b>"))
-                return
-                
-        self.queue.append({
-            'id': job_id,
-            'model': model,
-            'region': region,
-            'period': period,
-            'status': 'PENDING',
-            'progress': '0%'
-        })
+        added = 0
+        for r in regions:
+            for y in years:
+                for m in months:
+                    period = f"{y}_{m:02d}" if m > 0 else f"{y}"
+                    job_id = f"{model} | {r} | {period}"
+                    
+                    # Check if already in queue
+                    if any(job['id'] == job_id for job in self.queue):
+                        continue
+                        
+                    self.queue.append({
+                        'id': job_id,
+                        'model': model,
+                        'region': r,
+                        'period': period,
+                        'status': 'PENDING',
+                        'progress': '0%'
+                    })
+                    added += 1
+                    
         save_queue(self.queue)
+        
+        # Reset selections (keeping the model)
+        self.w_region.value = tuple()
+        self.w_year.value = tuple()
+        self.w_month.value = tuple()
         
         with self.out_msg:
             clear_output()
-            display(HTML(f"<b style='color:green;'>✅ Tarea añadida a la cola: [{job_id}]</b>"))
+            if added > 0:
+                display(HTML(f"<b style='color:green;'>✅ {added} tareas añadidas a la cola exitosamente.</b>"))
+            else:
+                display(HTML(f"<b style='color:orange;'>⚠️ Las combinaciones seleccionadas ya estaban en la cola.</b>"))
             
         self._refresh_ui()
 
