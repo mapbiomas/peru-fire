@@ -24,7 +24,7 @@ def run_m5_queue():
     if not pending_jobs:
         with out: 
             clear_output()
-            display(HTML("<b style='color:green;'>✅ No hay tareas pendientes en la cola. Todo está al día.</b>"))
+            display(HTML("<b style='color:green;'>Exito: No hay tareas pendientes en la cola. Todo está al día.</b>"))
         return
         
     for job in pending_jobs:
@@ -34,7 +34,7 @@ def run_m5_queue():
         try:
             with out:
                 clear_output(wait=True)
-                print(f"🚀 Iniciando clasificación regional: [{job['id']}]")
+                print(f"Iniciando clasificación regional: [{job['id']}]")
             
             _process_job(job, out)
             
@@ -43,13 +43,13 @@ def run_m5_queue():
             save_queue(queue)
             
             with out:
-                print(f"\n✅ Tarea {job['id']} finalizada con éxito.")
+                print(f"\nExito: Tarea {job['id']} finalizada con éxito.")
                 
         except Exception as e:
             job['status'] = 'FAILED'
             save_queue(queue)
             with out: 
-                print(f"\n❌ Error Crítico en la tarea {job['id']}: {str(e)}")
+                print(f"\nError Crítico en la tarea {job['id']}: {str(e)}")
             # Paramos a fila em caso de erro grave para evitar loops de falha
             break 
 
@@ -81,21 +81,21 @@ def _process_job(job, out):
     month = int(parts[1]) if len(parts) > 1 else 0
     
     # 2. Determinar Celdas Geográficas (cim-world)
-    with out: print(f"🌐 Extrayendo grilla de la región '{region_name}' desde GEE...")
+    with out: print(f"Extrayendo grilla de la región '{region_name}' desde GEE...")
     cells = _get_region_cells(region_name)
     if not cells:
         raise ValueError(f"No se encontraron celdas de la grilla cim-world para la región {region_name}.")
     
     total_cells = len(cells)
-    with out: print(f"📊 Se encontraron {total_cells} celdas (tiles) para procesar.")
+    with out: print(f"Se encontraron {total_cells} celdas (tiles) para procesar.")
     
     # 3. Cargar el Modelo de IA a RAM
     local_model_path = f"/tmp/{model_id}.keras"
     if not os.path.exists(local_model_path):
-        with out: print(f"📥 Descargando modelo Keras a la instancia local...")
+        with out: print(f"Descargando modelo Keras a la instancia local...")
         fs.get(f"{model_dir}/model.keras", local_model_path)
     
-    with out: print("🧠 Cargando modelo en memoria (TensorFlow)...")
+    with out: print("Cargando modelo en memoria (TensorFlow)...")
     model = tf.keras.models.load_model(local_model_path)
     
     # 4. Bucle de Procesamiento con Checkpoint Local
@@ -115,10 +115,10 @@ def _process_job(job, out):
         
         # --- CHECKPOINT: Salta si ya existe ---
         if fs.exists(out_gcs):
-            with out: print(f"  ⏭️ [{(i+1):03d}/{total_cells}] Carta {cell_id} ya procesada. Saltando.")
+            with out: print(f"  [{(i+1):03d}/{total_cells}] Carta {cell_id} ya procesada. Saltando.")
             continue
             
-        with out: print(f"  🔥 [{(i+1):03d}/{total_cells}] Clasificando carta: {cell_id} ...")
+        with out: print(f"  [{(i+1):03d}/{total_cells}] Clasificando carta: {cell_id} ...")
         
         # --- INFERENCIA ---
         _classify_cell(cell_id, model, bands_config, year, month, out_gcs, fs)
