@@ -800,8 +800,20 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
     if not active_plots: return
 
     n = len(active_plots)
-    cols = 4
-    rows = (n + cols - 1) // cols
+    
+    # --- MATRIZ AUTO-AJUSTÁVEL (Lógica Progressiva) ---
+    if n == 1:
+        rows, cols = 1, 1
+    else:
+        for r in range(1, 10):
+            # 2 gráficos = 1x2, 5-6 gráficos = 2x3, etc.
+            if r * (r + 1) >= n:
+                rows, cols = r, r + 1
+                break
+            # 3-4 gráficos = 2x2, 7-9 gráficos = 3x3, etc.
+            if (r + 1) * (r + 1) >= n:
+                rows, cols = r + 1, r + 1
+                break
     
     fig = plt.figure(figsize=(18, 4.5 * rows))
     
