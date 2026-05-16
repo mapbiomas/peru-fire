@@ -172,13 +172,33 @@ class M5QueueUI:
             return
             
         added = 0
+        skipped = 0
+        
+        try:
+            from M0_auth_config import CONFIG, _get_fs
+            fs = _get_fs()
+        except Exception:
+            fs = None
+            
         for r in regions:
             for period in periods:
                 job_id = f"{model} | {r} | {period}"
                 
                 # Check if already in queue
                 if any(job['id'] == job_id for job in self.queue):
+                    skipped += 1
                     continue
+                    
+                # Check if already processed in GCS
+                if fs is not None:
+                    gcs_dir = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{model}/{period}"
+                    # Se achar arquivos para essa região, considera bloqueado
+                    try:
+                        if len(fs.glob(f"{gcs_dir}/*{r}*.tif")) > 0:
+                            skipped += 1
+                            continue
+                    except:
+                        pass
                     
                 self.queue.append({
                     'id': job_id,
@@ -200,9 +220,12 @@ class M5QueueUI:
         with self.out_msg:
             clear_output()
             if added > 0:
-                display(HTML(f"<b style='color:green;'>Exito: {added} tareas añadidas a la cola exitosamente.</b>"))
+                msg = f"<b style='color:green;'>Exito: {added} tareas añadidas a la cola.</b>"
+                if skipped > 0:
+                    msg += f"<br><span style='color:orange;'>Atencion: {skipped} omitidas (ya en cola o clasificadas en GCS).</span>"
+                display(HTML(msg))
             else:
-                display(HTML(f"<b style='color:orange;'>Atencion: Las combinaciones seleccionadas ya estaban en la cola.</b>"))
+                display(HTML(f"<b style='color:orange;'>Atencion: {skipped} tareas omitidas. Ya estaban en la cola o ya se clasificaron en el Storage.</b>"))
             
         self._refresh_ui()
 
@@ -286,7 +309,7 @@ class M5QueueUI:
         else:
             rows = []
             for job in filtered_jobs:
-                chk = widgets.Checkbox(value=job.get('enabled', True), description=job['id'], layout=widgets.Layout(width='350px'))
+                chk = widgets.Checkbox(value=job.get('enabled', True), description=job['id'], style={'description_width': 'initial'}, layout=widgets.Layout(width='auto', max_width='100%'))
                 chk.observe(lambda change, jid=job['id']: self._toggle_enabled(change, jid), names='value')
                 
                 status_color = "#e67e22" if job['status'] == 'PENDING' else "#3498db" if job['status'] == 'RUNNING' else "#c0392b"
@@ -323,7 +346,7 @@ class M5QueueUI:
                 
                 job_rows = []
                 for job in jobs:
-                    chk_gee = widgets.Checkbox(value=job.get('upload_gee', False), description=f"{job['region']} | {job['period']}", layout=widgets.Layout(width='300px'))
+                    chk_gee = widgets.Checkbox(value=job.get('upload_gee', False), description=f"{job['region']} | {job['period']}", style={'description_width': 'initial'}, layout=widgets.Layout(width='auto', max_width='100%'))
                     chk_gee.observe(lambda change, jid=job['id']: self._toggle_gee(change, jid), names='value')
                     
                     lbl_status = widgets.HTML(f"<span style='color:#27ae60; font-weight:bold; width:100px; display:inline-block;'>{job['status']}</span>")

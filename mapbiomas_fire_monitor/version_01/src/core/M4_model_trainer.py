@@ -1754,6 +1754,19 @@ class ModelTrainerUI(PipelineStepUI):
         next_id = self._suggest_next_id()
         self.w_training_id = widgets.Text(value=next_id, description='ID Training:', style={'description_width': '120px'}, layout=L(width='300px'))
         self.w_shortname = widgets.Text(value='peru_v1', description='Nome:', layout=L(width='200px'))
+        
+        # Smart Naming Hook
+        def _hook_smart_naming(change):
+            self._auto_generate_shortname()
+            
+        # Bind to samples
+        for chk in self.chk_dict.values():
+            chk.observe(_hook_smart_naming, names='value')
+            
+        # Bind to bands
+        for chk in self.band_chk_map.values():
+            chk.observe(_hook_smart_naming, names='value')
+
         self.w_comment = widgets.Textarea(placeholder='Comentários...', layout=L(width='98%', height='60px'))
         
         return widgets.VBox([
@@ -2031,6 +2044,36 @@ class ModelTrainerUI(PipelineStepUI):
             
         self._refresh_canvas_hub()
         self._update_canvas()
+
+    
+    def _auto_generate_shortname(self, *_):
+        # Base format: [region]_[n]bands_[method]
+        # Example: peru_r1_4bands_minnbr
+        
+        selected_samples = [name for name, chk in self.chk_dict.items() if chk.value]
+        if not selected_samples:
+            self.w_shortname.value = ""
+            return
+            
+        first_sample = selected_samples[0]
+        region_part = first_sample.replace('_samples', '').replace('library_samples_', '')
+        if len(selected_samples) > 1:
+            region_part += f'_multi'
+            
+        methods = set()
+        bands_count = 0
+        for (s, m, p, b), chk in self.band_chk_map.items():
+            if chk.value:
+                bands_count += 1
+                methods.add(m)
+                
+        if bands_count == 0:
+            return
+            
+        method_part = list(methods)[0] if len(methods) == 1 else 'mixed'
+        
+        new_name = f"{region_part}_{bands_count}bands_{method_part}"
+        self.w_shortname.value = new_name
 
     def _build_viz_toolbar(self):
         L = widgets.Layout
