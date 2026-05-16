@@ -45,12 +45,34 @@ class M5QueueUI:
         
         self.out_pending = widgets.Output()
         self.out_completed = widgets.Output()
+        self.out_guide = widgets.Output()
         
-        self.tabs = widgets.Tab(children=[self.out_pending, self.out_completed])
-        self.tabs.set_title(0, 'En Proceso / Pendientes')
-        self.tabs.set_title(1, 'Completados / Fallidos')
+        self.tabs = widgets.Tab(children=[self.out_guide, widgets.VBox(), self.out_pending, self.out_completed])
+        self.tabs.set_title(0, 'Guía / Detalles')
+        self.tabs.set_title(1, 'Cadastrar Clasificaciones')
+        self.tabs.set_title(2, 'Clasificaciones Pendientes')
+        self.tabs.set_title(3, 'Clasificaciones Concluidas')
         
         self.out_msg = widgets.Output()
+        
+        # Populate guide
+        with self.out_guide:
+            guide_html = """
+            <div style='padding:20px; font-family:sans-serif;'>
+                <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Clasificación Regional de Larga Escala</h3>
+                <p>Este módulo permite clasificar múltiples regiones geográficas (cartas <b>cim-world-1-250000</b>) a lo largo de diferentes meses y años, utilizando los modelos de Inteligencia Artificial entrenados en el módulo M4.</p>
+                <h4>Flujo de Trabajo:</h4>
+                <ol style='line-height:1.6;'>
+                    <li>Vaya a la pestaña <b>Cadastrar Clasificaciones</b>.</li>
+                    <li>Seleccione un modelo base entrenado en la biblioteca.</li>
+                    <li>Utilice <code>Ctrl/Cmd</code> o <code>Shift</code> para seleccionar múltiples <b>Regiones, Años y Meses</b> simultáneamente.</li>
+                    <li>Haga clic en <b>Añadir Lote a la Cola</b> para generar todas las combinaciones cartesianas automáticamente.</li>
+                    <li>Acompañe el progreso en las pestañas de <b>Pendientes</b> y <b>Concluidas</b>.</li>
+                    <li>Para iniciar el procesamiento en segundo plano (con persistencia e ignorando cartas ya procesadas), ejecute la celda <code>run_m5_queue()</code> en su Notebook.</li>
+                </ol>
+            </div>
+            """
+            display(HTML(guide_html))
         
         self._populate_dropdowns()
         
@@ -155,20 +177,17 @@ class M5QueueUI:
     def display(self):
         self._refresh_ui()
         form = widgets.VBox([
-            widgets.HTML("<h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px; margin-top:0;'>M5 - Registro de Cola de Clasificación</h3>"),
-            widgets.HTML("<p style='font-size:13px; color:#666;'>Agende múltiples tareas de clasificación. El procesamiento real se realizará de forma desacoplada y tolerante a fallos.</p>"),
+            widgets.HTML("<p style='font-size:13px; color:#666; margin-bottom:15px;'>Agende múltiples tareas de clasificación. Seleccione múltiples opciones usando <b>Ctrl/Cmd</b> o <b>Shift</b>.</p>"),
             widgets.HBox([self.w_model, self.w_region], layout=widgets.Layout(margin='0 0 10px 0')),
             widgets.HBox([self.w_year, self.w_month], layout=widgets.Layout(margin='0 0 15px 0')),
             widgets.HBox([self.btn_add, widgets.HTML("<div style='width:20px'></div>"), self.btn_refresh, self.btn_clear], layout=widgets.Layout(margin='0 0 10px 0', align_items='center')),
             self.out_msg
-        ], layout=widgets.Layout(padding='20px', border='1px solid #e0e0e0', background_color='#fcfcfc', margin='0 0 20px 0', border_radius='8px'))
+        ], layout=widgets.Layout(padding='20px'))
         
-        display(widgets.VBox([
-            form, 
-            widgets.HTML("<h4 style='color:#34495e; margin:0 0 10px 0;'>Estado Actual de la Cola</h4>"), 
-            self.tabs,
-            widgets.HTML("<div style='margin-top:15px; padding:10px; background-color:#e8f4fd; border-left:4px solid #3498db; font-size:13px; color:#2c3e50;'><b>Para iniciar el procesamiento:</b> Ejecute la celda <code>run_m5_queue()</code> ubicada más abajo en el notebook.</div>")
-        ]))
+        # Injects the registration form into the second tab
+        self.tabs.children = [self.out_guide, form, self.out_pending, self.out_completed]
+        
+        display(self.tabs)
 
 def run_m5_ui():
     ui = M5QueueUI()
