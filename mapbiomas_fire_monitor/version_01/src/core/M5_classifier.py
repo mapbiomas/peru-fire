@@ -6,11 +6,13 @@ import numpy as np
 import tensorflow as tf
 from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs, _gcs_models_base
 
-def run_m5_queue():
+def run_m5_queue(send=None):
     """
-    Função principal que deve ser chamada em uma célula do Colab.
-    Lê a fila de tarefas e processa de forma resiliente.
+    Motor de Processamento (Fase 1: Classificacao, Fase 2: Upload GEE)
     """
+    if send is None:
+        send = ['classification', 'upload']
+        
     from M5_classifier_ui import load_queue, save_queue
     from IPython.display import display, HTML, clear_output
     import ipywidgets as widgets
@@ -18,40 +20,71 @@ def run_m5_queue():
     out = widgets.Output()
     display(out)
     
-    queue = load_queue()
-    pending_jobs = [j for j in queue if j['status'] == 'PENDING']
-    
-    if not pending_jobs:
-        with out: 
-            clear_output()
-            display(HTML("<b style='color:green;'>Exito: No hay tareas pendientes en la cola. Todo está al día.</b>"))
+    valid_commands = ['classification', 'upload']
+    if not isinstance(send, list) or not any(s in valid_commands for s in send):
+        with out:
+            print("Atencion: Argumento 'send' invalido. Use send=['classification'], send=['upload'] o send=['classification', 'upload'].")
         return
         
-    for job in pending_jobs:
-        job['status'] = 'RUNNING'
-        save_queue(queue)
+    queue = load_queue()
+    
+    pending_jobs = [j for j in queue if j['status'] == 'PENDING' and j.get('enabled', True)]
+    upload_jobs = [j for j in queue if j['status'] == 'COMPLETED' and j.get('upload_gee', False)]
+    
+    if not pending_jobs and not upload_jobs:
+        with out: 
+            clear_output()
+            display(HTML("<b style='color:green;'>Exito: No hay tareas activas pendientes ni uploads configurados.</b>"))
+        return
         
-        try:
-            with out:
-                clear_output(wait=True)
-                print(f"Iniciando clasificación regional: [{job['id']}]")
-            
-            _process_job(job, out)
-            
-            job['status'] = 'COMPLETED'
-            job['progress'] = '100%'
+    # --- FASE 1: CLASIFICACION ---
+    if pending_jobs and 'classification' in send:
+        with out: print("--- INICIANDO FASE DE CLASIFICACION ---")
+        for job in pending_jobs:
+            job['status'] = 'RUNNING'
             save_queue(queue)
             
-            with out:
-                print(f"\nExito: Tarea {job['id']} finalizada con éxito.")
+            try:
+                with out:
+                    print(f"
+Iniciando clasificación regional: [{job['id']}]")
                 
-        except Exception as e:
-            job['status'] = 'FAILED'
-            save_queue(queue)
-            with out: 
-                print(f"\nError Crítico en la tarea {job['id']}: {str(e)}")
-            # Paramos a fila em caso de erro grave para evitar loops de falha
-            break 
+                _process_job(job, out)
+                
+                job['status'] = 'COMPLETED'
+                job['progress'] = '100%'
+                save_queue(queue)
+                
+                with out:
+                    print(f"Exito: Tarea {job['id']} finalizada.")
+                    
+            except Exception as e:
+                job['status'] = 'FAILED'
+                save_queue(queue)
+                with out: 
+                    print(f"Error Crítico en la tarea {job['id']}: {str(e)}")
+                break 
+
+    # --- FASE 2: UPLOAD GEE ---
+    if upload_jobs and 'upload' in send:
+        with out: print("
+--- INICIANDO FASE DE UPLOAD AL GEE ---")
+        queue = load_queue() # Recarrega caso a fase 1 tenha alterado
+        for job in upload_jobs:
+            try:
+                with out: print(f"
+Iniciando subida al GEE: [{job['id']}]")
+                _upload_job_to_gee(job, out)
+                
+                # Desmarca a flag para não subir novamente atoa na próxima
+                job['upload_gee'] = False 
+                job['progress'] = '100% (GEE)'
+                save_queue(queue)
+                
+                with out: print(f"Exito: Tarea {job['id']} enviada como Task al GEE.")
+                    
+            except Exception as e:
+                with out: print(f"Error al subir tarea {job['id']}: {str(e)}")
 
 def _process_job(job, out):
     import ee
