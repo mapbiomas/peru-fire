@@ -43,7 +43,13 @@ class M5QueueUI:
         self.btn_clear = widgets.Button(description='Limpiar Cola', button_style='danger', icon='trash', layout=widgets.Layout(width='150px'))
         self.btn_clear.on_click(self._on_clear_click)
         
-        self.out_table = widgets.Output()
+        self.out_pending = widgets.Output()
+        self.out_completed = widgets.Output()
+        
+        self.tabs = widgets.Tab(children=[self.out_pending, self.out_completed])
+        self.tabs.set_title(0, 'En Proceso / Pendientes')
+        self.tabs.set_title(1, 'Completados / Fallidos')
+        
         self.out_msg = widgets.Output()
         
         self._populate_dropdowns()
@@ -120,29 +126,31 @@ class M5QueueUI:
 
     def _refresh_ui(self):
         self.queue = load_queue()
-        with self.out_table:
-            clear_output(wait=True)
-            if not self.queue:
-                display(HTML("<div style='padding:20px; text-align:center; color:#999; border:1px dashed #ccc; border-radius:8px;'><i>Cola vacía. Agregue tareas usando el formulario de arriba.</i></div>"))
-                return
+        
+        pending_jobs = [j for j in self.queue if j['status'] in ['PENDING', 'RUNNING']]
+        completed_jobs = [j for j in self.queue if j['status'] not in ['PENDING', 'RUNNING']]
+        
+        def _render_table(jobs, out_widget, empty_msg):
+            with out_widget:
+                clear_output(wait=True)
+                if not jobs:
+                    display(HTML(f"<div style='padding:20px; text-align:center; color:#999; border:1px dashed #ccc; border-radius:8px;'><i>{empty_msg}</i></div>"))
+                    return
+                    
+                html = "<table style='width:100%; border-collapse: collapse; font-family: sans-serif; text-align: left;'>"
+                html += "<tr style='background-color:#2c3e50; color:white;'><th style='padding:10px; border:1px solid #ddd;'>Tarea (ID)</th><th style='padding:10px; border:1px solid #ddd;'>Status</th><th style='padding:10px; border:1px solid #ddd;'>Progreso</th></tr>"
                 
-            html = "<table style='width:100%; border-collapse: collapse; font-family: sans-serif; text-align: left;'>"
-            html += "<tr style='background-color:#2c3e50; color:white;'><th style='padding:10px; border:1px solid #ddd;'>Tarea (ID)</th><th style='padding:10px; border:1px solid #ddd;'>Status</th><th style='padding:10px; border:1px solid #ddd;'>Progreso</th></tr>"
-            
-            for job in self.queue:
-                color = "#e67e22" if job['status'] == 'PENDING' else "#3498db" if job['status'] == 'RUNNING' else "#27ae60"
-                html += f"<tr><td style='padding:10px; border:1px solid #ddd; font-weight:bold;'>{job['id']}</td>"
-                html += f"<td style='padding:10px; border:1px solid #ddd; color:{color}; font-weight:bold;'>{job['status']}</td>"
-                html += f"<td style='padding:10px; border:1px solid #ddd;'>{job.get('progress', '0%')}</td></tr>"
-            
-            html += "</table>"
-            
-            # Helper command for the user
-            html += "<div style='margin-top:15px; padding:10px; background-color:#e8f4fd; border-left:4px solid #3498db; font-size:13px; color:#2c3e50;'>"
-            html += "<b>Para iniciar el procesamiento:</b> Ejecute la celda <code>run_m5_queue()</code> ubicada más abajo en el notebook."
-            html += "</div>"
-            
-            display(HTML(html))
+                for job in jobs:
+                    color = "#e67e22" if job['status'] == 'PENDING' else "#3498db" if job['status'] == 'RUNNING' else "#c0392b" if 'FAIL' in job['status'] else "#27ae60"
+                    html += f"<tr><td style='padding:10px; border:1px solid #ddd; font-weight:bold;'>{job['id']}</td>"
+                    html += f"<td style='padding:10px; border:1px solid #ddd; color:{color}; font-weight:bold;'>{job['status']}</td>"
+                    html += f"<td style='padding:10px; border:1px solid #ddd;'>{job.get('progress', '0%')}</td></tr>"
+                
+                html += "</table>"
+                display(HTML(html))
+
+        _render_table(pending_jobs, self.out_pending, "No hay tareas pendientes en la cola. Agregue tareas arriba.")
+        _render_table(completed_jobs, self.out_completed, "No hay tareas completadas todavía.")
 
     def display(self):
         self._refresh_ui()
@@ -155,7 +163,12 @@ class M5QueueUI:
             self.out_msg
         ], layout=widgets.Layout(padding='20px', border='1px solid #e0e0e0', background_color='#fcfcfc', margin='0 0 20px 0', border_radius='8px'))
         
-        display(widgets.VBox([form, widgets.HTML("<h4 style='color:#34495e; margin:0 0 10px 0;'>Estado Actual de la Cola</h4>"), self.out_table]))
+        display(widgets.VBox([
+            form, 
+            widgets.HTML("<h4 style='color:#34495e; margin:0 0 10px 0;'>Estado Actual de la Cola</h4>"), 
+            self.tabs,
+            widgets.HTML("<div style='margin-top:15px; padding:10px; background-color:#e8f4fd; border-left:4px solid #3498db; font-size:13px; color:#2c3e50;'><b>Para iniciar el procesamiento:</b> Ejecute la celda <code>run_m5_queue()</code> ubicada más abajo en el notebook.</div>")
+        ]))
 
 def run_m5_ui():
     ui = M5QueueUI()
