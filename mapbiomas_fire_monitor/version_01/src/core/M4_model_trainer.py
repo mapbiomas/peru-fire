@@ -2105,6 +2105,7 @@ def start_training(ui):
 
     # 3⃣ Constrói o dicionário de configuração de bandas a partir da Matriz Dinâmica
     bands_config = {}
+    sensors_used = set()
     for (s, m, p, b), chk in ui.band_chk_map.items():
         if chk.value:
             # p_norm será 'monthly' ou 'yearly'
