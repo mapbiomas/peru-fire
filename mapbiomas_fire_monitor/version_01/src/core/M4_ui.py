@@ -1010,7 +1010,7 @@ class ModelTrainerUI(PipelineStepUI):
             display(grid)
 
 def start_training(ui):
-    tf_avail = _get_tf()
+    tf_avail = _get_tf(force=True)
     if tf_avail is None:
         print("\n" + "="*70)
         print(" [AVISO] AMBIENTE LOCAL INCOMPATIBLE")

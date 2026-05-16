@@ -8,10 +8,17 @@ from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
 
 from M4_data_extractor import compute_normalizer, normalize
-def _get_tf():
-    """Carrega o TensorFlow apenas quando necessário (Lazy Load)."""
+def _get_tf(force=False):
+    """Carrega o TensorFlow apenas quando necessário (Lazy Load).
+    
+    Args:
+        force: Se True, ignora o cache e tenta carregar novamente.
+    """
     global TF_AVAILABLE, TF_ERROR
-    if TF_AVAILABLE is not None: return tf if TF_AVAILABLE else None
+    if not force and TF_AVAILABLE is True:
+        return tf
+    if not force and TF_AVAILABLE is False:
+        return None
     
     try:
         import tensorflow.compat.v1 as _tf
