@@ -150,7 +150,11 @@ def list_trained_models(force_refresh=False):
             for t_dir in trainings:
                 t_name = t_dir.split('/')[-1]
                 if t_name.startswith('training_'):
-                    models.append({'training_id': t_name, 'path': t_dir})
+                    models.append(t_name)
+                    # Guarda o path no cache em vez de poluir a lista de IDs
+                    if 'meta' not in cache: cache['meta'] = {}
+                    if t_name not in cache['meta']: cache['meta'][t_name] = {}
+                    cache['meta'][t_name]['path'] = t_dir
         
         # Atualiza a lista de IDs conhecidos no cache
         cache['known_ids'] = models
@@ -470,11 +474,6 @@ class ModelTrainer:
                     
                     if update_chart_fn:
                         update_chart_fn(history, embeds, preds_viz.flatten(), y_viz)
-                    
-                    if snapshot_dir:
-                        # Ainda mantemos o PNG para compatibilidade/preview rápido se necessário
-                        snap_path = os.path.join(snapshot_dir, f"iteration_{i:05d}.png")
-                        render_diagnostic_dashboard(history, embeds, preds_viz.flatten(), y_viz, save_path=snap_path)
 
             self._saved_vars = {v.name: sess.run(v) for v in tf.global_variables()}
             self._history = history
@@ -880,7 +879,8 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
                 ax.set_xticks([]); ax.set_yticks([]); ax.set_zticks([])
 
     plt.tight_layout()
-    display(fig)
+    if not save_path:
+        display(fig)
     plt.close(fig)
 
     if save_path:
@@ -1793,13 +1793,14 @@ class ModelTrainerUI(PipelineStepUI):
         metadata_cache = cache.get('metadata', {})
         
         updated_cache = False
-        for m in models:
-            m_id = m['training_id']
+        for m_id in models:
             # Só baixa metadados se for novo OU se pedirmos refresh total
             if m_id not in metadata_cache or force_refresh:
                 try:
                     from M0_auth_config import CONFIG
-                    clean_path = m['path'].replace('gs://', '').replace(f"{CONFIG['bucket']}/", '').lstrip('/')
+                    m_path = cache.get('meta', {}).get(m_id, {}).get('path', '')
+                    if not m_path: continue
+                    clean_path = m_path.replace('gs://', '').replace(f"{CONFIG['bucket']}/", '').lstrip('/')
                     with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f:
                         meta = json.load(f)
                     try:
@@ -1857,6 +1858,16 @@ class ModelTrainerUI(PipelineStepUI):
                 self.live_training_info['f1'] = rep.get('1', {}).get('f1-score', 0)
                 self._refresh_canvas_hub()
             
+            # --- SLIDER COMO BARRA DE PROGRESSO ---
+            current_step = len(history.get('steps', [])) - 1
+            if current_step >= 0:
+                if self.w_global_slider.max < current_step:
+                    self.w_global_slider.max = current_step
+                # Desabilita o observer temporariamente para evitar recálculo de canvas
+                self.w_global_slider.unobserve(self._on_global_slider_change, names='value')
+                self.w_global_slider.value = current_step
+                self.w_global_slider.observe(self._on_global_slider_change, names='value')
+
             render_diagnostic_dashboard(history, embeds, preds, y_true, viz_config=self.viz_config)
             
             # 2. MODELOS DO RANKING (Comparação em Tempo Real)
@@ -1884,6 +1895,9 @@ class ModelTrainerUI(PipelineStepUI):
         
         full_data = []
         for mid in m_ids:
+            # Garante que mid seja string mesmo se vier um dicionário de um cache antigo
+            if isinstance(mid, dict): mid = mid.get('training_id')
+            if not mid: continue
             # Tenta pegar metadados do cache (populado no init ou refresh)
             meta = cache.get(mid, {})
             # Se não estiver no cache, info mínima
