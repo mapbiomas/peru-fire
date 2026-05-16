@@ -8,6 +8,7 @@ v10: Exclusive Tool for Sample Collection and Export (Vectors)
 
 // ─── GLOBAL CONFIGURATION ───────────────────────────────────────────────────
 var PERSONAL_TASK_FLAG = 'CATALOG';
+var SAMPLING_CAMPAIGN = 'monitor_01';
 
 // ─── LANGUAGE CONFIGURATION ─────────────────────────────────────────────────
 // Change APP_LANG to switch the interface language: 'es', 'pt', 'en'
@@ -488,7 +489,7 @@ function user_interface() {
         var pais = getSelectedCountry().toLowerCase();
 
         // Base bands needed for loading
-        var baseBands = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2'];
+        var baseBands = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'];
 
         // Lógica de Regiões Selecionadas
         var selectedNames = [];
@@ -534,17 +535,25 @@ function user_interface() {
 
                         try {
                             baseBands.forEach(function (b) {
-                                // Nova Estrutura: {base}/{sensor}/{period}/{mosaic}/{band}
-                                var colId = [assetBase, sensorFolder, periodFolder, mosaicType, b.toUpperCase()].join('/');
+                                // Estrutura Corrigida: {base}/SENSOR/PERIOD/MOSAIC/band (lowercase)
+                                var colId = [assetBase, sensorFolder, periodFolder, mosaicType, b.toLowerCase()].join('/');
                                 var col = ee.ImageCollection(colId);
 
-                                // Filtra a imagem pelo nome institucional ou metadados
+                                // Filtra a imagem pelo nome institucional
                                 var dateKey = periodicity === 'monthly' ? year + '_' + ('0' + month).slice(-2) : year;
-                                var imgName = 'image_peru_fire_sentinel2_' + mosaicType.toLowerCase() + '_' + b + '_' + dateKey;
+                                var imgName = 'image_peru_fire_sentinel2_' + mosaicType.toLowerCase() + '_' + b.toLowerCase() + '_' + dateKey;
 
-                                // Tenta carregar a imagem da coleção
-                                var bandImg = col.filter(ee.Filter.eq('system:index', imgName)).first();
-                                imgAsset = imgAsset.addBands(bandImg.rename(b));
+                                // Tenta carregar a imagem (safe-load via mosaic)
+                                var bandImg = col.filter(ee.Filter.eq('system:index', imgName)).mosaic();
+                                
+                                // Garante que a banda tenha o nome correto mesmo que esteja vazia
+                                var safeImg = ee.Image(ee.Algorithms.If(
+                                    bandImg.bandNames().size().gt(0),
+                                    bandImg,
+                                    ee.Image(0).rename(b.toLowerCase()).updateMask(0)
+                                ));
+                                
+                                imgAsset = imgAsset.addBands(safeImg.select([0], [b.toLowerCase()]), null, true);
                             });
 
                             imgAsset = addIndices(imgAsset);
@@ -860,21 +869,47 @@ function user_interface() {
         // Atualiza a gaveta de períodos
         updatePeriodDrawer();
 
+        // Atualiza as Campanhas Disponíveis em ambos os seletores
+        try {
+            var sampleRoot = conf.asset_samples;
+            var rootList = ee.data.listAssets(sampleRoot);
+            var folders = rootList ? rootList.assets.filter(function (a) { return a.type === 'FOLDER'; }) : [];
+            var campaignItems = folders.map(function (f) { return f.id.split('/').slice(-1)[0]; });
+
+            if (campaignItems.indexOf(SAMPLING_CAMPAIGN) === -1) campaignItems.push(SAMPLING_CAMPAIGN);
+
+            var sortedItems = campaignItems.sort();
+            select_campaign_imp.items().reset(sortedItems);
+            select_campaign_exp.items().reset(sortedItems);
+            
+            select_campaign_imp.setValue(SAMPLING_CAMPAIGN, false);
+            select_campaign_exp.setValue(SAMPLING_CAMPAIGN, false);
+        } catch (e) {
+            select_campaign_imp.items().reset([SAMPLING_CAMPAIGN]);
+            select_campaign_exp.items().reset([SAMPLING_CAMPAIGN]);
+            select_campaign_imp.setValue(SAMPLING_CAMPAIGN, false);
+            select_campaign_exp.setValue(SAMPLING_CAMPAIGN, false);
+        }
+
+        updateImportList(conf);
+    }
+
+    function updateImportList(conf) {
         // Atualiza a lista de amostras no Asset para a aba IMPORTAR
         try {
-            var assetList = ee.data.listAssets(conf.asset_samples);
+            var campaignPath = conf.asset_samples + '/' + SAMPLING_CAMPAIGN;
+            var assetList = ee.data.listAssets(campaignPath);
             var sample_list = assetList ? assetList.assets : [];
             var items = sample_list ? sample_list.map(function (obj) { return { label: obj.id.split('/').slice(-1)[0], value: obj.id }; }) : [];
             select_address.items().reset(items);
             if (items.length > 0) {
-                select_address.setPlaceholder('Elija muestra antiga...');
+                select_address.setPlaceholder('Elija muestra antigua...');
             } else {
-                select_address.setPlaceholder('Sin muestras em Asset');
+                select_address.setPlaceholder('Sin muestras en la campaña');
             }
         } catch (e) {
             select_address.items().reset([]);
-            select_address.setPlaceholder('Sin muestras em Asset');
-            console.log('Error listing assets:', e);
+            select_address.setPlaceholder('Campanha não encontrada no Asset');
         }
     }
 
@@ -1080,6 +1115,30 @@ function user_interface() {
     drawerExp.panel.style().set('shown', true);
     drawerAmo.panel.style().set('shown', true);
 
+    // --- CAMPAIGN SELECTORS (Synced) ---
+    function makeCampaignSelector() {
+        return ui.Select({
+            items: [SAMPLING_CAMPAIGN],
+            placeholder: 'Campaña...',
+            value: SAMPLING_CAMPAIGN,
+            onChange: function (v) {
+                SAMPLING_CAMPAIGN = v;
+                // Sincroniza ambos os seletores
+                select_campaign_imp.setValue(v, false);
+                select_campaign_exp.setValue(v, false);
+                // Atualiza as listas
+                suggestNextVersion();
+                syncDateSelect();
+                var conf = countryConfigs[getSelectedCountry()];
+                updateImportList(conf);
+            },
+            style: { margin: '2px', stretch: 'horizontal' }
+        });
+    }
+
+    var select_campaign_imp = makeCampaignSelector();
+    var select_campaign_exp = makeCampaignSelector();
+
     cabSamples.content.add(drawerControl.panel);
     cabSamples.content.add(drawerInst.panel);
     cabSamples.content.add(drawerImp.panel);
@@ -1160,6 +1219,8 @@ function user_interface() {
     });
 
     var row_imp = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row });
+    row_imp.add(ui.Label('📁 Campaña:', { fontSize: '10px', margin: '5px 2px' }));
+    row_imp.add(select_campaign_imp);
     row_imp.add(select_address).add(btt_import_action);
     drawerImp.panel.add(row_imp);
 
@@ -1176,7 +1237,8 @@ function user_interface() {
         var conf = countryConfigs[getSelectedCountry()];
 
         try {
-            var assetList = ee.data.listAssets(conf.asset_samples);
+            var campaignPath = conf.asset_samples + '/' + SAMPLING_CAMPAIGN;
+            var assetList = ee.data.listAssets(campaignPath);
             var assets = assetList ? assetList.assets : [];
 
             if (!assets || assets.length === 0) {
@@ -1386,13 +1448,13 @@ function user_interface() {
             Export.table.toAsset({
                 collection: vec,
                 description: PERSONAL_TASK_FLAG + '_ASSET_' + desc,
-                assetId: conf.asset_samples + '/' + desc
+                assetId: conf.asset_samples + '/' + SAMPLING_CAMPAIGN + '/' + desc
             });
             Export.table.toCloudStorage({
                 collection: vec,
                 description: PERSONAL_TASK_FLAG + '_GCS_' + desc,
                 bucket: conf.bucket,
-                fileNamePrefix: conf.gcs_samples + '/' + desc,
+                fileNamePrefix: conf.gcs_samples + '/' + SAMPLING_CAMPAIGN + '/' + desc,
                 fileFormat: 'CSV'
             });
             print(L.task_created + desc + L.task_hint);
@@ -1400,6 +1462,8 @@ function user_interface() {
     });
 
     // --- Montar o panel_export ---
+    drawerExp.panel.add(ui.Label('📁 Seleccionar Campaña:', { fontSize: '11px', fontWeight: 'bold', margin: '4px 2px 2px 2px' }));
+    drawerExp.panel.add(select_campaign_exp);
     drawerExp.panel.add(ui.Label(L.lbl_version, styles.label));
     var rowVer = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row });
     rowVer.add(txt_version).add(lab_version_status);

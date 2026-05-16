@@ -124,14 +124,12 @@ class CacheManager:
         for sensor_name in all_sensors:
             for period_type in ['monthly', 'yearly']:
                 for mosaic_m in mosaic_methods:
-                    for band in bands:
-                        col_id = get_asset_mosaic_collection(
-                            sensor=sensor_name.upper(),
-                            periodicity=period_type,
-                            band=band,
-                            mosaic=mosaic_m.upper()
-                        )
-                        tasks.append((col_id, period_type, band))
+                    col_id = get_asset_mosaic_collection(
+                        sensor=sensor_name,
+                        periodicity=period_type,
+                        mosaic=mosaic_m
+                    )
+                    tasks.append((col_id, period_type))
         
         total_steps = len(tasks)
         completed = 0
@@ -139,7 +137,7 @@ class CacheManager:
         if logger: logger("Iniciando sincronización GEE (Paralelo)...", "info")
         
         def fetch_assets(task_info):
-            col_id, period_type, band = task_info
+            col_id, period_type = task_info
             assets_found = []
             page_token = None
             try:
@@ -332,6 +330,19 @@ class CacheManager:
         return CacheManager._state
 
     @staticmethod
+    def clear():
+        """Remove o arquivo de cache local e limpa o estado em memória."""
+        CacheManager._state = {}
+        if os.path.exists(CacheManager.CACHE_FILE):
+            try:
+                os.remove(CacheManager.CACHE_FILE)
+                print(f"🧹 Cache local removido: {CacheManager.CACHE_FILE}")
+            except Exception as e:
+                print(f"⚠️ Erro ao remover cache local: {e}")
+        else:
+            print("ℹ️ Cache local não encontrado.")
+
+    @staticmethod
     def save(state=None):
         """Salva cache no GCS."""
         with CacheManager._lock:
@@ -351,6 +362,12 @@ class CacheManager:
                 
                 with fs.open(gcs_path, 'w') as f:
                     json.dump(state, f, indent=2)
+                
+                # Salva também localmente para garantir consistência imediata
+                try:
+                    with open(CacheManager.CACHE_FILE, 'w') as lf:
+                        json.dump(state, lf, indent=2)
+                except: pass
                 
                 CacheManager._state = state
             except Exception as e:

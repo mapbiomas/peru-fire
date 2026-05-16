@@ -70,14 +70,16 @@ def list_sample_collections_gcs(force_refresh=False):
     if cache.get('known_samples') and not force_refresh:
         return cache['known_samples']
     
-    if not force_refresh:
-        return [] # Retorna vazio rápido em vez de travar no GCS
-        
     try:
-        from M0_auth_config import CONFIG
+        from M0_auth_config import CONFIG, GLOBAL_OPTS
         # Timeout curtíssimo para não travar a UI se a rede estiver lenta
         fs = _get_fs()
-        path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}"
+        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
+        path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{campaign}"
+        
+        if not fs.exists(path):
+            return []
+            
         files = fs.ls(path) # ls simples não costuma travar tanto quanto find
         samples = sorted([f.split('/')[-1].replace('.csv', '') for f in files if f.endswith('.csv')], reverse=True)
         
@@ -87,6 +89,29 @@ def list_sample_collections_gcs(force_refresh=False):
     except Exception:
         # Se falhar qualquer coisa (rede, timeout), usa o que tem no cache ou vazio
         return cache.get('known_samples', [])
+
+def list_campaigns_gcs():
+    """Lista as campanhas (subpastas) disponíveis em LIBRARY_SAMPLES no GCS."""
+    try:
+        from M0_auth_config import CONFIG
+        fs = _get_fs()
+        path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}"
+        if not fs.exists(path):
+            return ['monitor_01']
+        
+        items = fs.ls(path)
+        campaigns = []
+        for item in items:
+            name = item['name'] if isinstance(item, dict) else item
+            if not name.endswith('.csv') and not name.endswith('.json') and not name.endswith('.npz'):
+                c_name = name.split('/')[-1]
+                if c_name and not c_name.startswith('.'):
+                    campaigns.append(c_name)
+        
+        if not campaigns: return ['monitor_01']
+        return sorted(list(set(campaigns)))
+    except:
+        return ['monitor_01']
 
 def _load_m4_cache():
     """Lê o cache local com busca em múltiplos níveis de diretório."""
@@ -148,7 +173,8 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
     
     dfs = []
     for group in sample_groups:
-        sample_path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{group}.csv"
+        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
+        sample_path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{campaign}/{group}.csv"
         if logger: logger(f"Leyendo muestras: {group}.csv", "info")
         try:
             with fs.open(sample_path, 'r') as f:
@@ -698,7 +724,8 @@ class ModelTrainer:
         if logger: logger("Copiar archivos CSV de las muestras para su almacenamiento...", "info")
         collections = getattr(self, '_sample_collections', [])
         for coll in collections:
-            src = gcs_path(f"{CONFIG['gcs_library_samples']}/{coll}.csv")
+            campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
+            src = gcs_path(f"{CONFIG['gcs_library_samples']}/{campaign}/{coll}.csv")
             dest = gcs_path(f"{base_path}/samples/{coll}.csv")
             subprocess.run(['gsutil', 'cp', src, dest], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -1129,6 +1156,7 @@ class ModelTrainerUI(PipelineStepUI):
         self.search_query_models = "" 
         self.sort_column = "acc"      
         self.sort_ascending = False   
+        self.sampling_campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
         
         # --- INTENÇÃO DE RETREINAMENTO ---
         self.retrain_intent = {'mode': None, 'hp': None} # Guarda a intenção atual de re-treinamento
@@ -1434,7 +1462,7 @@ class ModelTrainerUI(PipelineStepUI):
         L = widgets.Layout
         css = PipelineStepUI.get_status_css()
         
-        # BARRA DE BUSCA E BOTÕES DE LOTE
+        # BARRA DE BUSCA E SELETOR DE CAMPANHA
         self.txt_search_samples = widgets.Text(
             value=self.search_query_samples,
             placeholder='Buscar muestras...',
@@ -1442,13 +1470,40 @@ class ModelTrainerUI(PipelineStepUI):
         )
         self.txt_search_samples.observe(self._on_search_samples_change, names='value')
 
+        self.w_campaign = widgets.Dropdown(
+            options=list_campaigns_gcs(),
+            value=self.sampling_campaign,
+            layout=L(width='150px'),
+            style={'description_width': 'initial'}
+        )
+        
+        def _on_campaign_change(change):
+            from M0_auth_config import GLOBAL_OPTS
+            new_c = change['new']
+            GLOBAL_OPTS['SAMPLING_CAMPAIGN'] = new_c
+            self.sampling_campaign = new_c
+            # Limpa cache para forçar refresh real das amostras da nova campanha
+            cache = _load_m4_cache()
+            if 'known_samples' in cache: del cache['known_samples']
+            _save_m4_cache(cache)
+            # Refresh UI
+            self._refresh_samples_panes()
+            
+        self.w_campaign.observe(_on_campaign_change, names='value')
+
         btn_all = widgets.Button(description="Todos", icon="check-square", layout=L(width='70px'), button_style='info')
         btn_none = widgets.Button(description="Limpiar", icon="square-o", layout=L(width='75px'), button_style='warning')
         btn_all.on_click(self._on_select_all_samples)
         btn_none.on_click(self._on_select_none_samples)
         
         self.txt_search_samples.layout.flex = '1'
-        sample_toolbar = widgets.HBox([self.txt_search_samples, btn_all, btn_none], layout=L(gap='4px', margin='0 0 5px 0', width='100%'))
+        sample_toolbar = widgets.HBox([
+            widgets.HTML("<b style='margin-right:5px;'>Campanha:</b>"), 
+            self.w_campaign, 
+            widgets.HTML("<div style='width:10px'></div>"),
+            self.txt_search_samples, 
+            btn_all, btn_none
+        ], layout=L(gap='4px', margin='0 0 5px 0', width='100%', align_items='center'))
 
         self.available_samples_container = widgets.VBox([], layout=L(
             border='1px solid #ddd', height='300px', overflow_y='auto', padding='0'

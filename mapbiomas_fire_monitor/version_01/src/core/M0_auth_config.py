@@ -60,9 +60,13 @@ def get_config(country='peru'):
 
 # ─── AUTENTICAÇÃO ─────────────────────────────────────────────────────────────
 
-def authenticate(project='mapbiomas-peru'):
+def authenticate(project='mapbiomas-peru', clean_cache=False):
     """Autenticar com Google Earth Engine e GCS (Suporta Local e Colab)."""
     import ee
+    
+    if clean_cache:
+        from M_cache import CacheManager
+        CacheManager.clear()
     
     # Detecção de ambiente Colab para autenticação GCS
     try:
@@ -93,7 +97,8 @@ GLOBAL_OPTS = {
     'SENSOR': 'landsat',       # landsat, sentinel2, hls, modis
     'PERIODICITY': 'yearly',   # yearly, monthly
     'MOSAIC_METHOD': 'minnbr', # minnbr, minnbr_buffer, median, minndvi
-    'PERSONAL_TASK_FLAG': 'CATALOG'
+    'PERSONAL_TASK_FLAG': 'CATALOG',
+    'SAMPLING_CAMPAIGN': 'monitor_01'
 }
 
 def _get_fs():
@@ -108,7 +113,7 @@ def _get_fs():
         # Deixamos o gcsfs detectar o projeto automaticamente para evitar conflitos de quota.
         return gcsfs.GCSFileSystem(token='google_default', requests_timeout=10)
 
-def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='MONITOR', clean_cache=False):
+def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='MONITOR', sampling_campaign='monitor_01', clean_cache=False):
     """
     Configura variáveis globais do fluxo de processamento.
     
@@ -121,19 +126,23 @@ def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='
     GLOBAL_OPTS['SENSOR'] = sensor
     GLOBAL_OPTS['PERIODICITY'] = periodicity
     GLOBAL_OPTS['PERSONAL_TASK_FLAG'] = personal_task_flag
+    GLOBAL_OPTS['SAMPLING_CAMPAIGN'] = sampling_campaign
     
-    print(f"✅ Opciones globales: {sensor.upper()} | {periodicity.upper()} | Task Flag: {personal_task_flag}")
+    print(f"✅ Opciones globales: {sensor.upper()} | {periodicity.upper()} | Campaign: {sampling_campaign} | Task Flag: {personal_task_flag}")
 
     if clean_cache:
         try:
+            from M_cache import CacheManager
+            CacheManager.clear()
+            
             fs = _get_fs()
             cache_file = f"state.json"
             gcs_path = f"gs://{CONFIG['bucket']}/{CONFIG['gcs_cache']}/{cache_file}"
             if fs.exists(gcs_path):
                 fs.rm(gcs_path)
-                print(f"🧹 Caché eliminado: {gcs_path}")
+                print(f"🧹 Caché GCS eliminado: {gcs_path}")
             else:
-                print("ℹ️ Cache no encontrado (nada para limpar).")
+                print("ℹ️ Cache GCS no encontrado (nada para limpar).")
         except Exception as e:
             print(f"⚠️ Aviso al limpiar caché: {e}")
     
@@ -213,21 +222,17 @@ def gcs_path(relative):
 # ─── GENERADORES DE CAMINHOS GEE ──────────────────────────────────────────────
 
 def get_asset_mosaic_collection(sensor=None, periodicity=None, band=None, period=None, mosaic=None):
-    """
-    Gera o path da ImageCollection no GEE para imagens raw/mosaicadas.
-    Padrão: .../LIBRARY_IMAGES/{SENSOR}/{PERIODICITY}/{MOSAIC}/{band}
-    """
     period = period or periodicity or GLOBAL_OPTS['PERIODICITY']
     folder_period = period.upper()
-    m = (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).upper()
+    m_name = (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).upper()
     
     sensor_name = (sensor or GLOBAL_OPTS['SENSOR']).upper()
     
-    # Path principal da library de imagens
-    path = f"{CONFIG['asset_monitor_base']}/LIBRARY_IMAGES/{sensor_name}/{folder_period}/{m}"
+    # PADRÃO: ImageCollection por BANDA
+    path = f"{CONFIG['asset_monitor_base']}/LIBRARY_IMAGES/{sensor_name}/{folder_period}/{m_name}"
     
     if band:
-        path = f"{path}/{band.upper()}"
+        path = f"{path}/{band.lower()}"
     return path
 
 
@@ -330,11 +335,13 @@ def sample_asset_name(temporal_id, version_id):
 
 def get_asset_samples(temporal_id, version_id):
     asset = sample_asset_name(temporal_id, version_id)
-    return f"{CONFIG['asset_monitor_base']}/LIBRARY_SAMPLES/{asset}"
+    campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
+    return f"{CONFIG['asset_monitor_base']}/LIBRARY_SAMPLES/{campaign}/{asset}"
 
 def get_gcs_samples(temporal_id, version_id):
     asset = sample_asset_name(temporal_id, version_id)
-    return f"{CONFIG['gcs_library_samples']}/{asset}"
+    campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
+    return f"{CONFIG['gcs_library_samples']}/{campaign}/{asset}"
 
 def get_asset_regional(region_id, training_id, temporal_id):
     """Retorna o path do GEE para classificações regionais."""

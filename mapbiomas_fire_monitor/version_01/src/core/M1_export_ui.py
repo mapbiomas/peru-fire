@@ -108,7 +108,6 @@ class ExportDispatcherUI(PipelineStepUI):
             now = datetime.datetime.now()
             
             if period == 'monthly':
-                # Se for o ano atual, limita até o mês passado. Caso contrário, todos os 12 meses.
                 limit_month = now.month - 1 if y == now.year else 12
                 months = range(limit_month, 0, -1)
             else:
@@ -116,7 +115,6 @@ class ExportDispatcherUI(PipelineStepUI):
                 
             for m in months:
                 date_str = f"{y}_{m:02d}" if m else f"{y}"
-                name = mosaic_name(y, m, period)
                 
                 for row_type in ['GCS', 'ASSET']:
                     cells = [
@@ -130,27 +128,20 @@ class ExportDispatcherUI(PipelineStepUI):
                     cells.append(btn_s)
 
                     for b in self.bands:
-                        # Lógica de existência (COG) vs disponibilidade (Chunks)
                         m_name = mosaic_name(y, m, period, band=b, mosaic=mosaic_method, sensor=sensor)
                         m_base_name = mosaic_name(y, m, period, mosaic=mosaic_method, sensor=sensor)
                         
-                        # 1. Verifica no GCS (Chunks)
-                        # Cache salva chaves em lowercase; normalizar para garantir compatibilidade
                         chunks_dict = self.state.get('gcs_chunks', {})
                         exists_gcs = b in chunks_dict.get(m_base_name.lower(), [])
                         
-                        # 2. Verifica no GEE (Assets)
-                        # Cache normaliza para lowercase; comparar com .lower() para evitar mismatch
                         assets_key = 'assets_monthly' if period == 'monthly' else 'assets_annually'
                         assets_list = self.state.get(assets_key, [])
                         exists_gee = m_name.lower() in assets_list
                         
-                        # 3. Verifica se está rodando no GEE
-                        # A descrição contém o nome da imagem (m_name)
                         m_name_lower = m_name.lower()
-                        # Busca apenas se o nome base da imagem está presente na descrição da tarefa
-                        # Isso funciona mesmo se o prefixo da tarefa for MONITOR_01 ou outro.
-                        is_active = any(m_name_lower in t.lower() for t in active_tasks)
+                        # Busca precisa usando a flag pessoal: FLAG_TIPO_NOME
+                        task_id = f"{GLOBAL_OPTS['PERSONAL_TASK_FLAG']}_{row_type}_{m_name_lower}".lower()
+                        is_active = any(task_id in t.lower() for t in active_tasks)
                         
                         chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
                         chk._meta = {'sensor': sensor, 'period': period, 'mosaic': mosaic_method, 'year': y, 'month': m, 'band': b, 'type': row_type}
@@ -165,7 +156,6 @@ class ExportDispatcherUI(PipelineStepUI):
                         else:
                             status, css = 'MISS', 'mfm-null'
                         
-                        # Se já existe ou está rodando, desabilita a seleção, A MENOS que seja edit_mode
                         if not is_edit_mode():
                             if exists or is_active: chk.disabled = True
                         
@@ -188,16 +178,13 @@ class ExportDispatcherUI(PipelineStepUI):
 
     def _build_ui(self):
         self._init_data()
-        # Limpa widgets de título da classe base para usar o novo header compacto
         self.header_title.value = ""
         self.header_desc.value = ""
-        # Remove loader do topo para não ficar duplicado (já estará no footer)
         self.header_box.children = [self.header_title]
         
         L = widgets.Layout
         self.chk_dict = {}
 
-        # --- HEADER COMPACTO (LINHA ÚNICA) ---
         header_html = f'''
         <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 5px 10px; background: #fff; border-bottom: 2px solid #333; margin-bottom: 10px;">
             <div style="display: flex; align-items: center; gap: 15px;">
@@ -211,7 +198,6 @@ class ExportDispatcherUI(PipelineStepUI):
         </div>
         '''
         
-        # --- FOOTER DE CONTROLE ---
         self.btn_refresh = widgets.Button(description="Sincronizar Datos", button_style='success', icon='refresh', layout=L(width='180px'))
         self.btn_refresh.on_click(lambda _: self._refresh_cache())
         
@@ -220,22 +206,20 @@ class ExportDispatcherUI(PipelineStepUI):
         btn_all.on_click(self._on_select_all)
         btn_none.on_click(self._on_select_none)
         
-        # Loader integrado ao lado do botão de sincronizar
         footer = widgets.VBox([
             widgets.HBox([btn_all, btn_none, self.btn_refresh, self.loader_html], layout=L(margin='15px 0', gap='10px', align_items='center'))
         ])
 
-        # --- SISTEMA DE ABAS (TABS) ---
-        sensors = ['SENTINEL2'] #, 'LANDSAT', 'HLS', 'MODIS']
-        periods = ['monthly'] #, 'yearly']
-        methods = ['minnbr', 'minnbr_buffer'] #, 'median', 'minndvi']
+        sensors = ['SENTINEL2']
+        periods = ['monthly']
+        methods = ['minnbr', 'minnbr_buffer']
         
         self.update_status("Sincronizando tarefas GEE...")
         active_tasks = self._get_active_tasks()
         
         self.sensor_tabs = widgets.Tab()
         self.sensor_children = []
-        self.tab_map = {} # (s_idx, p_idx, m_idx) -> (sensor, period, method)
+        self.tab_map = {}
 
         for i, s in enumerate(sensors):
             period_tabs = widgets.Tab()
@@ -244,7 +228,6 @@ class ExportDispatcherUI(PipelineStepUI):
                 method_tabs = widgets.Tab()
                 method_children = []
                 for k, m in enumerate(methods):
-                    # Placeholder para cada método
                     placeholder = widgets.VBox([widgets.HTML(f"<i>Clique para cargar {s} {p} ({m})...</i>")], layout=L(padding='20px'))
                     method_children.append(placeholder)
                     self.tab_map[(i, j, k)] = (s.lower(), p, m)
@@ -253,7 +236,6 @@ class ExportDispatcherUI(PipelineStepUI):
                 for k, m in enumerate(methods):
                     method_tabs.set_title(k, m.upper())
                 
-                # Monitorar mudança de método
                 method_tabs.observe(lambda change, si=i, pi=j: self._on_method_change(change, si, pi), names='selected_index')
                 period_children.append(method_tabs)
             
@@ -270,21 +252,8 @@ class ExportDispatcherUI(PipelineStepUI):
             
         self.sensor_tabs.observe(self._on_sensor_change, names='selected_index')
 
-        # Gatilho inicial: Carrega S2 Monthly minnbr
         self._load_tab(0, 0, 0, active_tasks)
 
-        # --- FOOTER ---
-        btn_all = widgets.Button(description="Seleccionar Pendientes", button_style='info', layout=L(width='180px'))
-        btn_none = widgets.Button(description="Limpiar Selección", button_style='warning', layout=L(width='150px'))
-        btn_all.on_click(self._on_select_all)
-        btn_none.on_click(self._on_select_none)
-        
-        btn_exp_asset = widgets.Button(description="Exportar a GEE (Asset)", button_style='primary', icon='cloud-upload', layout=L(width='220px'))
-        btn_exp_gcs = widgets.Button(description="Exportar a GCS (Chunks)", button_style='primary', icon='database', layout=L(width='220px'))
-        btn_exp_asset.on_click(lambda _: start_export(self, 'ASSET'))
-        btn_exp_gcs.on_click(lambda _: start_export(self, 'GCS'))
-
-        # --- RESTAURAÇÃO DE ESTADO ---
         if hasattr(self, '_last_sensor_idx'):
             try:
                 self.sensor_tabs.selected_index = self._last_sensor_idx
@@ -292,7 +261,6 @@ class ExportDispatcherUI(PipelineStepUI):
                 s_tab.selected_index = self._last_period_idx
                 m_tab = s_tab.children[self._last_period_idx]
                 m_tab.selected_index = self._last_method_idx
-                # Força o carregamento da aba restaurada
                 self._load_tab(self._last_sensor_idx, self._last_period_idx, self._last_method_idx, active_tasks)
             except: pass
 
@@ -324,15 +292,12 @@ class ExportDispatcherUI(PipelineStepUI):
         p_tabs = self.sensor_children[s_idx]
         method_tabs = p_tabs.children[p_idx]
         
-        # Se já foi carregado (não é mais o placeholder), ignora
         target_container = method_tabs.children[m_idx]
         if not isinstance(target_container.children[0], widgets.HTML) or "Clique para cargar" not in target_container.children[0].value:
             return
 
-        # Build grid for this specific mosaic method
         grid = self._build_mosaic_grid(sensor, period, method, active_tasks)
         
-        # Atualiza a aba com o conteúdo real
         new_children = list(method_tabs.children)
         new_children[m_idx] = grid
         method_tabs.children = new_children
@@ -341,8 +306,6 @@ class ExportDispatcherUI(PipelineStepUI):
         if self.is_refreshing: return
         try:
             self.is_refreshing = True
-            
-            # Salva o estado atual das abas aninhadas
             if hasattr(self, 'sensor_tabs'):
                 self._last_sensor_idx = self.sensor_tabs.selected_index
                 s_tab = self.sensor_children[self._last_sensor_idx]
@@ -366,10 +329,6 @@ def run_ui(years=None):
     return ui
 
 def start_export(ui_obj, mode=None):
-    """
-    Dispara exportações selecionadas. 
-    Se mode for None, dispara tanto ASSET quanto GCS conforme a seleção na UI.
-    """
     selected = []
     for chk in ui_obj.chk_dict.values():
         if chk.value:
@@ -382,45 +341,29 @@ def start_export(ui_obj, mode=None):
         return
 
     from M1_export_logic import export_to_asset, export_to_gcs
-    from M0_auth_config import mosaic_name
-
-    # Agrupa por tipo para log
-    asset_count = len([m for m in selected if m['type'] == 'ASSET'])
-    gcs_count = len([m for m in selected if m['type'] == 'GCS'])
-    
-    print(f"🚀 Iniciando {len(selected)} exportaciones ({asset_count} Assets, {gcs_count} GCS)...")
+    print(f"🚀 Iniciando {len(selected)} exportaciones...")
 
     import M1_export_logic as logic
     from M0_auth_config import CONFIG, mosaic_name
     
-    # Obtém a geometria simplificada (Bounding Box) apenas uma vez
-    # Usar .bounds() evita que o GEE processe o contorno detalhado do país no momento do envio
     country_geom = ee.FeatureCollection(CONFIG['asset_regions']).geometry().bounds()
 
     for i, meta in enumerate(selected, 1):
         y, m, p, band, mosaic_m, sensor = meta['year'], meta['month'], meta['period'], meta['band'], meta['mosaic'], meta['sensor']
         
-        # Nome BASE (sem data): image_peru_fire_sentinel2_minnbr
         name_base = mosaic_name(y, m, p, mosaic=mosaic_m, sensor=sensor, band=None).replace(f"_{y}_{m:02d}", "").replace(f"_{y}", "")
-        # Nome COMPLETO (para Asset): image_peru_fire_sentinel2_minnbr_blue_2026_03
         name_full = mosaic_name(y, m, p, mosaic=mosaic_m, sensor=sensor, band=band)
         
-        print(f"  [{i}/{len(selected)}] Enviando {sensor} {mosaic_m} ({band}) {y}-{m:02d} para {meta['type']}...")
+        print(f"  [{i}/{len(selected)}] Enviando {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d} para {meta['type']}...")
 
-        # Calcula intervalo de datas simplificado
-        start_date = f"{y}-{m:02d}-01" if p == 'monthly' else f"{y}-01-01"
-        end_date = (f"{y}-{m+1:02d}-01" if p == 'monthly' and m < 12 
-                    else f"{y+1}-01-01" if p == 'monthly' or p == 'yearly'
-                    else f"{y}-{m:02d}-28") # fallback seguro
+        start_date = f"{y}-{m:02d}-01" if p == 'monthly' and m else f"{y}-01-01"
+        end_date = (f"{y}-{m+1:02d}-01" if p == 'monthly' and m and m < 12 else f"{y+1}-01-01")
 
-        # 1. Gera o mosaico
         mosaic_obj = logic.get_quality_mosaic(sensor, y, start_date, end_date, country_geom, month=m, method=mosaic_m)
         
         if meta['type'] == 'ASSET':
-            # Passar a banda como string simples para evitar paths com ['band']
-            logic.export_to_asset(mosaic_obj, name_full, y, m, p, band=band)
+            logic.export_to_asset(mosaic_obj, name_full, y, m, p, band=band, mosaic=mosaic_m)
         else:
-            # GCS usa o nome base, pois a função logic.export_to_gcs monta o nome final
-            logic.export_to_gcs(mosaic_obj, name_base, y, m, p, bands=[band])
+            logic.export_to_gcs(mosaic_obj, name_base, y, m, p, bands=[band], mosaic=mosaic_m)
             
     print(f"\n✅ Completado! {len(selected)} tareas enviadas.")

@@ -224,8 +224,8 @@ def get_quality_mosaic(sensor, year, start_date, end_date, bounds, month=None, m
 
 # ─── FUNÇÕES DE EXPORTAÇÃO ─────────────────────────────────────────────────────
 
-def export_to_asset(mosaic, name, year, month=None, period='monthly', config=None, band=None):
-    country_geom = config.get_country_geometry() if config else mosaic.geometry()
+def export_to_asset(mosaic_obj, name, year, month=None, period='monthly', config=None, band=None, mosaic=None):
+    country_geom = config.get_country_geometry() if config else mosaic_obj.geometry()
     if period == 'monthly':
         t_start = ee.Date(f'{year}-{month:02d}-01').millis()
         t_end = ee.Date(f'{year}-{month:02d}-01').advance(1, 'month').millis()
@@ -246,10 +246,15 @@ def export_to_asset(mosaic, name, year, month=None, period='monthly', config=Non
         'produced_for': 'mapbiomas-fire'
     }
     
-    img = mosaic.clip(country_geom).set(properties)
+    img = mosaic_obj
+    if band:
+        img = img.select(band)
+        
+    img = img.clip(country_geom).set(properties)
 
     from M0_auth_config import get_asset_mosaic_collection, GLOBAL_OPTS
-    collection_id = get_asset_mosaic_collection(period=period, band=band)
+    m_method = mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')
+    collection_id = get_asset_mosaic_collection(period=period, band=band, mosaic=m_method)
     
     # Garante que a estrutura de pastas e a ImageCollection existam
     ensure_asset_path(collection_id, 'IMAGE_COLLECTION')
@@ -311,11 +316,11 @@ def delete_asset_band(year, month, period, band):
         print(f"[ERR] Falha ao deletar asset: {e}")
 
 
-def export_to_gcs(mosaic, name, year, month=None, period='monthly', bands=None, config_module=None):
+def export_to_gcs(mosaic_obj, name, year, month=None, period='monthly', bands=None, config_module=None, mosaic=None):
     from M0_auth_config import CONFIG, GLOBAL_OPTS, monthly_chunk_path, yearly_chunk_path
-    geometry = config_module.get_country_geometry() if config_module else mosaic.geometry()
+    geometry = config_module.get_country_geometry() if config_module else mosaic_obj.geometry()
     
-    m_method = GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()
+    m_method = mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()
     if period == 'monthly' and month is not None:
         folder = monthly_chunk_path(year, month, mosaic=m_method)
     else:
@@ -330,7 +335,7 @@ def export_to_gcs(mosaic, name, year, month=None, period='monthly', bands=None, 
         
         band_name = mosaic_name(year, month, period, band=clean_band, mosaic=m_method)
         task = ee.batch.Export.image.toCloudStorage(
-            image=mosaic.select(band).clip(geometry),
+            image=mosaic_obj.select(band).clip(geometry),
             description=f"{GLOBAL_OPTS['PERSONAL_TASK_FLAG']}_GCS_{band_name}", bucket=CONFIG['bucket'],
             fileNamePrefix=f"{folder}/{band_name}_", region=geometry.bounds(),
             scale=10, maxPixels=1e13, fileFormat='GeoTIFF',
