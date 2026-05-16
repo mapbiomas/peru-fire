@@ -1,6 +1,6 @@
 import os
 import json
-from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
+from M0_auth_config import CONFIG
 from M_cache import _get_fs
 
 def _load_m4_cache():

@@ -8,7 +8,6 @@ from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
 
 from M4_data_extractor import compute_normalizer, normalize
-from M4_hub_manager import list_trained_models
 def _get_tf():
     """Carrega o TensorFlow apenas quando necessário (Lazy Load)."""
     global TF_AVAILABLE, TF_ERROR

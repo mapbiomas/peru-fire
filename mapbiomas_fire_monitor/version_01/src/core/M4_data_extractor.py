@@ -8,6 +8,7 @@ import rasterio
 from rasterio.mask import mask
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
+from M4_hub_manager import _load_m4_cache, _save_m4_cache
 
 
 def list_sample_collections_gcs(force_refresh=False):

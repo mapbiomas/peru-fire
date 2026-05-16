@@ -10,7 +10,7 @@ from M_cache import _get_fs
 from M_ui_components import PipelineStepUI
 
 from M4_data_extractor import extract_pixels_from_gcs, list_sample_collections_gcs, list_campaigns_gcs
-from M4_algorithms_dnn import ModelTrainer
+from M4_algorithms_dnn import ModelTrainer, _get_tf
 from M4_analytics import view_analytics, render_diagnostic_dashboard, render_model_card_html
 from M4_hub_manager import list_trained_models, _load_m4_cache, _save_m4_cache
 class ModelTrainerUI(PipelineStepUI):
