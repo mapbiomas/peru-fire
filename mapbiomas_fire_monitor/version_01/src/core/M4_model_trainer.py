@@ -1832,7 +1832,6 @@ class ModelTrainerUI(PipelineStepUI):
             self.canvas_output.clear_output(wait=True)
             with self.canvas_output:
                 display(HTML("<h2 style='color:#2c3e50; border-bottom:3px solid #3498db; padding-bottom:5px; margin-bottom:15px;'>Entrenamiento en Vivo</h2>"))
-                display(self._build_viz_toolbar())
                 display(self._live_plots_out)
             self._live_initialized = True
 
@@ -1902,8 +1901,9 @@ class ModelTrainerUI(PipelineStepUI):
             # Garante que mid seja string mesmo se vier um dicionário de um cache antigo
             if isinstance(mid, dict): mid = mid.get('training_id')
             if not mid: continue
-            # Tenta pegar metadados do cache (populado no init ou refresh)
-            meta = cache.get(mid, {})
+            
+            # O path e outros dados extras foram movidos para a sub-chave 'meta'
+            meta = cache.get('meta', {}).get(mid, {})
             # Se não estiver no cache, info mínima
             if not meta and mid in self.canvas_history:
                 meta = self.canvas_history[mid]
