@@ -2110,9 +2110,12 @@ def start_training(ui):
         if chk.value:
             # p_norm será 'monthly' ou 'yearly'
             p_norm = 'monthly' if p == 'mensal' else 'yearly'
-            key = (s, m, p_norm)
-            if key not in bands_config: bands_config[key] = []
-            bands_config[key].append(b)
+            # A extração espera: bands_config[band_name] = {'sensor': ..., 'mosaic': ..., 'periodicity': ...}
+            bands_config[b] = {
+                'sensor': s,
+                'mosaic': m,
+                'periodicity': p_norm
+            }
             sensors_used.add(s)
             
     if not bands_config:
