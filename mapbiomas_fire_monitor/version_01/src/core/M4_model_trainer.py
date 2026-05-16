@@ -1096,7 +1096,16 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
             classic_keys = ['cm', 'history', 'prob', 'pr', 'pca3d_static', 'tsne3d_static']
             if any(viz_config.get(k) for k in classic_keys):
                 display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px;'> Métricas Clásicas y Proyecciones Estáticas</h4>"))
-                render_diagnostic_dashboard(hp.get('history', {}), None, preds_final, y_true_final, 
+                
+                # Trunca o histórico caso o slider de tempo esteja ativado
+                history_data = hp.get('history', {})
+                if history_data and epoch_index is not None and 'steps' in history_data:
+                    try:
+                        limit = epoch_index + 1
+                        history_data = {k: v[:limit] for k, v in history_data.items()}
+                    except: pass
+                    
+                render_diagnostic_dashboard(history_data, None, preds_final, y_true_final, 
                                           coords_override=tsne_coords_final if viz_config.get('tsne3d_static') else (pca_coords_final if viz_config.get('pca3d_static') or viz_config.get('pca2d') else None), 
                                           viz_config=viz_config)
 
@@ -1827,33 +1836,39 @@ class ModelTrainerUI(PipelineStepUI):
 
     def _update_canvas_live(self, history, embeds, preds, y_true, samples, b_cfg):
         """Atualiza apenas o painel de gráficos vivos, sem tocar na estrutura estável do canvas."""
-        # Inicializa a estrutura estável UMA só VEZ por sessão de treino
+        # Inicializa a estrutura estática do cabeçalho UMA só VEZ por sessão de treino
         if not getattr(self, '_live_initialized', False):
+            self._live_header_html = widgets.HTML()
+            self._live_plots_out = widgets.Output()
             self.canvas_output.clear_output(wait=True)
             with self.canvas_output:
                 display(HTML("<h2 style='color:#2c3e50; border-bottom:3px solid #3498db; padding-bottom:5px; margin-bottom:15px;'>Entrenamiento en Vivo</h2>"))
+                display(self._live_header_html)
                 display(self._live_plots_out)
             self._live_initialized = True
+
+        # 1. HEADER DO TREINO ATUAL (Metadados Live via Reatividade .value para não piscar)
+        from sklearn.metrics import classification_report
+        try:
+            rep = classification_report(y_true, (preds > 0.5).astype(int), output_dict=True, zero_division=0)
+        except: rep = {}
+        
+        hp_live = {
+            'training_id': self.w_training_id.value, 'shortname': self.w_shortname.value,
+            'sample_collections': samples, 'bands_input': sorted(b_cfg.keys()),
+            'layers': self.w_layers.value, 'lr': self.w_lr.value,
+            'sample_count': self.trainer_instance._sample_count, 'comment': self.w_comment.value,
+            'training_date': '[LIVE] Entrenamiento en curso...'
+        }
+        
+        if self.viz_config.get('title'): 
+            self._live_header_html.value = render_model_card_html(hp_live, {'classification_report': rep})
+        else:
+            self._live_header_html.value = ""
 
         # Atualiza SOMENTE o sub-container de gráficos
         self._live_plots_out.clear_output(wait=True)
         with self._live_plots_out:
-            # 1. HEADER DO TREINO ATUAL (Metadados Live)
-            from sklearn.metrics import classification_report
-            try:
-                rep = classification_report(y_true, (preds > 0.5).astype(int), output_dict=True, zero_division=0)
-            except: rep = {}
-            
-            hp_live = {
-                'training_id': self.w_training_id.value, 'shortname': self.w_shortname.value,
-                'sample_collections': samples, 'bands_input': sorted(b_cfg.keys()),
-                'layers': self.w_layers.value, 'lr': self.w_lr.value,
-                'sample_count': self.trainer_instance._sample_count, 'comment': self.w_comment.value,
-                'training_date': '[LIVE] Entrenamiento en curso...'
-            }
-            
-            if self.viz_config.get('title'): 
-                display(HTML(render_model_card_html(hp_live, {'classification_report': rep})))
             
             # Atualiza métricas no ranking lateral (LIVE)
             if hasattr(self, 'live_training_info') and self.live_training_info:
@@ -2251,18 +2266,19 @@ def start_training(ui):
         ui.trainer_instance.save(ui.w_training_id.value, ui.w_shortname.value, comment=ui.w_comment.value, logger=_logger)
         print("¡Modelo y Model Card guardados exitosamente!")
         
-        # Carregar o Model Card automaticamente no dashboard inferior
-        model_info = {
-            'training_id': f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{GLOBAL_OPTS['SENSOR'].lower()}", 
-            'path': model_path(ui.w_training_id.value, ui.w_shortname.value)
+        # Inserir o modelo fresquinho na Mesa do Canvas automaticamente
+        final_id = f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{GLOBAL_OPTS['SENSOR'].lower()}"
+        ui.selected_models = {
+            final_id: {'training_id': final_id, 'path': model_path(ui.w_training_id.value, ui.w_shortname.value)}
         }
-        view_analytics(model_info, out_widget=ui.analytics_dashboard_output)
+        
+        ui.live_training_info = None  # Remove o status de LIVE após conclusão
+        ui._live_initialized = False
+        ui._sync_repository(show_loader=False)
+        ui._update_canvas()  # Pinta o card final!
         
     except Exception as e:
         print(f"Error al guardar: {e}")
-        
-    ui.live_training_info = None  # Remove o status de LIVE após conclusão
-    ui._sync_repository(show_loader=False)
 
 
 def run_ui():
