@@ -171,3 +171,17 @@ from M7_curator import run_ui, start_curation
 ui_curator = run_curator(PRESET_VOTES)
 start_curation(ui_curator)
 ```
+
+
+## M5 - Classificação Regional
+`python
+# Interface de Agendamento da M5
+from M5_classifier_ui import run_m5_ui
+ui_m5 = run_m5_ui()
+`
+
+`python
+# Processamento Assíncrono da M5
+from M5_classifier import run_m5_queue
+run_m5_queue()
+`
