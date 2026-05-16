@@ -366,22 +366,24 @@ class ModelTrainer:
                 json.dump(metrics, f, indent=2)
             fs.put(os.path.join(tmpdir, 'metrics.json'), f"{CONFIG['bucket']}/{base_path}/metrics.json")
             
-            # --- 2.6 Keras Model Export (.keras) ---
+            # --- 2.6 Keras Model Export (arquitetura JSON + pesos H5) ---
             try:
-                import tensorflow as _tf2
-                if logger: logger("Exportando modelo no formato Keras (.keras)...", "info")
-                keras_model = _tf2.keras.Sequential(name=f"{training_id}_{shortname}")
-                keras_model.add(_tf2.keras.layers.Input(shape=(self.num_input,), name='x'))
+                if logger: logger("Exportando modelo no formato Keras (JSON+H5)...", "info")
+                keras_model = tf.keras.Sequential(name=f"{training_id}_{shortname}")
+                keras_model.add(tf.keras.layers.Input(shape=(self.num_input,), name='x'))
                 for i, n_units in enumerate(self.layers):
-                    keras_model.add(_tf2.keras.layers.Dense(n_units, activation='relu', name=f'fc_{i}'))
-                keras_model.add(_tf2.keras.layers.Dense(1, activation='sigmoid', name='output'))
+                    keras_model.add(tf.keras.layers.Dense(n_units, activation='relu', name=f'fc_{i}'))
+                keras_model.add(tf.keras.layers.Dense(1, activation='sigmoid', name='output'))
                 layer_names = [f'fc_{i}' for i in range(len(self.layers))] + ['output']
                 for ln in layer_names:
                     kernel = self._saved_vars[f'{ln}/kernel:0']
                     bias = self._saved_vars[f'{ln}/bias:0']
                     keras_model.get_layer(ln).set_weights([kernel, bias])
-                keras_model.save(os.path.join(tmpdir, 'model.keras'))
-                fs.put(os.path.join(tmpdir, 'model.keras'), f"{CONFIG['bucket']}/{base_path}/model.keras")
+                with open(os.path.join(tmpdir, 'model_arch.json'), 'w') as f:
+                    f.write(keras_model.to_json())
+                keras_model.save_weights(os.path.join(tmpdir, 'model.weights.h5'))
+                for fname in ['model_arch.json', 'model.weights.h5']:
+                    fs.put(os.path.join(tmpdir, fname), f"{CONFIG['bucket']}/{base_path}/{fname}")
                 if logger: logger("[OK] Modelo Keras guardado em GCS.", "info")
             except Exception as e_keras:
                 if logger: logger(f"[AVISO] No se pudo exportar modelo Keras: {e_keras}", "info")

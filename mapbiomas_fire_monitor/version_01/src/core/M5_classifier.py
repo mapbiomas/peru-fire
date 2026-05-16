@@ -118,14 +118,18 @@ def _process_job(job, out):
     total_cells = len(cells)
     with out: print(f"Se encontraron {total_cells} celdas (tiles) para procesar.")
     
-    # 3. Cargar el Modelo de IA a RAM (.keras exportado por M4)
-    local_model = f"/tmp/{model_id}.keras"
-    if not os.path.exists(local_model):
+    # 3. Cargar el Modelo de IA a RAM (arquitetura JSON + pesos H5 exportados por M4)
+    local_arch = f"/tmp/{model_id}_arch.json"
+    local_weights = f"/tmp/{model_id}.h5"
+    if not os.path.exists(local_arch) or not os.path.exists(local_weights):
         with out: print(f"Descargando modelo Keras desde GCS...")
-        fs.get(f"{model_dir}/model.keras", local_model)
+        fs.get(f"{model_dir}/model_arch.json", local_arch)
+        fs.get(f"{model_dir}/model.weights.h5", local_weights)
     
     with out: print("Cargando modelo en memoria (TensorFlow)...")
-    model = tf.keras.models.load_model(local_model)
+    with open(local_arch, 'r') as f:
+        model = tf.keras.models.model_from_json(f.read())
+    model.load_weights(local_weights)
     
     # 4. Bucle de Procesamiento con Checkpoint Local
     queue = load_queue() # Recarrega para salvar progresso
