@@ -366,6 +366,27 @@ class ModelTrainer:
                 json.dump(metrics, f, indent=2)
             fs.put(os.path.join(tmpdir, 'metrics.json'), f"{CONFIG['bucket']}/{base_path}/metrics.json")
             
+            # --- 2.6 Keras Model Export (.keras) ---
+            try:
+                tf_module = _get_tf(force=True)
+                if tf_module is not None:
+                    if logger: logger("Exportando modelo no formato Keras (.keras)...", "info")
+                    keras_model = tf_module.keras.Sequential(name=f"{training_id}_{shortname}")
+                    keras_model.add(tf_module.keras.layers.Input(shape=(self.num_input,), name='x'))
+                    for i, n_units in enumerate(self.layers):
+                        keras_model.add(tf_module.keras.layers.Dense(n_units, activation='relu', name=f'fc_{i}'))
+                    keras_model.add(tf_module.keras.layers.Dense(1, activation='sigmoid', name='output'))
+                    layer_names = [f'fc_{i}' for i in range(len(self.layers))] + ['output']
+                    for ln in layer_names:
+                        kernel = self._saved_vars[f'{ln}/kernel:0']
+                        bias = self._saved_vars[f'{ln}/bias:0']
+                        keras_model.get_layer(ln).set_weights([kernel, bias])
+                    keras_model.save(os.path.join(tmpdir, 'model.keras'))
+                    fs.put(os.path.join(tmpdir, 'model.keras'), f"{CONFIG['bucket']}/{base_path}/model.keras")
+                    if logger: logger("[OK] Modelo Keras guardado em GCS.", "info")
+            except Exception as e_keras:
+                if logger: logger(f"[AVISO] No se pudo exportar modelo Keras: {e_keras}", "info")
+
             # --- 2.7 TensorBoard Projector Files (Auto-Snapshot) ---
             try:
                 # Gerar arquivos do Projector usando a última amostra de treino (X_raw)
