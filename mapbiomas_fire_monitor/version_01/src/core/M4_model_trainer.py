@@ -2034,39 +2034,57 @@ class ModelTrainerUI(PipelineStepUI):
 
     def _build_viz_toolbar(self):
         L = widgets.Layout
+        
+        # 1. Labels e Criação
         labels = {
             'title': 'Metadatos', 'scores': 'KPIs', 'cm': 'Confusion', 
             'history': 'Historial', 'prob': 'Prob', 'pr': 'PR-Curve', 
-            'pca2d': 'PCA 2D', 'pca3d': 'PCA 3D (Int)', 'tsne3d': 't-SNE 3D (Int)',
-            'pca3d_static': 'PCA 3D (Est)', 'tsne3d_static': 't-SNE 3D (Est)',
+            'pca2d': 'PCA 2D', 'pca3d_static': 'PCA 3D (Est)', 'pca3d': 'PCA 3D (Int)',
+            'tsne3d_static': 't-SNE 3D (Est)', 'tsne3d': 't-SNE 3D (Int)',
             'management': 'Gestión'
         }
         
-        chks_widgets = {}
+        chks = {}
         for key, label in labels.items():
             cb = widgets.Checkbox(value=self.viz_config[key], description=label, layout=L(width='auto', margin='0 5px 0 0'))
             def _on_local_change(change, k=key):
                 self.viz_config[k] = change['new']
             cb.observe(_on_local_change, names='value')
-            chks_widgets[key] = cb
+            chks[key] = cb
             
         def _set_all(val):
             for k in labels.keys():
-                chks_widgets[k].value = val
+                chks[k].value = val
                 self.viz_config[k] = val
-                
+
+        # 2. Agrupamento por Categorias (Linhas)
+        def _make_row(title, keys):
+            return widgets.HBox([
+                widgets.HTML(f"<b style='width:160px; display:inline-block; color:#2c3e50; font-size: 13px;'>{title}:</b>"),
+                widgets.HBox([chks[k] for k in keys], layout=L(flex_flow='row wrap'))
+            ], layout=L(align_items='center', margin='2px 0'))
+            
+        row1 = _make_row("Metadatos", ['title', 'scores'])
+        row2 = _make_row("Estatísticas Básicas", ['cm', 'history', 'prob', 'pr'])
+        row3 = _make_row("Espaço Latente PCA", ['pca2d', 'pca3d_static', 'pca3d'])
+        row4 = _make_row("Espaço Latente t-SNE", ['tsne3d_static', 'tsne3d'])
+        row5 = _make_row("Gestión", ['management'])
+        
+        chk_container = widgets.VBox([row1, row2, row3, row4, row5])
+        
+        # 3. Botões de Ação na parte inferior
         btn_all = widgets.Button(description="Todos", layout=L(width='70px'), button_style='info')
         btn_none = widgets.Button(description="Nenhum", layout=L(width='70px'), button_style='warning')
         btn_all.on_click(lambda _: _set_all(True))
         btn_none.on_click(lambda _: _set_all(False))
         
-        return widgets.HBox([
-            widgets.HTML("<b style='margin-right:10px;'>Ver:</b>"),
-            widgets.HBox(list(chks_widgets.values()), layout=L(flex_flow='row wrap', max_width='700px')),
-            widgets.HTML("<div style='width:20px;'></div>"),
-            btn_all, btn_none,
-            self.w_apply_btn
-        ], layout=L(margin='10px 0', padding='10px', background_color='#f8f9fa', border_radius='5px', align_items='center'))
+        btn_container = widgets.HBox([btn_all, btn_none, widgets.HTML("<div style='width:20px'></div>"), self.w_apply_btn], layout=L(margin='15px 0 0 0', align_items='center'))
+        
+        return widgets.VBox([
+            widgets.HTML("<h4 style='margin:0 0 10px 0; color:#34495e; border-bottom:1px solid #ddd; padding-bottom:5px;'>Opciones de Visualización</h4>"),
+            chk_container,
+            btn_container
+        ], layout=L(margin='10px 0', padding='15px', background_color='#f8f9fa', border_radius='5px', border='1px solid #dee2e6'))
 
     def _update_canvas(self):
         """Renderiza o GridBox responsivo com os cards dos modelos selecionados."""
