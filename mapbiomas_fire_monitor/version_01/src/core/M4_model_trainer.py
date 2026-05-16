@@ -995,9 +995,11 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                 </div>
                 """)
 
-            kpi_acc = make_kpi_card("Acc", f"{rep.get('accuracy', 0):.1%}", "#27ae60")
-            kpi_f1 = make_kpi_card("F1-Fire", f"{rep.get('1', {}).get('f1-score', 0):.1%}", "#16a085")
-            kpi_auto = make_kpi_card("Nota Auto.", f"{a_rating}/5", "#34495e", icon="flash")
+            kpi_acc = make_kpi_card("Accuracy", f"{rep.get('accuracy', 0):.1%}", "#2c3e50", icon="crosshairs")
+            kpi_prec = make_kpi_card("Precision", f"{rep.get('1', {}).get('precision', 0):.1%}", "#8e44ad", icon="bullseye")
+            kpi_rec = make_kpi_card("Recall", f"{rep.get('1', {}).get('recall', 0):.1%}", "#e67e22", icon="search-plus")
+            kpi_f1 = make_kpi_card("F1-Score", f"{rep.get('1', {}).get('f1-score', 0):.1%}", "#16a085", icon="balance-scale")
+            kpi_auto = make_kpi_card("Nota IA", f"{a_rating}/5", "#34495e", icon="flash")
 
             # Nota Humana Interativa no KPI
             user_stars_container = widgets.HBox([], layout=widgets.Layout(margin='0', align_items='center'))
@@ -1028,8 +1030,8 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
             ], layout=widgets.Layout(background='white', padding='10px', border_left='5px solid #f1c40f', border_radius='4px', box_shadow='0 2px 4px rgba(0,0,0,0.08)', flex='1.5'))
 
             unified_grid = widgets.HBox(
-                [kpi_acc, kpi_f1, kpi_auto, kpi_human_box],
-                layout=widgets.Layout(gap='8px', margin='10px 0', width='100%')
+                [kpi_acc, kpi_prec, kpi_rec, kpi_f1, kpi_auto, kpi_human_box],
+                layout=widgets.Layout(gap='8px', margin='10px 0', width='100%', flex_wrap='wrap')
             )
 
             # --- CARD HEADER & BODY ---
@@ -1922,6 +1924,11 @@ class ModelTrainerUI(PipelineStepUI):
             # Se não estiver no cache, info mínima
             if not meta and mid in self.canvas_history:
                 meta = self.canvas_history[mid]
+            
+            # As métricas e dados pós-treino salvos no GCS ficam sob 'metadata'
+            metadata_rich = cache.get('metadata', {}).get(mid, {})
+            if metadata_rich:
+                meta.update(metadata_rich)
             
             metrics = meta.get('metrics', {})
             rep = metrics.get('classification_report', {})
