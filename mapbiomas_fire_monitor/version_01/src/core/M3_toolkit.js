@@ -7,7 +7,7 @@ v10: Exclusive Tool for Sample Collection and Export (Vectors)
 ********************************************/
 
 // ─── GLOBAL CONFIGURATION ───────────────────────────────────────────────────
-var PERSONAL_TASK_FLAG = 'MONITOR';
+var PERSONAL_TASK_FLAG = 'CATALOG';
 
 // ─── LANGUAGE CONFIGURATION ─────────────────────────────────────────────────
 // Change APP_LANG to switch the interface language: 'es', 'pt', 'en'
@@ -236,9 +236,9 @@ var countryConfigs = {
     // },
     'Peru': {
         asset_regions: 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
-        asset_samples: 'projects/mapbiomas-peru/assets/FIRE/MONITOR_01/LIBRARY_SAMPLES',
+        asset_samples: 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01/LIBRARY_SAMPLES',
         bucket: 'mapbiomas-fire',
-        gcs_samples: 'sudamerica/peru/monitor/version_01/library_samples',
+        gcs_samples: 'sudamerica/peru/CATALOG_01/LIBRARY_SAMPLES',
         property: 'region_nam'
     }
 };
@@ -527,15 +527,15 @@ function user_interface() {
                         var isBuffer = s.indexOf('buffer') !== -1;
                         var sensorFolder = 'SENTINEL2'; // Sensor base
                         var mosaicType = isBuffer ? 'MINNBR_BUFFER' : 'MINNBR';
-                        var periodFolder = folderPeriod;
+                        var periodFolder = folderPeriod.toUpperCase();
 
-                        var assetBase = 'projects/mapbiomas-peru/assets/FIRE/MONITOR_01/LIBRARY_IMAGES';
+                        var assetBase = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01/LIBRARY_IMAGES';
                         var imgAsset = ee.Image().select();
 
                         try {
                             baseBands.forEach(function (b) {
                                 // Nova Estrutura: {base}/{sensor}/{period}/{mosaic}/{band}
-                                var colId = [assetBase, sensorFolder, periodFolder, mosaicType, b].join('/');
+                                var colId = [assetBase, sensorFolder, periodFolder, mosaicType, b.toUpperCase()].join('/');
                                 var col = ee.ImageCollection(colId);
 
                                 // Filtra a imagem pelo nome institucional ou metadados
@@ -1226,13 +1226,13 @@ function user_interface() {
         var today = new Date();
         // Limitamos ao ano atual real, não permitindo datas futuras inconsistentes
         var maxYear = today.getFullYear();
-        var maxMonth = today.getMonth(); 
+        var maxMonth = today.getMonth();
         if (maxMonth === 0) { maxMonth = 12; maxYear--; }
-        
+
         // Se estivermos em 2026 no sistema, mas os dados reais param antes, 
         // vamos forçar um limite conservador (ex: 2025_12) se necessário,
         // ou deixar o usuário escolher. Aqui vamos apenas garantir que a ordem é inversa.
-        
+
         // Meses
         for (var y = maxYear; y >= 2019; y--) {
             var mEnd = (y === maxYear) ? Math.min(maxMonth, 12) : 12;

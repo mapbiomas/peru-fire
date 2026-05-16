@@ -328,12 +328,7 @@ def export_to_gcs(mosaic, name, year, month=None, period='monthly', bands=None, 
         # Normalização para evitar problemas com dayOfYear (case-insensitive)
         clean_band = "dayOfYear" if band.lower() == "dayofyear" else band
         
-        if period == 'monthly':
-            date_str = f"{year}_{month:02d}"
-        else:
-            date_str = f"{year}"
-            
-        band_name = f"{name}_{clean_band}_{date_str}"
+        band_name = mosaic_name(year, month, period, band=clean_band, mosaic=m_method)
         task = ee.batch.Export.image.toCloudStorage(
             image=mosaic.select(band).clip(geometry),
             description=f"{GLOBAL_OPTS['PERSONAL_TASK_FLAG']}_GCS_{band_name}", bucket=CONFIG['bucket'],

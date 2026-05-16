@@ -37,13 +37,13 @@ def get_config(country='peru'):
             'asset_filtered_old': 'projects/mapbiomas-peru/assets/FIRE/MONITOR_01/FILTERED',
             
             # NOVOS CAMINHOS GCS (Arquitetura Singleband)
-            'gcs_library_images': 'sudamerica/peru/monitor/version_01/library_images',
-            'gcs_library_samples': 'sudamerica/peru/monitor/version_01/library_samples',
-            'gcs_cache': 'sudamerica/peru/monitor/version_01/.cache',
-            'gcs_chunks': 'sudamerica/peru/monitor/version_01/chunks',
+            'gcs_library_images': 'sudamerica/peru/CATALOG_01/LIBRARY_IMAGES',
+            'gcs_library_samples': 'sudamerica/peru/CATALOG_01/LIBRARY_SAMPLES',
+            'gcs_cache': 'sudamerica/peru/CATALOG_01/.CACHE',
+            'gcs_chunks': 'sudamerica/peru/CATALOG_01/CHUNKS',
             
             # --- NOVOS CAMINHOS GEE (Arquitetura Singleband) ---
-            'asset_monitor_base': 'projects/mapbiomas-peru/assets/FIRE/MONITOR_01',
+            'asset_monitor_base': 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01',
             
             # Auxiliares
             'asset_regions': 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
@@ -93,7 +93,7 @@ GLOBAL_OPTS = {
     'SENSOR': 'landsat',       # landsat, sentinel2, hls, modis
     'PERIODICITY': 'yearly',   # yearly, monthly
     'MOSAIC_METHOD': 'minnbr', # minnbr, minnbr_buffer, median, minndvi
-    'PERSONAL_TASK_FLAG': 'MONITOR'
+    'PERSONAL_TASK_FLAG': 'CATALOG'
 }
 
 def _get_fs():
@@ -144,20 +144,20 @@ def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='
 
 def _gcs_library_base():
     """Base folder for images in GCS (agrupado por sensor)."""
-    sensor = GLOBAL_OPTS['SENSOR'].lower()
+    sensor = GLOBAL_OPTS['SENSOR'].upper()
     return f"{CONFIG['gcs_library_images']}/{sensor}"
 
 def _gcs_models_base():
     """Base folder for trained models in GCS (centralizado)."""
-    return f"{CONFIG['gcs_library_images']}/models"
+    return f"{CONFIG['gcs_library_images']}/MODELS"
 
 def _gcs_mosaic_path(periodicity, temporal_id, mosaic=None):
     """
-    Padrão GCS: .../library_images/{sensor}/{periodicity}/{mosaic}/{temporal_id}/
+    Padrão GCS: .../LIBRARY_IMAGES/{SENSOR}/{PERIODICITY}/{MOSAIC}/{temporal_id}/
     """
     base = _gcs_library_base()
-    period = periodicity.lower()
-    m = (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).lower()
+    period = periodicity.upper()
+    m = (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).upper()
     return f"{base}/{period}/{m}/{temporal_id}"
 
 def monthly_mosaic_path(year, month, mosaic=None):
@@ -169,24 +169,24 @@ def yearly_mosaic_path(year, mosaic=None):
     return _gcs_mosaic_path("yearly", temporal_id, mosaic=mosaic)
 
 def monthly_chunk_path(year, month, mosaic='minnbr', sensor=None):
-    """Caminho GCS para chunks mensais: {sensor}/{period}/{mosaic}/{date}/chunks/"""
-    s = (sensor or GLOBAL_OPTS['SENSOR']).lower()
-    return f"{CONFIG['gcs_library_images']}/{s}/monthly/{mosaic.lower()}/{year}_{month:02d}/chunks"
+    """Caminho GCS para chunks mensais: {SENSOR}/{PERIOD}/{MOSAIC}/{date}/CHUNKS/"""
+    s = (sensor or GLOBAL_OPTS['SENSOR']).upper()
+    return f"{CONFIG['gcs_library_images']}/{s}/MONTHLY/{mosaic.upper()}/{year}_{month:02d}/CHUNKS"
 
 def yearly_chunk_path(year, mosaic='minnbr', sensor=None):
-    """Caminho GCS para chunks anuais: {sensor}/{period}/{mosaic}/{date}/chunks/"""
-    s = (sensor or GLOBAL_OPTS['SENSOR']).lower()
-    return f"{CONFIG['gcs_library_images']}/{s}/annually/{mosaic.lower()}/{year}/chunks"
+    """Caminho GCS para chunks anuais: {SENSOR}/{PERIOD}/{MOSAIC}/{date}/CHUNKS/"""
+    s = (sensor or GLOBAL_OPTS['SENSOR']).upper()
+    return f"{CONFIG['gcs_library_images']}/{s}/ANNUALLY/{mosaic.upper()}/{year}/CHUNKS"
 
 def monthly_cog_path(year, month, mosaic='minnbr', sensor=None):
-    """Caminho GCS para COGs mensais: {sensor}/{period}/{mosaic}/{date}/cog/"""
-    s = (sensor or GLOBAL_OPTS['SENSOR']).lower()
-    return f"{CONFIG['gcs_library_images']}/{s}/monthly/{mosaic.lower()}/{year}_{month:02d}/cog"
+    """Caminho GCS para COGs mensais: {SENSOR}/{PERIOD}/{MOSAIC}/{date}/COG/"""
+    s = (sensor or GLOBAL_OPTS['SENSOR']).upper()
+    return f"{CONFIG['gcs_library_images']}/{s}/MONTHLY/{mosaic.upper()}/{year}_{month:02d}/COG"
 
 def yearly_cog_path(year, mosaic='minnbr', sensor=None):
-    """Caminho GCS para COGs anuais: {sensor}/{period}/{mosaic}/{date}/cog/"""
-    s = (sensor or GLOBAL_OPTS['SENSOR']).lower()
-    return f"{CONFIG['gcs_library_images']}/{s}/annually/{mosaic.lower()}/{year}/cog"
+    """Caminho GCS para COGs anuais: {SENSOR}/{PERIOD}/{MOSAIC}/{date}/COG/"""
+    s = (sensor or GLOBAL_OPTS['SENSOR']).upper()
+    return f"{CONFIG['gcs_library_images']}/{s}/ANNUALLY/{mosaic.upper()}/{year}/COG"
 
 def model_path(training_id, shortname, region=None):
     """
@@ -227,7 +227,7 @@ def get_asset_mosaic_collection(sensor=None, periodicity=None, band=None, period
     path = f"{CONFIG['asset_monitor_base']}/LIBRARY_IMAGES/{sensor_name}/{folder_period}/{m}"
     
     if band:
-        path = f"{path}/{band}"
+        path = f"{path}/{band.upper()}"
     return path
 
 

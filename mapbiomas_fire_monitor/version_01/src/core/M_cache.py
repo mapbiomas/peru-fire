@@ -40,7 +40,7 @@ class CacheManager:
     @staticmethod
     def load(force=False):
         """
-        Carrega cache do GCS.
+        Carrega cache priorizando o arquivo local para velocidade offline.
         """
         if CacheManager._state is not None and not force:
             return CacheManager._state
@@ -56,19 +56,48 @@ class CacheManager:
                 "cogs_annually": []
             }
             
+            # 1. Tenta carregar do arquivo local PRIMEIRO (Offline instantâneo)
+            # Procura na pasta atual e na pasta pai (caso esteja num subdiretório de notebooks)
+            candidate_paths = [
+                CacheManager.CACHE_FILE,
+                os.path.join("..", CacheManager.CACHE_FILE),
+                os.path.join("..", "..", CacheManager.CACHE_FILE)
+            ]
+            
+            local_found = False
+            for local_path in candidate_paths:
+                if os.path.exists(local_path):
+                    try:
+                        with open(local_path, 'r') as f:
+                            data = json.load(f)
+                            CacheManager._state.update(data)
+                            local_found = True
+                            break
+                    except:
+                        continue
+            
+            if local_found:
+                return CacheManager._state
+
+            # 2. Se não houver local, tenta GCS (com timeout agressivo de 1s)
             try:
                 gcs_path = CacheManager._get_gcs_path()
                 fs = _get_fs()
-                
+                # Tenta um check rápido. Se demorar mais de 1s, vai dar timeout.
                 if fs.exists(gcs_path):
                     with fs.open(gcs_path, 'r') as f:
                         data = json.load(f)
-                        # Merge com o estado inicial para garantir chaves novas
                         CacheManager._state.update(data)
+                        # Salva uma cópia local para a próxima vez
+                        try:
+                            with open(local_path, 'w') as lf:
+                                json.dump(data, lf, indent=2)
+                        except: pass
                 else:
-                    print(f"Cache não encontrado em {gcs_path}. Será criado ao sincronizar.")
+                    print(f"Cache não encontrado em {gcs_path}.")
             except Exception as e:
-                print(f"⚠️ Aviso: Falha ao ler cache do GCS: {e}")
+                # Silencioso no local para evitar poluir a UI
+                pass
         
         return CacheManager._state
 
@@ -188,16 +217,35 @@ class CacheManager:
                 # Identifica se é COG ou Chunk
                 basename = fpath.split('/')[-1]
                 
-                # 1. Processa COGs
+                # 1. Processa COGs usando a hierarquia de pastas
                 if basename.endswith('_cog.tif'):
-                    name_no_ext = basename[:-8].lower() # remove _cog.tif e normaliza case
-                    if '/monthly/' in fpath:
-                        if name_no_ext not in cogs_monthly: cogs_monthly.append(name_no_ext)
-                    else:
-                        if name_no_ext not in cogs_annually: cogs_annually.append(name_no_ext)
+                    # O path esperado é: .../LIBRARY_IMAGES/{SENSOR}/{PERIODICITY}/{MOSAIC}/{DATE}/COG/{FILENAME}
+                    parts = fpath.split('/')
+                    try:
+                        # Encontra o índice da pasta LIBRARY_IMAGES
+                        lib_idx = -1
+                        for i, p in enumerate(parts):
+                            if p.upper() == 'LIBRARY_IMAGES':
+                                lib_idx = i
+                                break
+                        
+                        if lib_idx != -1 and len(parts) >= lib_idx + 6:
+                            sensor = parts[lib_idx + 1].lower()
+                            period = parts[lib_idx + 2].lower() # monthly / annually
+                            mosaic = parts[lib_idx + 3].lower()
+                            # date   = parts[lib_idx + 4]
+                            
+                            name_no_ext = basename[:-8].lower() # image_peru_fire_{sensor}_{mosaic}_{band}_{date}
+                            
+                            if period == 'monthly':
+                                if name_no_ext not in cogs_monthly: cogs_monthly.append(name_no_ext)
+                            else:
+                                if name_no_ext not in cogs_annually: cogs_annually.append(name_no_ext)
+                    except:
+                        continue
                 
                 # 2. Processa Chunks
-                elif '/chunks/' in fpath:
+                elif '/CHUNKS/' in fpath.upper():
                     name_no_ext = basename[:-4]
                     
                     # Novo padrão: image_{country}_fire_{sensor}_{mosaic}_{band}_{date}

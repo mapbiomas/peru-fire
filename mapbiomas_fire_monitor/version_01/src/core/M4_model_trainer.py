@@ -21,8 +21,25 @@ from rasterio.mask import mask
 from rasterio.io import MemoryFile
 import gcsfs
 
-import tensorflow.compat.v1 as tf
-tf.compat.v1.disable_v2_behavior()
+# TensorFlow movido para dentro dos métodos para evitar travamento de DLL no import global.
+TF_AVAILABLE = None
+TF_ERROR = None
+
+def _get_tf():
+    """Carrega o TensorFlow apenas quando necessário (Lazy Load)."""
+    global TF_AVAILABLE, TF_ERROR
+    if TF_AVAILABLE is not None: return tf if TF_AVAILABLE else None
+    
+    try:
+        import tensorflow.compat.v1 as _tf
+        _tf.compat.v1.disable_v2_behavior()
+        globals()['tf'] = _tf
+        TF_AVAILABLE = True
+        return _tf
+    except Exception as e:
+        TF_AVAILABLE = False
+        TF_ERROR = str(e)
+        return None
 
 import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML
@@ -47,37 +64,58 @@ SENSOR_MOSAIC_BANDS = {
 
 ALL_BANDS_LIST = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']
 
-def list_sample_collections_gcs():
-    """Lista arquivos CSV de amostras curadas no GCS."""
-    from M0_auth_config import CONFIG
+def list_sample_collections_gcs(force_refresh=False):
+    """Lista amostras com prioridade TOTAL offline. Só toca no GCS se force_refresh=True."""
+    cache = _load_m4_cache()
+    if cache.get('known_samples') and not force_refresh:
+        return cache['known_samples']
+    
+    if not force_refresh:
+        return [] # Retorna vazio rápido em vez de travar no GCS
+        
     try:
+        from M0_auth_config import CONFIG
+        # Timeout curtíssimo para não travar a UI se a rede estiver lenta
         fs = _get_fs()
         path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}"
-        files = fs.ls(path)
-        return sorted([f.split('/')[-1].replace('.csv', '') for f in files if f.endswith('.csv')], reverse=True)
+        files = fs.ls(path) # ls simples não costuma travar tanto quanto find
+        samples = sorted([f.split('/')[-1].replace('.csv', '') for f in files if f.endswith('.csv')], reverse=True)
+        
+        cache['known_samples'] = samples
+        _save_m4_cache(cache)
+        return samples
     except Exception:
-        return []
+        # Se falhar qualquer coisa (rede, timeout), usa o que tem no cache ou vazio
+        return cache.get('known_samples', [])
 
 def _load_m4_cache():
-    """Lê o cache local de modelos para evitar chamadas excessivas ao GCS."""
-    cache_path = "m4_ranking_cache.json"
-    if os.path.exists(cache_path):
-        try:
-            with open(cache_path, 'r') as f: return json.load(f)
-        except: return {}
+    """Lê o cache local com busca em múltiplos níveis de diretório."""
+    filename = "m4_ranking_cache.json"
+    candidates = [filename, os.path.join("..", filename), os.path.join("..", "..", filename)]
+    
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                with open(path, 'r') as f: return json.load(f)
+            except: continue
     return {}
 
 def _save_m4_cache(data):
-    """Salva o estado atual no cache local."""
+    """Salva o estado no arquivo local mais próximo."""
     try:
         with open("m4_ranking_cache.json", 'w') as f:
             json.dump(data, f, indent=2)
     except: pass
 
-def list_trained_models():
-    """Lista modelos já treinados no GCS com fallback para cache local."""
+def list_trained_models(force_refresh=False):
+    """Lista modelos já treinados priorizando o cache local para velocidade."""
     from M0_auth_config import _gcs_models_base, CONFIG
     cache = _load_m4_cache()
+    
+    # Se temos cache e não forçamos refresh, retorna instantaneamente
+    if cache.get('known_ids') and not force_refresh:
+        return cache['known_ids']
+        
     try:
         fs = _get_fs()
         path = f"{CONFIG['bucket']}/{_gcs_models_base()}"
@@ -88,12 +126,12 @@ def list_trained_models():
                 t_name = t_dir.split('/')[-1]
                 if t_name.startswith('training_'):
                     models.append({'training_id': t_name, 'path': t_dir})
+        
         # Atualiza a lista de IDs conhecidos no cache
         cache['known_ids'] = models
         _save_m4_cache(cache)
         return models
     except Exception as e:
-        print(f"⚠️ Aviso: Usando cache local de modelos (Erro GCS: {e})")
         return cache.get('known_ids', [])
 
 def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
@@ -106,7 +144,7 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
     
     fs = _get_fs()
     state = CacheManager.load() or {}
-    gcs_chunks = state.get('gcs_chunks', {})
+    cogs_avail = state.get('cogs_monthly', []) + state.get('cogs_annually', [])
     
     dfs = []
     for group in sample_groups:
@@ -132,11 +170,11 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
                     # Se encontrarmos uma data absurda (como 2026_04) mas o arquivo diz outra coisa,
                     # forçamos a data do arquivo para que a extração funcione.
                     if file_date and any(int(p.split('_')[0]) > 2025 for p in p_found):
-                        if logger: logger(f"  ⚠️ Se ha detectado una fecha futura {p_found} no CSV. Corrigiendo para {file_date}...", "warning")
+                        if logger: logger(f"  [AVISO] Se ha detectado una fecha futura {p_found} no CSV. Corrigiendo para {file_date}...", "warning")
                         temp_df['period'] = file_date
                         p_found = [file_date]
                     
-                    if logger: logger(f"  🔍 Contenido: {len(temp_df)} puntos | Períodos: {p_found}", "info")
+                    if logger: logger(f"  [Buscar] Contenido: {len(temp_df)} puntos | Períodos: {p_found}", "info")
                 dfs.append(temp_df)
         except Exception as e:
             if logger: logger(f"Error al leer {group}: {e}", "error")
@@ -174,34 +212,36 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
         band_paths = {}
         
         for b in bands_sorted:
-            config = bands_config[b]
-            s_name = config.get('sensor').lower()
-            m_type = config.get('mosaic').lower()
+            s_name = bands_config[b].get('sensor').lower()
+            m_type = bands_config[b].get('mosaic').lower()
             
-            # Constrói o nome base do mosaico para buscar no cache
-            # image_peru_fire_{sensor}_{mosaic}_{date}
-            m_base_name = f"image_peru_fire_{s_name}_{m_type}_{p}"
+            # Constrói o ID único do COG (ex: image_peru_fire_sentinel2_minnbr_2025_10_blue)
+            cog_id = f"{mosaic_name(y, m, periodicity, band=b, mosaic=m_type, sensor=s_name)}".lower()
             
-            # Verifica no cache se esta banda existe para este mosaico
-            if m_base_name not in gcs_chunks or b not in gcs_chunks[m_base_name]:
+            if cog_id not in cogs_avail:
                 missing_bands.append(f"{s_name}/{m_type}/{b}")
                 continue
             
-            # Constrói o path real do COG
+            # Constrói o path real do COG usando os auxiliares do M0
+            from M0_auth_config import monthly_cog_path, yearly_cog_path
+            if periodicity == 'monthly':
+                rel_folder = monthly_cog_path(y, m, mosaic=m_type, sensor=s_name)
+            else:
+                rel_folder = yearly_cog_path(y, mosaic=m_type, sensor=s_name)
+            
             m_file_name = f"{mosaic_name(y, m, periodicity, band=b, mosaic=m_type, sensor=s_name)}_cog.tif"
-            rel_folder = f"{CONFIG['gcs_library_images']}/{s_name}/{periodicity}/{m_type}/{p}/cog"
             band_paths[b] = f"gs://{CONFIG['bucket']}/{rel_folder}/{m_file_name}"
 
         if missing_bands:
-            if logger: logger(f"⚠️ Saltar período {p}: Faltan {len(missing_bands)} bandas ({', '.join(missing_bands)})", "warning")
+            if logger: logger(f"[AVISO] Saltar período {p}: Faltan {len(missing_bands)} bandas ({', '.join(missing_bands)})", "warning")
             continue
 
-        if logger: logger(f"✅ Mosaicos OK para {p}: {len(band_paths)} bandas listas para la extracción.", "info")
-        if logger: logger(f"📡 Extrayendo {len(geometries)} muestras de {p}...", "info")
+        if logger: logger(f"[OK] Mosaicos OK para {p}: {len(band_paths)} bandas listas para la extracción.", "info")
+        if logger: logger(f"[GCS] Extrayendo {len(geometries)} muestras de {p}...", "info")
         
         # --- LEITURA REAL DAS BANDAS ---
-        if logger: logger(f"✅ Mosaicos OK para {p}: {len(band_paths)} bandas listas para la extracción.", "info")
-        if logger: logger(f"📡 Extrayendo {len(geometries)} muestras de {p}...", "info")
+        if logger: logger(f"[OK] Mosaicos OK para {p}: {len(band_paths)} bandas listas para la extracción.", "info")
+        if logger: logger(f"[GCS] Extrayendo {len(geometries)} muestras de {p}...", "info")
         
         sources = {}
         local_files = []
@@ -216,7 +256,7 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
                 if not is_colab:
                     from M0_auth_config import get_temp_dir
                     local_file = os.path.join(get_temp_dir(), os.path.basename(cog_path))
-                    if logger: logger(f"  📥 Bajando banda {b}...", "info")
+                    if logger: logger(f"  [Baixar] Bajando banda {b}...", "info")
                     fs.get(cog_path, local_file)
                     src_path = local_file
                     local_files.append(local_file)
@@ -265,7 +305,7 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
                 y_all.append(np.array(labels_acc))
                 
         except Exception as e:
-            if logger: logger(f"❌ Error crítico en período {p}: {e}", "error")
+            if logger: logger(f"[ERRO] Error crítico en período {p}: {e}", "error")
         finally:
             for s in sources.values(): s.close()
             for f in local_files:
@@ -292,6 +332,7 @@ def normalize(X, stats):
 
 class ModelTrainer:
     def __init__(self, num_input, layers=None, lr=None, seed=42):
+        _get_tf()
         self.num_input  = num_input
         self.layers     = layers or CONFIG['model_layers']
         self.lr         = lr     or CONFIG['model_lr']
@@ -505,7 +546,7 @@ class ModelTrainer:
         # Caminho completo para o gcsfs (ex: bucket/models/...)
         full_path = f"{CONFIG['bucket']}/{base_uri}"
         
-        print(f"🧹 Eliminando carpeta del modelo (GCSFS): {full_path}")
+        print(f" Eliminando carpeta del modelo (GCSFS): {full_path}")
         try:
             if fs.exists(full_path):
                 fs.rm(full_path, recursive=True)
@@ -541,12 +582,12 @@ class ModelTrainer:
             for fname in ['vectors.tsv', 'metadata.tsv']:
                 src = os.path.join(tmpdir, fname)
                 dest = f"{CONFIG['bucket']}/{dest_dir}/{fname}"
-                if logger: logger(f"  📤 Subiendo {fname} a GCS...", "info")
+                if logger: logger(f"  [Enviar] Subiendo {fname} a GCS...", "info")
                 fs.put(src, dest)
             
             if logger: 
-                logger(f"✅ Arquivos do Projector salvos em: {dest_dir}", "info")
-                logger(f"💡 Dica: Baixe-os e suba em https://projector.tensorflow.org/", "info")
+                logger(f"[OK] Arquivos do Projector salvos em: {dest_dir}", "info")
+                logger(f"[Dica] Dica: Baixe-os e suba em https://projector.tensorflow.org/", "info")
 
     def save(self, training_id, shortname, comment="", logger=None):
         import subprocess, tempfile
@@ -612,7 +653,7 @@ class ModelTrainer:
                     'y_true': self._y_raw[idx_snap].flatten().tolist()
                 }
             except Exception as e_snap:
-                if logger: logger(f"⚠️ No se pudo generar snapshot: {e_snap}", "info")
+                if logger: logger(f"[AVISO] No se pudo generar snapshot: {e_snap}", "info")
                 diag_snapshot = None
 
             metrics = {
@@ -631,7 +672,7 @@ class ModelTrainer:
                 # Gerar arquivos do Projector usando a última amostra de treino (X_raw)
                 self.save_projector_files(training_id, shortname, self._X_raw, self._y_raw, logger=logger)
             except Exception as e_proj:
-                if logger: logger(f"⚠️ Nota: No se pudo gerar archivos del Projector: {e_proj}", "info")
+                if logger: logger(f"[AVISO] Nota: No se pudo gerar archivos del Projector: {e_proj}", "info")
 
             # --- 2.8 Iteration History (Snapshots) ---
             if hasattr(self, 'snapshot_dir') and self.snapshot_dir and os.path.exists(self.snapshot_dir):
@@ -688,7 +729,7 @@ class ModelTrainer:
                 fs.put(tmp_file, f"{CONFIG['bucket']}/{path}")
             return True
         except Exception as e:
-            print(f"❌ Erro ao atualizar metadados: {e}")
+            print(f"[ERRO] Erro ao atualizar metadados: {e}")
             return False
 
 
@@ -934,7 +975,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
             def _show_stars():
                 btns = []
                 for i in range(1, 6):
-                    btn = widgets.Button(description="★" if i <= h_rating else "☆", 
+                    btn = widgets.Button(description="" if i <= h_rating else "", 
                                        layout=widgets.Layout(width='22px', height='22px', margin='0', padding='0'),
                                        style={'button_color': '#f1c40f' if i <= h_rating else '#fff'})
                     def _hnd_click(b, val=i):
@@ -972,7 +1013,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
 
             # --- CICLO DE VIDA (GESTÃO OPCIONAL) ---
             if viz_config.get('management'):
-                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'>🛠️ Gestión del Ciclo de Vida</h4>"))
+                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'> Gestión del Ciclo de Vida</h4>"))
                 def _set_intent(mode):
                     def __h(_):
                         if ui:
@@ -1025,7 +1066,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
             # 1. MÉTRICAS CLÁSSICAS (Incluindo Estáticas 3D)
             classic_keys = ['cm', 'history', 'prob', 'pr', 'pca3d_static', 'tsne3d_static']
             if any(viz_config.get(k) for k in classic_keys):
-                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px;'>📊 Métricas Clásicas y Proyecciones Estáticas</h4>"))
+                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px;'> Métricas Clásicas y Proyecciones Estáticas</h4>"))
                 render_diagnostic_dashboard(hp.get('history', {}), None, preds_final, y_true_final, 
                                           coords_override=tsne_coords_final if viz_config.get('tsne3d_static') else (pca_coords_final if viz_config.get('pca3d_static') or viz_config.get('pca2d') else None), 
                                           viz_config=viz_config)
@@ -1033,7 +1074,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
             # 2. ESPAÇO LATENTE (INTERATIVO SIDE-BY-SIDE)
             latent_keys = ['pca3d', 'tsne3d']
             if any(viz_config.get(k) for k in latent_keys):
-                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'>🌌 Espacio Latente Interactivo</h4>"))
+                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'> Espacio Latente Interactivo</h4>"))
                 import plotly.graph_objects as go
                 fire_colorscale = [[0, '#2c3e50'], [0.5, '#bdc3c7'], [1, '#e67e22']]
                 
@@ -1068,7 +1109,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
         else:
             _render_content()
     except Exception as e:
-        msg = f"❌ Erro ao carregar analíticos: {e}"
+        msg = f"[ERRO] Erro ao carregar analíticos: {e}"
         if out_widget:
             with out_widget: print(msg)
         else: print(msg)
@@ -1171,23 +1212,25 @@ class ModelTrainerUI(PipelineStepUI):
         # 1. NOVO TREINO (Fluxo Completo)
         hp_sec = self._build_hp_section()
         dest_sec = self._build_dest_section()
+        
+        # Build areas sem fazer chamadas ao GCS (usando cache ou vazio)
         self.samples_area = self._build_matrix()
         self.extraction_area = self._build_extraction_matrix()
         
         self.new_training_tab = widgets.VBox([
-            widgets.HTML("<h2 style='color:#2c3e50;'>📂 1. Selección de Muestras</h2>"),
+            widgets.HTML("<h2 style='color:#2c3e50;'> 1. Selección de Muestras</h2>"),
             self.samples_area,
-            widgets.HTML("<br><h2 style='color:#2c3e50;'>🛰️ 2. Matriz de Extracción (Multisensor GCS)</h2>"),
+            widgets.HTML("<br><h2 style='color:#2c3e50;'> 2. Matriz de Extracción (Multisensor GCS)</h2>"),
             self.extraction_area,
-            widgets.HTML("<br><h2 style='color:#2c3e50;'>⚙️ 3. Configuración do Modelo</h2>"),
+            widgets.HTML("<br><h2 style='color:#2c3e50;'> 3. Configuración do Modelo</h2>"),
             hp_sec,
-            widgets.HTML("<br><h2 style='color:#2c3e50;'>📍 4. Destino GCS</h2>"),
+            widgets.HTML("<br><h2 style='color:#2c3e50;'> 4. Destino GCS</h2>"),
             dest_sec,
         ], layout=widgets.Layout(padding='20px', background_color='white'))
         
         # 2. CANVAS (Visualização + Ranking Sidebar)
         # --- SIDEBAR (ESQUERDA) ---
-        self.w_canvas_search = widgets.Text(placeholder='🔍 Buscar en repositorio...', layout=widgets.Layout(width='100%'))
+        self.w_canvas_search = widgets.Text(placeholder='Buscar en repositorio...', layout=widgets.Layout(width='100%'))
         self.w_canvas_search.observe(lambda c: self._on_canvas_search_change(c['new']), names='value')
         
         self.w_canvas_sort = widgets.Dropdown(
@@ -1202,6 +1245,9 @@ class ModelTrainerUI(PipelineStepUI):
             self._refresh_canvas_hub()
         self.w_canvas_sort.observe(_on_sort_change, names='value')
 
+        btn_sync = widgets.Button(description="Sincronizar GCS", icon="refresh", layout=widgets.Layout(width='100%'), button_style='primary')
+        btn_sync.on_click(lambda _: self._sync_repository(show_loader=True, force_refresh=True))
+
         btn_all_canvas = widgets.Button(description="Todos", icon="check-square", layout=widgets.Layout(width='48%'), button_style='info')
         btn_none_canvas = widgets.Button(description="Limpiar", icon="square-o", layout=widgets.Layout(width='48%'), button_style='warning')
         btn_all_canvas.on_click(lambda _: self._on_canvas_batch_action('all'))
@@ -1211,6 +1257,7 @@ class ModelTrainerUI(PipelineStepUI):
             widgets.HTML("<b style='font-size:13px; color:#2c3e50;'>🏆 Ranking / Repositorio</b>"),
             self.w_canvas_search,
             self.w_canvas_sort,
+            btn_sync,
             self.canvas_available_box,
             widgets.HBox([btn_all_canvas, btn_none_canvas], layout=widgets.Layout(justify_content='space-between', margin='5px 0')),
             widgets.HTML("<b style='font-size:13px; color:#2c3e50; margin-top:10px;'>✅ Seleccionados em Canvas</b>"),
@@ -1218,7 +1265,7 @@ class ModelTrainerUI(PipelineStepUI):
         ], layout=widgets.Layout(width='320px', padding='10px', background_color='#fcfcfc', border_right='2px solid #eee'))
 
         main_canvas_vbox = widgets.VBox([
-            widgets.HTML("<h3 style='color:#2c3e50; margin:0 0 10px 0;'>📊 Centro de Entrenamientos y Auditoría</h3>"),
+            widgets.HTML("<h3 style='color:#2c3e50; margin:0 0 10px 0;'> Centro de Treinamentos y Auditoría</h3>"),
             self._build_viz_toolbar(), 
             self.w_global_slider,      
             self.canvas_output         
@@ -1234,28 +1281,29 @@ class ModelTrainerUI(PipelineStepUI):
             self.new_training_tab,
             self.canvas_area,
         ]
-        self.tab.set_title(0, '📖 Guia')
-        self.tab.set_title(1, '🔥 Nuevo Entrenamiento')
-        self.tab.set_title(2, '📊 Entrenamientos')
+        self.tab.set_title(0, ' Guia de Uso')
+        self.tab.set_title(1, ' Novo Treinamento')
+        self.tab.set_title(2, ' Treinamentos')
         
         self.tab.selected_index = 0
         self.main_area.children = [self.tab]
         super().display()
         
-        self._sync_repository(show_loader=True)
+        # REMOVIDO: Sincronização automática no display() para evitar travamento.
+        # Agora o usuário clica em sincronizar ou os dados vêm do cache.
 
     def _build_guide_tab(self):
         """Constrói uma interface de documentação interativa para o usuário."""
         html = """
         <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #fdfdfd; color: #2c3e50; line-height: 1.6;">
-            <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">Guia de Operación: M4 Model Trainer</h1>
+            <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">Guia de Uso de Operación: M4 Model Trainer</h1>
             
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px;">
                 <!-- Seção 1: Fluxo de Trabalho -->
                 <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
                     <h3 style="color: #3498db; margin-top:0;">Estructura de la Plataforma</h3>
                     <ul style="padding-left: 20px; font-size:13px;">
-                        <li><b>Guia:</b> Esta pantalla de orientación y documentación.</li>
+                        <li><b>Guia de Uso:</b> Esta pantalla de orientación y documentación.</li>
                         <li><b>Novo Treino:</b> Configuración de nuevos experimentos, selección de muestras y bandas.</li>
                         <li><b>Trenamientos:</b> Ranking histórico con métricas detalladas y gestión de modelos.</li>
                         <li><b>Canvas:</b> Mesa de auditoría paralela para comparar múltiples modelos en profundidad.</li>
@@ -1292,13 +1340,13 @@ class ModelTrainerUI(PipelineStepUI):
                         <li><b>Recall:</b> Cobertura: ¿Cuánto del fuego real se encontró? (Evita omisiones).</li>
                         <li><b>F1-Score:</b> Media armónica. El mejor balance entre Precision y Recall.</li>
                         <li><b>Nota IA:</b> Auditoría automática que castiga severamente las omisiones.</li>
-                        <li><b>Nota Humana:</b> Evaluación subjetiva (1-5★) sobre el Espacio Latente.</li>
+                        <li><b>Nota Humana:</b> Evaluación subjetiva (1-5) sobre el Espacio Latente.</li>
                     </ul>
                 </div>
             </div>
             
             <div style="margin-top: 30px; padding: 15px; background: #e8f4fd; border-left: 5px solid #3498db; border-radius: 4px; font-size:14px;">
-                <b>💡 Pro-Tip del Auditor:</b> Use el <b>Canvas</b> para cargar un modelo antiguo (benchmark) y su modelo nuevo. Compare si la separación de clases en t-SNE 3D ha mejorado o si hay nuevas zonas de confusión.
+                <b>[Dica] Pro-Tip del Auditor:</b> Use el <b>Canvas</b> para cargar un modelo antiguo (benchmark) y su modelo nuevo. Compare si la separación de clases en t-SNE 3D ha mejorado o si hay nuevas zonas de confusión.
             </div>
         </div>
         """
@@ -1350,8 +1398,10 @@ class ModelTrainerUI(PipelineStepUI):
         self.retrain_intent['mode'] = mode
 
     def _refresh_matrix_only(self):
-        new_matrix = self._build_matrix_content()
-        self.matrix_container.children = [new_matrix]
+        """Atualiza especificamente a seção da matriz de extração."""
+        if hasattr(self, 'extraction_matrix_container'):
+            new_matrix = self._build_extraction_matrix()
+            self.extraction_matrix_container.children = [new_matrix]
 
     def _build_matrix_content(self):
         """Constrói apenas a lista de linhas filtradas."""
@@ -1384,20 +1434,21 @@ class ModelTrainerUI(PipelineStepUI):
         L = widgets.Layout
         css = PipelineStepUI.get_status_css()
         
-        # BARRA DE BUSCA E BOTÕES DE LOTE (Estilo Canvas Hub)
+        # BARRA DE BUSCA E BOTÕES DE LOTE
         self.txt_search_samples = widgets.Text(
             value=self.search_query_samples,
-            placeholder='🔍 Buscar muestras...',
+            placeholder='Buscar muestras...',
             layout=L(width='100%')
         )
         self.txt_search_samples.observe(self._on_search_samples_change, names='value')
 
-        btn_all = widgets.Button(description="Todos", icon="check-square", layout=L(width='90px'), button_style='info')
-        btn_none = widgets.Button(description="Limpiar", icon="square-o", layout=L(width='90px'), button_style='warning')
+        btn_all = widgets.Button(description="Todos", icon="check-square", layout=L(width='70px'), button_style='info')
+        btn_none = widgets.Button(description="Limpiar", icon="square-o", layout=L(width='75px'), button_style='warning')
         btn_all.on_click(self._on_select_all_samples)
         btn_none.on_click(self._on_select_none_samples)
         
-        sample_toolbar = widgets.HBox([self.txt_search_samples, btn_all, btn_none], layout=L(gap='5px', margin='0 0 10px 0'))
+        self.txt_search_samples.layout.flex = '1'
+        sample_toolbar = widgets.HBox([self.txt_search_samples, btn_all, btn_none], layout=L(gap='4px', margin='0 0 5px 0', width='100%'))
 
         self.available_samples_container = widgets.VBox([], layout=L(
             border='1px solid #ddd', height='300px', overflow_y='auto', padding='0'
@@ -1407,13 +1458,13 @@ class ModelTrainerUI(PipelineStepUI):
         ))
 
         left_pane = widgets.VBox([
-            widgets.HTML("<b style='font-size:12px; color:#555;'>📂 Muestras Disponibles</b>"),
+            widgets.HTML("<b style='font-size:12px; color:#555;'> Muestras Disponibles</b>"),
             sample_toolbar,
             self.available_samples_container
         ], layout=L(flex='1'))
 
         right_pane = widgets.VBox([
-            widgets.HTML("<b style='font-size:12px; color:#555;'>✅ Muestras Seleccionadas</b>"),
+            widgets.HTML("<b style='font-size:12px; color:#555;'>[OK] Muestras Seleccionadas</b>"),
             widgets.HTML("<div style='height:42px;'></div>"), # Alinhador com a toolbar
             self.selected_samples_container
         ], layout=L(flex='1'))
@@ -1436,7 +1487,7 @@ class ModelTrainerUI(PipelineStepUI):
             if s in self.chk_dict and self.chk_dict[s].value:
                 continue # Already selected
                 
-            btn = widgets.Button(description=f"➕ {s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#f8f9fa'})
+            btn = widgets.Button(description=f"+ {s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#f8f9fa'})
             def _add(b, name=s):
                 if name not in self.chk_dict: self.chk_dict[name] = widgets.Checkbox(value=False)
                 self.chk_dict[name].value = True
@@ -1450,7 +1501,7 @@ class ModelTrainerUI(PipelineStepUI):
         selected_widgets = []
         for s, chk in self.chk_dict.items():
             if chk.value:
-                btn = widgets.Button(description=f"❌ {s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#e3f2fd'})
+                btn = widgets.Button(description=f"✓ {s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#e3f2fd'})
                 def _remove(b, name=s):
                     self.chk_dict[name].value = False
                     self._refresh_samples_panes()
@@ -1460,48 +1511,93 @@ class ModelTrainerUI(PipelineStepUI):
         self.selected_samples_container.children = selected_widgets
 
     def _build_extraction_matrix(self):
-        """Constrói a matriz dinâmica baseada no que existe no GCS (COGs reais) usando scan recursivo."""
+        """Constrói a matriz dinâmica priorizando o cache local 'state.json'."""
         L = widgets.Layout
-        fs = _get_fs()
-        from M0_auth_config import CONFIG
+        from M_cache import CacheManager
         
-        base_path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_images']}"
+        # --- CABEÇALHO COM BOTÃO DE SYNC ---
+        btn_sync = widgets.Button(
+            description="Sincronizar Catálogo (GCS)",
+            icon="sync",
+            button_style='success',
+            layout=L(width='220px', height='30px')
+        )
+        sync_out = widgets.Output()
         
-        # Escaneamento recursivo real para detectar combinações de Sensor/Mosaico e Bandas
-        available_combos = {} # (sensor, mosaic) -> set(bands)
+        def _on_sync_click(b):
+            btn_sync.description = "Sincronizando..."
+            btn_sync.disabled = True
+            with sync_out:
+                clear_output()
+                print("Escaneando GCS... Aguarde.")
+                CacheManager.build_cache_from_gcs() # Força scan real no GCS
+                self._refresh_matrix_only()         # Atualiza a UI
+                print("¡Catálogo Sincronizado!")
+            btn_sync.description = "Sincronizar Catálogo (GCS)"
+            btn_sync.disabled = False
+
+        btn_sync.on_click(_on_sync_click)
+        
+        header = widgets.HBox([
+            widgets.HTML("<b style='font-size:14px; color:#2c3e50;'>2. Matriz de Extracción (Multisensor GCS)</b>"),
+            widgets.HTML("<div style='width:20px;'></div>"),
+            btn_sync,
+            sync_out
+        ], layout=L(align_items='center', margin='10px 0'))
+
+        available_combos = {} # (sensor, mosaic, period) -> set(bands)
+        
         try:
-            # find() é recursivo. Vamos garantir que estamos olhando para o bucket certo.
-            all_files = fs.find(base_path)
-            for f in all_files:
-                if not f.endswith('.tif'): continue
+            # 1. Tenta carregar o cache. O CacheManager agora tentará local primeiro.
+            state = CacheManager.load()
+            all_cogs = state.get('cogs_monthly', []) + state.get('cogs_annually', [])
+            
+            if not all_cogs:
+                raise ValueError("Cache vazio")
+
+            def _parse_cog_agnostic(name):
+                """Parse agnóstico: identifica banda e sensor pelo padrão do arquivo."""
+                # padrão: image_peru_fire_{sensor}_{mosaic}_{band}_{date}
+                p = name.lower().split('fire_')[-1].split('_')
+                if len(p) < 4: return None
                 
-                # Normaliza o path para remover bucket e prefixos redundantes
-                clean_f = f.split(CONFIG['gcs_library_images'])[-1].strip('/')
-                parts = clean_f.split('/')
+                # O sensor é sempre o primeiro
+                sensor = p[0]
+                # A data costuma ser os últimos 1 ou 2 campos (YYYY ou YYYY_MM)
+                date_idx = -1
+                if p[-2].isdigit() and len(p[-2]) == 4: date_idx = -2 # YYYY_MM
+                elif p[-1].isdigit() and len(p[-1]) == 4: date_idx = -1 # YYYY
                 
-                # Estrutura esperada: {sensor}/{mosaic}/{periodicity}/{year}/{month}/cog/{band}_date_cog.tif
-                # Ou similar. O sensor e mosaic são SEMPRE os dois primeiros níveis após library_images
-                if len(parts) >= 2:
-                    sensor = parts[0]
-                    mosaic = parts[1]
-                    
-                    # Evita pegar pastas de sistema como 'models' ou 'samples'
-                    if sensor in ['models', 'samples', 'cache']: continue
-                    
-                    combo = (sensor, mosaic)
+                if date_idx == -1:
+                    band = p[-2]
+                    mosaic = "_".join(p[1:-2])
+                else:
+                    band = p[-3]
+                    mosaic = "_".join(p[1:-3])
+                
+                return {'sensor': sensor, 'mosaic': mosaic, 'band': band}
+
+            # Processar Mensais
+            for cog_name in state.get('cogs_monthly', []):
+                p = _parse_cog_agnostic(cog_name)
+                if p:
+                    combo = (p['sensor'], p['mosaic'], 'mensal')
                     if combo not in available_combos: available_combos[combo] = set()
-                    
-                    # Identifica a banda pelo nome do arquivo
-                    fname = parts[-1].lower()
-                    for b in ALL_BANDS_LIST:
-                        # Verificação robusta de banda no nome do arquivo
-                        if f"_{b}_" in fname or fname.startswith(f"{b}_") or fname.endswith(f"_{b}.tif") or fname.endswith(f"_{b}_cog.tif"):
-                            available_combos[combo].add(b)
-        except Exception as e:
-            # Fallback seguro com o que sabemos que deve existir
+                    available_combos[combo].add(p['band'])
+
+            # Processar Anuais
+            for cog_name in state.get('cogs_annually', []):
+                p = _parse_cog_agnostic(cog_name)
+                if p:
+                    combo = (p['sensor'], p['mosaic'], 'anual')
+                    if combo not in available_combos: available_combos[combo] = set()
+                    available_combos[combo].add(p['band'])
+        except:
+            # Fallback offline fixo se nem o cache existir
             available_combos = {
-                ('sentinel2', 'minnbr'): set(ALL_BANDS_LIST),
-                ('sentinel2', 'minnbr_buffer'): set(ALL_BANDS_LIST)
+                ('sentinel2', 'minnbr'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']),
+                ('sentinel2', 'minnbr_buffer'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']),
+                ('landsat', 'minnbr'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'])
             }
 
         if not available_combos:
@@ -1509,34 +1605,38 @@ class ModelTrainerUI(PipelineStepUI):
 
         self.band_chk_map = {} 
         matrix_rows = []
-        BANDS_PRIORITY = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']
         
-        for (s, m), found_bands in sorted(available_combos.items()):
-            label_text = f"{s.upper()} {m.replace('_', ' ').title()}"
-            label_html = widgets.HTML(f'<div style="width:180px; font-weight:bold; color:#333; font-size:11px;">{label_text}</div>')
+        # PRIORIDADE DE BANDAS (Ordem sugerida)
+        BANDS_PRIORITY = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2']
+        
+        for (s, m, p) in sorted(available_combos.keys()):
+            found_bands = available_combos[(s, m, p)]
+            label_text = f"{s.upper()} {m.replace('_', ' ').title()} ({p.title()})"
+            label_html = widgets.HTML(f'<div style="width:200px; font-weight:bold; color:#333; font-size:11px;">{label_text}</div>')
             
-            # Ordenação inteligente
-            sorted_bands = sorted(list(found_bands), key=lambda x: BANDS_PRIORITY.index(x) if x in BANDS_PRIORITY else 999)
+            # Ordenação dinâmica: Prioritárias primeiro, resto depois (em ordem alfabética)
+            sorted_bands = sorted(list(found_bands), key=lambda x: BANDS_PRIORITY.index(x) if x in BANDS_PRIORITY else 100 + ord(x[0]))
             
             band_widgets = []
             for b in sorted_bands:
                 chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
-                # Auto-select recomendada
                 if s == 'sentinel2' and m == 'minnbr': chk.value = True
                 
-                self.band_chk_map[(s, m, b)] = chk
+                self.band_chk_map[(s, m, p, b)] = chk
                 
-                # Célula de status estilo M1/M2: Checkbox invisível + Label clicável que muda de cor
-                status_cell = PipelineStepUI.make_status_cell(chk, b.upper(), 'mfm-ok', width='90px')
+                status_cell = PipelineStepUI.make_status_cell(chk, b.upper(), 'mfm-ok', width='110px')
                 band_widgets.append(status_cell)
             
             row = widgets.HBox([label_html] + band_widgets, layout=L(align_items='center', padding='5px 0', border_bottom='1px solid #eee'))
             matrix_rows.append(row)
 
-        return widgets.VBox(matrix_rows, layout=L(
+        matrix_vbox = widgets.VBox(matrix_rows, layout=L(
             border='1px solid #dee2e6', padding='10px', margin='10px 0',
-            background_color='#fff', border_radius='4px', max_height='400px', overflow_y='auto'
+            background_color='#fff', border_radius='4px', max_height='400px', 
+            overflow_y='auto', overflow_x='auto'
         ))
+        
+        return widgets.VBox([header, matrix_vbox])
 
     def _build_hp_section(self):
         L = widgets.Layout
@@ -1546,7 +1646,7 @@ class ModelTrainerUI(PipelineStepUI):
         self.w_layers = widgets.Text(value="7, 14, 7", description='Capas Ocultas:', style={'description_width': '150px'}, layout=L(width='350px'))
         
         return widgets.VBox([
-            widgets.HTML("<b style='font-size:14px; color:#2c3e50;'>⚙️ Hiperparámetros (DNN)</b>"),
+            widgets.HTML("<b style='font-size:14px; color:#2c3e50;'> Hiperparámetros (DNN)</b>"),
             widgets.HBox([self.w_iters, self.w_batch], layout=L(gap='10px')),
             widgets.HBox([self.w_lr, self.w_layers], layout=L(gap='10px')),
         ], layout=L(padding='15px', border='1px solid #eee', border_radius='8px', margin='0 0 15px 0', flex='1'))
@@ -1616,9 +1716,22 @@ class ModelTrainerUI(PipelineStepUI):
         self._refresh_canvas_hub()
         self._update_canvas()
 
-    def _sync_repository(self, show_loader=False):
+    def _sync_repository(self, show_loader=False, force_refresh=False):
         if show_loader: self.show_loader("Sincronizando Repositorio...")
-        models = list_trained_models()
+        
+        # list_trained_models e list_sample_collections_gcs agora respeitam o cache por padrão
+        models = list_trained_models(force_refresh=force_refresh)
+        
+        # Atualiza também a lista de amostras se for um refresh forçado
+        if force_refresh:
+            list_sample_collections_gcs(force_refresh=True)
+            self.samples_area = self._build_matrix() # Reconstroi a matriz de amostras
+            self.new_training_tab.children = [
+                self.new_training_tab.children[0], # Title
+                self.samples_area,                 # New Matrix
+                *self.new_training_tab.children[2:]# Rest
+            ]
+
         fs = _get_fs()
         
         cache = _load_m4_cache()
@@ -1627,7 +1740,8 @@ class ModelTrainerUI(PipelineStepUI):
         updated_cache = False
         for m in models:
             m_id = m['training_id']
-            if m_id not in metadata_cache or show_loader:
+            # Só baixa metadados se for novo OU se pedirmos refresh total
+            if m_id not in metadata_cache or force_refresh:
                 try:
                     from M0_auth_config import CONFIG
                     clean_path = m['path'].replace('gs://', '').replace(f"{CONFIG['bucket']}/", '').lstrip('/')
@@ -1676,7 +1790,7 @@ class ModelTrainerUI(PipelineStepUI):
                 'sample_collections': samples, 'bands_input': sorted(b_cfg.keys()),
                 'layers': self.w_layers.value, 'lr': self.w_lr.value,
                 'sample_count': self.trainer_instance._sample_count, 'comment': self.w_comment.value,
-                'training_date': '🚀 Entrenamiento en curso...'
+                'training_date': '[LIVE] Entrenamiento en curso...'
             }
             
             if self.viz_config.get('title'): 
@@ -1855,7 +1969,7 @@ class ModelTrainerUI(PipelineStepUI):
         
         with self.canvas_output:
             if not self.selected_models and not self.trainer_instance:
-                display(HTML("<div style='padding:100px; text-align:center; background:white; border-radius:8px;'> <span style='font-size:50px;'>🎨</span><br><h3 style='color:#999;'>El Canvas está vacío</h3><p style='color:#ccc;'>Busque y seleccione modelos en el panel lateral para visualizarlos aquí.</p></div>"))
+                display(HTML("<div style='padding:100px; text-align:center; background:white; border-radius:8px;'> <span style='font-size:50px;'></span><br><h3 style='color:#999;'>Canvas vazio</h3><p style='color:#ccc;'>Busque y seleccione modelos en el panel lateral para visualizarlos aquí.</p></div>"))
                 return
             
             # --- AJUSTE DINÂMICO DO SLIDER GLOBAL ---
@@ -1886,8 +2000,17 @@ class ModelTrainerUI(PipelineStepUI):
             display(grid)
 
 def start_training(ui):
+    _get_tf() # Garante que TF_AVAILABLE foi definido
+    if not TF_AVAILABLE:
+        print("\n" + "="*70)
+        print(" [AVISO] AMBIENTE LOCAL INCOMPATIBLE")
+        print(" O seu processador não possui as instruções AVX/AVX2 requeridas pelo TensorFlow.")
+        print(" POR FAVOR: Execute este treinamento no Google Colab.")
+        if TF_ERROR: print(f" Detalhes: {TF_ERROR}")
+        print("="*70 + "\n")
+        return
     # -----------------------------------------------------------------
-    # 1️⃣ Retraining intent (checked via the UI state)
+    # 1⃣ Retraining intent (checked via the UI state)
     # -----------------------------------------------------------------
     intent = ui.retrain_intent
     if intent.get('mode'):
@@ -1899,7 +2022,7 @@ def start_training(ui):
         
         # If 'borrar' mode is selected, delete the target model first.
         if intent['mode'] == 'borrar':
-            print(f"🗑️ Borrando modelo previo: {target_id} ({target_short})")
+            print(f" Borrando modelo previo: {target_id} ({target_short})")
             ModelTrainer.delete_model(target_id, target_short)
             
         # If hp is provided, load its full configuration into the widgets.
@@ -1907,7 +2030,7 @@ def start_training(ui):
             ui._load_config_into_widgets(hp)
             selected_samples = hp.get('sample_collections', [])
             
-        print(f"🔄 Modo '{intent['mode']}' activado para {target_id}")
+        print(f" Modo '{intent['mode']}' activado para {target_id}")
         
         # Reset the intent so it does not fire again accidentally.
         ui.retrain_intent = {'mode': None, 'hp': None}
@@ -1917,7 +2040,7 @@ def start_training(ui):
             cb.value = False
             cb.observe(ui._on_intent_cb_change, names='value')
     
-    # 2️⃣ Get parameters from UI
+    # 2⃣ Get parameters from UI
     if not intent.get('mode') or not hp:
         selected_samples = [name for name, chk in ui.chk_dict.items() if chk.value]
 
@@ -1925,14 +2048,15 @@ def start_training(ui):
         print("Error: Ninguna muestra seleccionada.")
         return
 
-    # 3️⃣ Constrói o dicionário de configuração de bandas a partir da Matriz Dinâmica
+    # 3⃣ Constrói o dicionário de configuração de bandas a partir da Matriz Dinâmica
     bands_config = {}
-    sensors_used = set()
-    for (s, m, b), chk in ui.band_chk_map.items():
+    for (s, m, p, b), chk in ui.band_chk_map.items():
         if chk.value:
-            # Em caso de conflito de nome de banda (ex: 'red' em dois sensores), 
-            # o último selecionado ganha. Isso é compatível com o extrator atual.
-            bands_config[b] = {'sensor': s, 'mosaic': m}
+            # p_norm será 'monthly' ou 'yearly'
+            p_norm = 'monthly' if p == 'mensal' else 'yearly'
+            key = (s, m, p_norm)
+            if key not in bands_config: bands_config[key] = []
+            bands_config[key].append(b)
             sensors_used.add(s)
             
     if not bands_config:
@@ -1947,7 +2071,7 @@ def start_training(ui):
         
     # --- PREPARAR INTERFACE PARA NOVO TREINO ---
     ui.selected_models = {}       # Limpa seleções anteriores
-    ui.tab.selected_index = 2     # Vai para a aba Entrenamientos (renomeada)
+    ui.tab.selected_index = 2     # Vai para a aba Treinamentos (renomeada)
     
     # Registra o treino como "LIVE" para aparecer no ranking lateral
     sensor_suffix = GLOBAL_OPTS['SENSOR'].lower()
@@ -2013,7 +2137,7 @@ def start_training(ui):
         import plotly.graph_objects as go
         from sklearn.manifold import TSNE
         try:
-            display(HTML("<h4 style='color:#2c3e50; margin-top:20px; font-weight:bold;'>🚀 Auditoría t-SNE (Espacio Latente Final)</h4>"))
+            display(HTML("<h4 style='color:#2c3e50; margin-top:20px; font-weight:bold;'>[LIVE] Auditoría t-SNE (Espacio Latente Final)</h4>"))
             display(HTML("<p style='font-size:11px; color:#666;'>Calculando proyección no-lineal para mejor visualización de clústeres...</p>"))
             
             idx_v = np.random.choice(len(X_val), min(600, len(X_val)), replace=False)
@@ -2041,9 +2165,9 @@ def start_training(ui):
                 scene=dict(xaxis_title='t-SNE 1', yaxis_title='t-SNE 2', zaxis_title='t-SNE 3')
             )
             display(HTML(fig_tsne.to_html(include_plotlyjs=True, full_html=False)))
-            print("✅ Auditoría t-SNE lista.")
+            print("[OK] Auditoría t-SNE lista.")
         except Exception as e:
-            print(f"⚠️ No se pudo gerar t-SNE final: {e}")
+            print(f"[AVISO] No se pudo gerar t-SNE final: {e}")
 
     print("Guardando estructura (muestras, píxeles, metadatos, métricas) en GCS...")
     try:
