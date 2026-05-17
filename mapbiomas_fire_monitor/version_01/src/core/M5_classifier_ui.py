@@ -192,7 +192,7 @@ class M5QueueUI:
                 # Check if already processed in GCS
                 if fs is not None:
                     gcs_dir = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{model}/{period}"
-                    regional_path = f"{gcs_dir}/regionais_classificadas/{r}.tif"
+                    regional_path = f"{gcs_dir}/regional_mosaics/{r}.tif"
                     # Se o mosaico regional já existe, considera bloqueado
                     try:
                         if fs.exists(regional_path):
@@ -250,11 +250,11 @@ class M5QueueUI:
                     region = job['region']
                     gcs_base = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{job['model']}/{job['period']}"
                     # Apagar mosaico regional
-                    regional = f"{gcs_base}/regionais_classificadas/{region}.tif"
+                    regional = f"{gcs_base}/regional_mosaics/{region}.tif"
                     if fs.exists(regional):
                         fs.rm(regional)
                     # Apagar tiles individuais
-                    tiles_dir = f"{gcs_base}/cartas_classificadas/{region}/"
+                    tiles_dir = f"{gcs_base}/classified_tiles/{region}/"
                     tiles = [p for p in fs.glob(f"{tiles_dir}*.tif") if not p.endswith('.aux.xml')]
                     for f in tiles:
                         fs.rm(f)

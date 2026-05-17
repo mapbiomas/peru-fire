@@ -154,7 +154,7 @@ def _process_job(job, out):
                     q_job['progress'] = f"{i}/{total_cells} ({(i/total_cells):.1%})"
             save_queue(queue)
             
-        out_gcs = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{model_id}/{period}/cartas_classificadas/{region_name}/{cell_id}.tif"
+        out_gcs = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{model_id}/{period}/classified_tiles/{region_name}/{cell_id}.tif"
         
         # --- CHECKPOINT: Salta si ya existe ---
         if fs.exists(out_gcs):
@@ -219,7 +219,7 @@ def _upload_job_to_gee(job, out):
     period = job['period']
 
     base = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{model_id}/{period}"
-    tiles_dir = f"{base}/cartas_classificadas/{region_name}"
+    tiles_dir = f"{base}/classified_tiles/{region_name}"
 
     with out: print(f"Listando tiles clasificados em {tiles_dir}...")
     tile_paths = [p for p in fs.glob(f"{tiles_dir}/*.tif") if not p.endswith('.aux.xml')]
@@ -253,7 +253,7 @@ def _upload_job_to_gee(job, out):
         with rasterio.open(mosaic_local, 'w', **out_meta) as dest:
             dest.write(mosaic.astype(out_meta.get('dtype', 'uint8')))
 
-        mosaic_gcs = f"{base}/regionais_classificadas/{region_name}.tif"
+        mosaic_gcs = f"{base}/regional_mosaics/{region_name}.tif"
         fs.put(mosaic_local, mosaic_gcs)
         with out: print(f"✓ Mosaico guardado em GCS: {mosaic_gcs}")
 
