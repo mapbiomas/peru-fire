@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import numpy as np
 import rasterio
 import tensorflow as tf
 from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs, _gcs_models_base
