@@ -118,18 +118,27 @@ def _process_job(job, out):
     total_cells = len(cells)
     with out: print(f"Se encontraron {total_cells} celdas (tiles) para procesar.")
     
-    # 3. Cargar el Modelo de IA a RAM (arquitetura JSON + pesos H5 exportados por M4)
-    local_arch = f"/tmp/{model_id}_arch.json"
-    local_weights = f"/tmp/{model_id}.h5"
-    if not os.path.exists(local_arch) or not os.path.exists(local_weights):
-        with out: print(f"Descargando modelo Keras desde GCS...")
-        fs.get(f"{model_dir}/model_arch.json", local_arch)
-        fs.get(f"{model_dir}/model.weights.h5", local_weights)
+    # 3. Cargar el Modelo de IA a RAM (desde metadata.json + weights.npz do M4)
+    local_npz = f"/tmp/{model_id}_weights.npz"
+    if not os.path.exists(local_npz):
+        with out: print(f"Descargando modelo desde GCS (npz + metadata)...")
+        fs.get(f"{model_dir}/weights.npz", local_npz)
     
     with out: print("Cargando modelo en memoria (TensorFlow)...")
-    with open(local_arch, 'r') as f:
-        model = tf.keras.models.model_from_json(f.read())
-    model.load_weights(local_weights)
+    num_input = meta['num_input']
+    layers_cfg = meta['layers']
+    model = tf.keras.Sequential()
+    model.add(tf.keras.layers.Input(shape=(num_input,)))
+    for n_units in layers_cfg:
+        model.add(tf.keras.layers.Dense(n_units, activation='relu'))
+    model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
+    w = np.load(local_npz)
+    layer_names = [f'fc_{i}' for i in range(len(layers_cfg))] + ['output']
+    weights_list = []
+    for ln in layer_names:
+        weights_list.append(w[f'{ln}/kernel:0'])
+        weights_list.append(w[f'{ln}/bias:0'])
+    model.set_weights(weights_list)
     
     # 4. Bucle de Procesamiento con Checkpoint Local
     queue = load_queue() # Recarrega para salvar progresso
