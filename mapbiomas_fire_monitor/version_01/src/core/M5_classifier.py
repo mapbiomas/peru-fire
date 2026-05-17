@@ -1,282 +1,213 @@
-import os
-import json
-import time
-import numpy as np
-import rasterio
-import tensorflow as tf
-from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs, _gcs_models_base
+from M0_auth_config import CONFIG, _get_fs, _gcs_models_base
+from M5_queue import load_queue, save_queue, make_job_id, tile_path, gcs_full
+from M5_inference import load_model_from_gcs, classify_cell
+from M5_publisher import merge_region_tiles, generate_tile_stats, generate_region_stats, upload_to_gee
 
-def run_m5_queue(send=None):
+VALID_PHASES = ['classification', 'publish']
+
+def run_m5_queue(phases=None):
+    """Motor de procesamiento M5.
+
+    Args:
+        phases: lista con fases a ejecutar.
+            'classification' — clasifica tiles pendientes
+            'publish'        — mosaicado + stats + upload GEE
     """
-    Motor de Processamento (Fase 1: Classificacao, Fase 2: Upload GEE)
-    """
-    if send is None:
-        send = ['classification', 'upload']
-        
-    from M5_classifier_ui import load_queue, save_queue
+    if phases is None:
+        phases = ['classification', 'publish']
+
+    if not isinstance(phases, list) or not any(p in VALID_PHASES for p in phases):
+        print(f"Atencion: Argumento 'phases' invalido. Use {VALID_PHASES}.")
+        return
+
     from IPython.display import display, HTML, clear_output
     import ipywidgets as widgets
-    
+
     out = widgets.Output()
     display(out)
-    
-    valid_commands = ['classification', 'upload']
-    if not isinstance(send, list) or not any(s in valid_commands for s in send):
-        with out:
-            print("Atencion: Argumento 'send' invalido. Use send=['classification'], send=['upload'] o send=['classification', 'upload'].")
-        return
-        
-    queue = load_queue()
-    
-    pending_jobs = [j for j in queue if j['status'] == 'PENDING' and j.get('enabled', True)]
-    upload_jobs = [j for j in queue if j['status'] == 'COMPLETED' and j.get('upload_gee', False)]
-    
-    if not pending_jobs and not upload_jobs:
-        with out: 
-            clear_output()
-            display(HTML("<b style='color:green;'>Exito: No hay tareas activas pendientes ni uploads configurados.</b>"))
-        return
-        
-    # --- FASE 1: CLASIFICACION ---
-    if pending_jobs and 'classification' in send:
-        with out: print("--- INICIANDO FASE DE CLASIFICACION ---")
-        for job in pending_jobs:
-            job['status'] = 'RUNNING'
-            save_queue(queue)
-            
-            try:
-                with out:
-                    print(f"Iniciando clasificación regional: [{job['id']}]")
-                
-                _process_job(job, out)
-                
-                job['status'] = 'COMPLETED'
-                job['progress'] = '100%'
-                save_queue(queue)
-                
-                with out:
-                    print(f"Exito: Tarea {job['id']} finalizada.")
-                    
-            except Exception as e:
-                job['status'] = 'FAILED'
-                save_queue(queue)
-                with out: 
-                    print(f"Error Crítico en la tarea {job['id']}: {str(e)}")
-                break 
 
-    # --- FASE 2: UPLOAD GEE ---
-    if upload_jobs and 'upload' in send:
-        with out: print("--- INICIANDO FASE DE UPLOAD AL GEE ---")
-        queue = load_queue() # Recarrega caso a fase 1 tenha alterado
-        for job in upload_jobs:
-            try:
-                with out: print(f"Iniciando subida al GEE: [{job['id']}]")
-                _upload_job_to_gee(job, out)
-                
-                # Desmarca a flag para não subir novamente atoa na próxima
-                job['upload_gee'] = False 
-                job['progress'] = '100% (GEE)'
+    queue = load_queue()
+
+    if 'classification' in phases:
+        _run_classification(queue, out)
+
+    if 'publish' in phases:
+        _run_publish(queue, out)
+
+
+def _run_classification(queue, out):
+    """Fase 1: clasifica tiles pendientes."""
+    pending = [j for j in queue if j['status'] == 'PENDING' and j.get('enabled', True)]
+
+    if not pending:
+        with out:
+            clear_output()
+            display(HTML("<b style='color:green;'>Ningun trabajo pendiente para clasificar.</b>"))
+        return
+
+    with out:
+        print("--- FASE 1: CLASIFICACION ---")
+
+    for job in pending:
+        job['status'] = 'RUNNING'
+        save_queue(queue)
+
+        try:
+            with out:
+                print(f"Iniciando: [{job['id']}]")
+
+            _process_job(job, out)
+
+            job['status'] = 'COMPLETED'
+            job['progress'] = '100%'
+            save_queue(queue)
+
+            with out:
+                print(f"OK: {job['id']} completado.")
+
+        except Exception as e:
+            job['status'] = 'FAILED'
+            save_queue(queue)
+            with out:
+                print(f"ERROR en {job['id']}: {e}")
+            break
+
+
+def _run_publish(queue, out):
+    """Fase 2: mosaicado, estadisticas y upload GEE."""
+    to_publish = [j for j in queue if j['status'] == 'COMPLETED' and j.get('enabled', True)]
+
+    if not to_publish:
+        with out:
+            print("Ningun trabajo COMPLETED para publicar.")
+        return
+
+    with out:
+        print("--- FASE 2: PUBLICACION (mosaico + stats + GEE) ---")
+
+    fs = _get_fs()
+    for job in to_publish:
+        model_id = job['model']
+        region = job['region']
+        period = job['period']
+
+        try:
+            with out:
+                print(f"Publicando: [{job['id']}]")
+
+            mosaic_path = merge_region_tiles(model_id, region, period, fs=fs)
+
+            if mosaic_path:
+                job['progress'] = '50% (mosaico)'
                 save_queue(queue)
-                
-                with out: print(f"Exito: Tarea {job['id']} enviada como Task al GEE.")
-                    
-            except Exception as e:
-                with out: print(f"Error al subir tarea {job['id']}: {str(e)}")
+
+            if job.get('upload_gee'):
+                upload_to_gee(model_id, region, period, fs=fs)
+                job['progress'] = '100% (publicado)'
+            else:
+                job['progress'] = '100% (mosaico)'
+
+            job['status'] = 'FINISHED'
+            save_queue(queue)
+
+            with out:
+                print(f"OK: {job['id']} finalizado.")
+
+        except Exception as e:
+            with out:
+                print(f"ERROR al publicar {job['id']}: {e}")
+
 
 def _process_job(job, out):
+    """Procesa un trabajo: carga modelo, itera tiles, clasifica."""
     import ee
-    from M5_classifier_ui import load_queue, save_queue
-    fs = _get_fs()
-    
-    model_id = job['model']
-    region_name = job['region']
-    period = job['period'] 
-    
-    # 1. Recuperar Metadatos del Modelo
-    model_dir = f"{CONFIG['bucket']}/{_gcs_models_base()}/{model_id}"
-    meta_path = f"{model_dir}/metadata.json"
-    
-    if not fs.exists(meta_path):
-        raise ValueError(f"Modelo {model_id} no encontrado en GCS ({meta_path}).")
-        
-    with fs.open(meta_path, 'r') as f:
-        meta = json.load(f)
-        
-    bands_config = meta.get('bands_config', {})
-    if not bands_config:
-        raise ValueError(f"El modelo {model_id} no tiene 'bands_config' en sus metadatos. No se puede saber qué bandas requiere.")
-        
-    parts = period.split('_')
-    year = int(parts[0])
-    month = int(parts[1]) if len(parts) > 1 else 0
-    
-    # 2. Determinar Celdas Geográficas (cim-world)
-    with out: print(f"Extrayendo grilla de la región '{region_name}' desde GEE...")
-    cells = _get_region_cells(region_name)
-    if not cells:
-        raise ValueError(f"No se encontraron celdas de la grilla cim-world para la región {region_name}.")
-    
-    total_cells = len(cells)
-    with out: print(f"Se encontraron {total_cells} celdas (tiles) para procesar.")
-    
-    # 3. Cargar el Modelo de IA a RAM (desde metadata.json + weights.npz do M4)
-    local_npz = f"/tmp/{model_id}_weights.npz"
-    if not os.path.exists(local_npz):
-        with out: print(f"Descargando modelo desde GCS (npz + metadata)...")
-        fs.get(f"{model_dir}/weights.npz", local_npz)
-    
-    with out: print("Cargando modelo en memoria (TensorFlow)...")
-    num_input = meta['num_input']
-    layers_cfg = meta['layers']
-    model = tf.keras.Sequential()
-    model.add(tf.keras.layers.Input(shape=(num_input,)))
-    for n_units in layers_cfg:
-        model.add(tf.keras.layers.Dense(n_units, activation='relu'))
-    model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
-    w = np.load(local_npz)
-    layer_names = [f'fc_{i}' for i in range(len(layers_cfg))] + ['output']
-    weights_list = []
-    for ln in layer_names:
-        weights_list.append(w[f'{ln}/kernel:0'])
-        weights_list.append(w[f'{ln}/bias:0'])
-    model.set_weights(weights_list)
-    
-    # 4. Bucle de Procesamiento con Checkpoint Local
-    queue = load_queue() # Recarrega para salvar progresso
-    
-    for i, cell in enumerate(cells):
-        cell_id = cell['system:index']
-        
-        # Atualiza a interface da fila para o usuário saber onde parou
-        if i % 5 == 0: 
-            for q_job in queue:
-                if q_job['id'] == job['id']:
-                    q_job['progress'] = f"{i}/{total_cells} ({(i/total_cells):.1%})"
-            save_queue(queue)
-            
-        out_gcs = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{model_id}/{period}/classified_tiles/{region_name}/{cell_id}.tif"
-        
-        # --- CHECKPOINT: Salta si ya existe ---
-        if fs.exists(out_gcs):
-            with out: print(f"  [{(i+1):03d}/{total_cells}] Carta {cell_id} ya procesada. Saltando.")
-            continue
-            
-        with out: print(f"  [{(i+1):03d}/{total_cells}] Clasificando carta: {cell_id} ...")
-        
-        # --- INFERENCIA ---
-        _classify_cell(cell_id, model, bands_config, year, month, out_gcs, fs)
+    from M0_auth_config import authenticate, _gcs_models_base
 
-def _get_region_cells(region_name):
-    """
-    Busca no Earth Engine os polígonos do grid cim-world que cruzam com a região.
-    """
-    import ee
-    cim = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
-    
-    if region_name.lower() == 'peru':
-        region_fc = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(ee.Filter.eq('ADM0_NAME', 'Peru'))
-    else:
-        # Usa o asset de regiões configurado e filtra pela coluna name
-        region_fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.eq('region_nam', region_name))
-        
-    intersected = cim.filterBounds(region_fc.geometry())
-    
-    # Coleta a lista de identificadores das cartas (ex: NA-1-V-A)
-    try:
-        ids = intersected.aggregate_array('system:index').getInfo()
-        return [{'system:index': str(i)} for i in ids]
-    except Exception as e:
-        print(f"Erro ao buscar grilla no GEE: {e}")
-        return []
-
-def _classify_cell(cell_id, model, bands_config, year, month, out_gcs_path, fs):
-    """
-    Função de inferência isolada por carta.
-    """
-    # 1. Montar os paths dinamicamente baseados nas bandas exigidas pelo modelo
-    # (A lógica de /vsigs/ rasterio entra aqui para empilhar os arrays Numpy das bandas da carta)
-    
-    # ... LÓGICA DE EXTRAÇÃO E INFERÊNCIA RASTERIO AQUI ...
-    
-    # [SIMULAÇÃO] Tempo de processamento raster
-    time.sleep(1.5) 
-    
-    # [SIMULAÇÃO] Salvar o TIFF
-    local_tmp = f"/tmp/regional_{cell_id}.tif"
-    with open(local_tmp, 'w') as f: 
-        f.write("Simulated Classified GeoTIFF")
-    
-    # Fazer upload para o GCS e limpar lixo local
-    fs.put(local_tmp, out_gcs_path)
-    os.remove(local_tmp)
-
-def _upload_job_to_gee(job, out):
-    import ee, tempfile, shutil
-    from rasterio.merge import merge
     fs = _get_fs()
     model_id = job['model']
     region_name = job['region']
     period = job['period']
 
-    base = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{model_id}/{period}"
-    tiles_dir = f"{base}/classified_tiles/{region_name}"
+    parts = period.split('_')
+    year = int(parts[0])
+    month = int(parts[1]) if len(parts) > 1 else 0
 
-    with out: print(f"Listando tiles clasificados em {tiles_dir}...")
-    tile_paths = [p for p in fs.glob(f"{tiles_dir}/*.tif") if not p.endswith('.aux.xml')]
-    if not tile_paths:
-        raise ValueError(f"No se encontraron tiles clasificados en {tiles_dir}")
+    # 1. Cargar modelo + metadatos
+    model_dir = f"{CONFIG['bucket']}/{_gcs_models_base()}/{model_id}"
+    model, meta, bands_config, norm_stats = load_model_from_gcs(model_dir, fs, logger=lambda m, l=None: out.append_display_data(m))
 
-    with out: print(f"Mosaico: {len(tile_paths)} tiles encontrados. Descargando...")
-    tmpdir = tempfile.mkdtemp()
-    try:
-        local_tiles = []
-        for i, tp in enumerate(sorted(tile_paths)):
-            local = os.path.join(tmpdir, f"tile_{i:04d}.tif")
-            fs.get(tp, local)
-            local_tiles.append(local)
+    # 2. Obtener grid de celdas de la region
+    with out:
+        print(f"  Grid GEE para '{region_name}'...")
 
-        with out: print(f"Generando mosaico regional via rasterio...")
-        src_files = [rasterio.open(t) for t in local_tiles]
-        mosaic, out_transform = merge(src_files)
-        out_meta = src_files[0].meta.copy()
-        for src in src_files:
-            src.close()
-        out_meta.update({
-            "height": mosaic.shape[1],
-            "width": mosaic.shape[2],
-            "transform": out_transform
-        })
-        nodata = 255
-        if out_meta.get('count', 1) == 1:
-            out_meta.update(dtype='uint8', nodata=nodata)
-        mosaic_local = os.path.join(tmpdir, f"{region_name}_{period}.tif")
-        with rasterio.open(mosaic_local, 'w', **out_meta) as dest:
-            dest.write(mosaic.astype(out_meta.get('dtype', 'uint8')))
+    cells = _get_region_cells(region_name)
+    if not cells:
+        raise ValueError(f"Ninguna celda encontrada para {region_name}.")
 
-        mosaic_gcs = f"{base}/regional_mosaics/{region_name}.tif"
-        fs.put(mosaic_local, mosaic_gcs)
-        with out: print(f"✓ Mosaico guardado em GCS: {mosaic_gcs}")
+    total = len(cells)
+    with out:
+        print(f"  {total} tiles para procesar.")
 
-        gcs_uri = f"gs://{mosaic_gcs}"
-        with out: print(f"Lançando Task de importação ao GEE...")
-        img = ee.Image.loadGeoTIFF(gcs_uri)
+    # 3. Clasificar cada tile
+    tile_results = []
+    predict_fn = lambda x: model.predict(x, verbose=0)
 
-        parent = f"{CONFIG['asset_monitor_base']}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
-        try:
-            ee.data.createAsset({'type': 'ImageCollection'}, parent)
-        except Exception:
-            pass
+    for i, cell in enumerate(cells):
+        cell_id = cell['system:index']
 
-        asset_id = f"{parent}/{region_name}_{period}"
-        task = ee.batch.Export.image.toAsset(
-            image=img,
-            description=f"UPLOAD_{model_id}_{region_name}_{period}",
-            assetId=asset_id,
-            scale=10,
-            maxPixels=1e13,
-            pyramidingPolicy={'.default': 'mean'}
+        if i % 5 == 0:
+            queue = load_queue()
+            for qj in queue:
+                if qj['id'] == job['id']:
+                    qj['progress'] = f"{i}/{total} ({i/total:.1%})"
+            save_queue(queue)
+
+        # Checkpoint: salta si ya existe
+        out_rel = tile_path(model_id, region_name, cell_id, period)
+        out_full = gcs_full(out_rel)
+
+        if fs.exists(out_full):
+            continue
+
+        with out:
+            print(f"  [{i+1:03d}/{total}] {cell_id} ...")
+
+        stats = classify_cell(
+            cell_id, predict_fn, bands_config, norm_stats,
+            year, month, out_full, logger=lambda m, l=None: out.append_display_data(m)
         )
-        task.start()
-        with out: print(f"✓ Task GEE lançada! Asset: {asset_id}")
-    finally:
-        shutil.rmtree(tmpdir)
+
+        if stats:
+            stats['tile_id'] = cell_id
+            stats['region'] = region_name
+            stats['period'] = period
+            tile_results.append(stats)
+
+    # 4. Generar estadisticas de los tiles
+    if tile_results:
+        with out:
+            print(f"  Generando estadisticas de {len(tile_results)} tiles...")
+        generate_tile_stats(model_id, region_name, period, tile_results, fs=fs)
+        generate_region_stats(model_id, region_name, period, tile_results, fs=fs)
+    else:
+        with out:
+            print(f"  Ningun tile nuevo clasificado (todos ya existian).")
+
+
+def _get_region_cells(region_name):
+    """Busca celdas cim-world que intersectan la region."""
+    import ee
+    cim = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
+
+    if region_name.lower() == 'peru':
+        region_fc = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(ee.Filter.eq('ADM0_NAME', 'Peru'))
+    else:
+        region_fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.eq('region_nam', region_name))
+
+    intersected = cim.filterBounds(region_fc.geometry())
+    try:
+        ids = intersected.aggregate_array('system:index').getInfo()
+        return [{'system:index': str(i)} for i in ids]
+    except Exception as e:
+        print(f"Error al buscar grilla en GEE: {e}")
+        return []
