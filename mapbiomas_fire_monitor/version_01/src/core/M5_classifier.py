@@ -154,7 +154,7 @@ def _process_job(job, out):
                     q_job['progress'] = f"{i}/{total_cells} ({(i/total_cells):.1%})"
             save_queue(queue)
             
-        out_gcs = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{model_id}/{period}/regional_classification_{cell_id}_{model_id}_{region_name}_{period}.tif"
+        out_gcs = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{model_id}/{period}/cartas_classificadas/{region_name}/{cell_id}.tif"
         
         # --- CHECKPOINT: Salta si ya existe ---
         if fs.exists(out_gcs):
@@ -209,3 +209,74 @@ def _classify_cell(cell_id, model, bands_config, year, month, out_gcs_path, fs):
     # Fazer upload para o GCS e limpar lixo local
     fs.put(local_tmp, out_gcs_path)
     os.remove(local_tmp)
+
+def _upload_job_to_gee(job, out):
+    import ee, tempfile, shutil
+    from rasterio.merge import merge
+    fs = _get_fs()
+    model_id = job['model']
+    region_name = job['region']
+    period = job['period']
+
+    base = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{model_id}/{period}"
+    tiles_dir = f"{base}/cartas_classificadas/{region_name}"
+
+    with out: print(f"Listando tiles clasificados em {tiles_dir}...")
+    tile_paths = [p for p in fs.glob(f"{tiles_dir}/*.tif") if not p.endswith('.aux.xml')]
+    if not tile_paths:
+        raise ValueError(f"No se encontraron tiles clasificados en {tiles_dir}")
+
+    with out: print(f"Mosaico: {len(tile_paths)} tiles encontrados. Descargando...")
+    tmpdir = tempfile.mkdtemp()
+    try:
+        local_tiles = []
+        for i, tp in enumerate(sorted(tile_paths)):
+            local = os.path.join(tmpdir, f"tile_{i:04d}.tif")
+            fs.get(tp, local)
+            local_tiles.append(local)
+
+        with out: print(f"Generando mosaico regional via rasterio...")
+        src_files = [rasterio.open(t) for t in local_tiles]
+        mosaic, out_transform = merge(src_files)
+        out_meta = src_files[0].meta.copy()
+        for src in src_files:
+            src.close()
+        out_meta.update({
+            "height": mosaic.shape[1],
+            "width": mosaic.shape[2],
+            "transform": out_transform
+        })
+        nodata = 255
+        if out_meta.get('count', 1) == 1:
+            out_meta.update(dtype='uint8', nodata=nodata)
+        mosaic_local = os.path.join(tmpdir, f"{region_name}_{period}.tif")
+        with rasterio.open(mosaic_local, 'w', **out_meta) as dest:
+            dest.write(mosaic.astype(out_meta.get('dtype', 'uint8')))
+
+        mosaic_gcs = f"{base}/regionais_classificadas/{region_name}.tif"
+        fs.put(mosaic_local, mosaic_gcs)
+        with out: print(f"✓ Mosaico guardado em GCS: {mosaic_gcs}")
+
+        gcs_uri = f"gs://{mosaic_gcs}"
+        with out: print(f"Lançando Task de importação ao GEE...")
+        img = ee.Image.loadGeoTIFF(gcs_uri)
+
+        parent = f"{CONFIG['asset_monitor_base']}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
+        try:
+            ee.data.createAsset({'type': 'ImageCollection'}, parent)
+        except Exception:
+            pass
+
+        asset_id = f"{parent}/{region_name}_{period}"
+        task = ee.batch.Export.image.toAsset(
+            image=img,
+            description=f"UPLOAD_{model_id}_{region_name}_{period}",
+            assetId=asset_id,
+            scale=10,
+            maxPixels=1e13,
+            pyramidingPolicy={'.default': 'mean'}
+        )
+        task.start()
+        with out: print(f"✓ Task GEE lançada! Asset: {asset_id}")
+    finally:
+        shutil.rmtree(tmpdir)

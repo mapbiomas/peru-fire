@@ -192,9 +192,10 @@ class M5QueueUI:
                 # Check if already processed in GCS
                 if fs is not None:
                     gcs_dir = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{model}/{period}"
-                    # Se achar arquivos para essa região, considera bloqueado
+                    regional_path = f"{gcs_dir}/regionais_classificadas/{r}.tif"
+                    # Se o mosaico regional já existe, considera bloqueado
                     try:
-                        if len(fs.glob(f"{gcs_dir}/*{r}*.tif")) > 0:
+                        if fs.exists(regional_path):
                             skipped += 1
                             continue
                     except:
@@ -246,16 +247,18 @@ class M5QueueUI:
             if job:
                 try:
                     fs = _get_fs()
-                    # O path gerado em M5_classifier.py
-                    gcs_path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{job['model']}/{job['period']}"
-                    # Procurar arquivos que contem os identificadores. Como podem ser varios tiles, vamos buscar e apagar
-                    # Para simplificar, listamos e apagamos o que cruza com a region e o period.
-                    # Mas como isso pode ser pesado, o ideal é o usuario saber que apaga tudo do diretorio dele
-                    # Vamos fazer uma remocao generica na biblioteca para a string basica.
-                    files = fs.glob(f"{gcs_path}/*{job['region']}*.tif")
-                    for f in files:
+                    region = job['region']
+                    gcs_base = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}/{job['model']}/{job['period']}"
+                    # Apagar mosaico regional
+                    regional = f"{gcs_base}/regionais_classificadas/{region}.tif"
+                    if fs.exists(regional):
+                        fs.rm(regional)
+                    # Apagar tiles individuais
+                    tiles_dir = f"{gcs_base}/cartas_classificadas/{region}/"
+                    tiles = [p for p in fs.glob(f"{tiles_dir}*.tif") if not p.endswith('.aux.xml')]
+                    for f in tiles:
                         fs.rm(f)
-                    print(f"Borrados {len(files)} archivos GCS.")
+                    print(f"Borrados {len(tiles)} tiles + mosaico regional de GCS.")
                 except Exception as e:
                     print(f"Error al borrar GCS: {e}")
                     
