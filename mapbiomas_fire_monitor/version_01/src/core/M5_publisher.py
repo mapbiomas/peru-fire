@@ -210,7 +210,7 @@ def generate_region_stats(model_id, region, period, tile_results, fs=None, logge
         logger(f"    {region} {period}: {burned_area_km2:.2f} km2 quemados ({burned_pixels:,} px)")
 
 
-def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None):
+def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None, scale=10):
     """Envia el mosaico regional CLASSIFIED_REGION como ImageCollection a GEE."""
     import ee
 
@@ -241,7 +241,7 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None)
         image=img,
         description=f"PUBLISH_{model_id}_{region}_{period}",
         assetId=asset_id,
-        scale=10,
+        scale=scale,
         maxPixels=1e13,
         pyramidingPolicy={'.default': 'mean'}
     )

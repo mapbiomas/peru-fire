@@ -1,11 +1,29 @@
 import os
 import json
+import time
 from M0_auth_config import CONFIG, GLOBAL_OPTS
 
-def _campaign(campaign=None):
-    """Return campaign subfolder path segment."""
-    c = campaign or GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
-    return f"{c}/" if c else ''
+def _lock_path():
+    return get_queue_file() + '.lock'
+
+def _acquire_lock(timeout=5.0):
+    lock = _lock_path()
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL)
+            os.close(fd)
+            return True
+        except FileExistsError:
+            time.sleep(0.05)
+    return False
+
+def _release_lock():
+    lock = _lock_path()
+    try:
+        os.remove(lock)
+    except FileNotFoundError:
+        pass
 
 def get_queue_file():
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -13,14 +31,23 @@ def get_queue_file():
 
 def load_queue():
     q_file = get_queue_file()
-    if os.path.exists(q_file):
-        with open(q_file, 'r') as f:
-            return json.load(f)
-    return []
+    _acquire_lock()
+    try:
+        if os.path.exists(q_file):
+            with open(q_file, 'r') as f:
+                return json.load(f)
+        return []
+    finally:
+        _release_lock()
 
 def save_queue(q):
-    with open(get_queue_file(), 'w') as f:
-        json.dump(q, f, indent=2)
+    q_file = get_queue_file()
+    _acquire_lock()
+    try:
+        with open(q_file, 'w') as f:
+            json.dump(q, f, indent=2)
+    finally:
+        _release_lock()
 
 def make_job_id(model, region, period, campaign=None):
     parts = [model, region, period]

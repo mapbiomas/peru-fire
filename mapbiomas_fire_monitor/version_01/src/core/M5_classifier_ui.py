@@ -1074,6 +1074,8 @@ class M5QueueUI:
         self.queue = load_queue()
 
         def _safe_update(f, new_ops):
+            if not hasattr(f, 'options') or not new_ops:
+                return
             old = f.value
             f.options = new_ops
             if old in new_ops:
@@ -1139,7 +1141,7 @@ class M5QueueUI:
         display(widgets.VBox([header_actions, self.tabs]))
 
 
-def run_m5_ui(years=None, peridiocity_active=None):
-    ui = M5QueueUI(years=years, peridiocity_active=peridiocity_active)
+def run_m5_ui(years=None, periodicity_active=None):
+    ui = M5QueueUI(years=years, periodicity_active=periodicity_active)
     ui.display()
     return ui

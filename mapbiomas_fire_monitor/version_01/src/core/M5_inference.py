@@ -166,33 +166,3 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
         for s in sources.values():
             s.close()
 
-def classify_cell(cell_id, predict_fn, bands_config, norm_stats, year, month, out_gcs_path, logger=None):
-    """Clasifica un tile cim-world (descarga COGs internamente, compatible con codigo legacy)."""
-    fs = _get_fs()
-    band_paths = build_band_paths(bands_config, year, month)
-    bands_sorted = sorted(bands_config.keys())
-    is_colab = 'COLAB_RELEASE_TAG' in os.environ
-
-    cogs = {}
-    local_files = []
-
-    try:
-        for b in bands_sorted:
-            cog_full = f"gs://{band_paths[b]}"
-            if is_colab:
-                cogs[b] = f"/vsigs/{band_paths[b]}"
-            else:
-                local_file = os.path.join(get_temp_dir(), os.path.basename(band_paths[b]))
-                if not os.path.exists(local_file):
-                    fs.get(cog_full, local_file)
-                local_files.append(local_file)
-                cogs[b] = local_file
-
-        return classify_cell_with_cogs(
-            cell_id, predict_fn, bands_config, norm_stats, out_gcs_path, cogs, logger=logger
-        )
-    finally:
-        if not is_colab:
-            for f in local_files:
-                if os.path.exists(f):
-                    os.remove(f)

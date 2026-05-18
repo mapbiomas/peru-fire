@@ -114,7 +114,7 @@ def _run_publish(queue, out):
             save_queue(queue)
 
             if job.get('upload_gee'):
-                upload_to_gee(model_id, region, period, fs=fs, campaign=campaign)
+                upload_to_gee(model_id, region, period, fs=fs, campaign=campaign, scale=10)
                 job['progress'] = '100% (published)'
             else:
                 job['progress'] = '100% (mosaic)'
@@ -243,7 +243,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
                     q = load_queue()
                     pct = (processed + i) / total_cells_group if total_cells_group else 0
                     for qj in q:
-                        if (qj['model'], qj['period']) == (model_id, period):
+                        if qj['id'] == job['id']:
                             qj['progress'] = f"{processed + i}/{total_cells_group} ({pct:.1%})"
                     save_queue(q)
 
