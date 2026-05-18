@@ -13,12 +13,12 @@ from M5_queue import (
     tile_path, gcs_full
 )
 
-def merge_region_tiles(model_id, region, period, fs=None, logger=None):
+def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=None):
     """Junta todos los tiles de una region en un mosaico regional."""
     if fs is None:
         fs = _get_fs()
 
-    tiles_dir = gcs_full(classified_tiles_dir(model_id))
+    tiles_dir = gcs_full(classified_tiles_dir(model_id, campaign))
     pattern = f"tile_{region}_"
     tile_paths = sorted([
         p for p in fs.glob(f"{tiles_dir}/*.tif")
@@ -33,7 +33,7 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None):
     if logger:
         logger(f"    Merge: {len(tile_paths)} tiles para {region}")
 
-    out_gcs = gcs_full(region_path(model_id, region, period))
+    out_gcs = gcs_full(region_path(model_id, region, period, campaign))
     tmpdir = tempfile.mkdtemp()
 
     try:
@@ -70,7 +70,7 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None):
         shutil.rmtree(tmpdir)
 
 
-def generate_tile_stats(model_id, region, period, tile_results, fs=None, logger=None):
+def generate_tile_stats(model_id, region, period, tile_results, fs=None, logger=None, campaign=None):
     """Guarda estadisticas por tile en CSV."""
     if fs is None:
         fs = _get_fs()
@@ -80,7 +80,7 @@ def generate_tile_stats(model_id, region, period, tile_results, fs=None, logger=
             logger(f"    Sin resultados de tiles para generar stats.")
         return
 
-    gcs_path = gcs_full(tile_stats_path(model_id))
+    gcs_path = gcs_full(tile_stats_path(model_id, campaign))
     local_tmp = os.path.join(tempfile.mkdtemp(), "stats_tile.csv")
     os.makedirs(os.path.dirname(local_tmp), exist_ok=True)
 
@@ -111,7 +111,7 @@ def generate_tile_stats(model_id, region, period, tile_results, fs=None, logger=
         logger(f"    stats_tile.csv guardado ({len(rows)} lineas)")
 
 
-def generate_region_stats(model_id, region, period, tile_results, fs=None, logger=None):
+def generate_region_stats(model_id, region, period, tile_results, fs=None, logger=None, campaign=None):
     """Agrega estadisticas por region+periodo y alimenta consolidated."""
     if fs is None:
         fs = _get_fs()
@@ -149,7 +149,7 @@ def generate_region_stats(model_id, region, period, tile_results, fs=None, logge
     fieldnames = list(row.keys())
 
     # Verifica si ya existe en GCS para hacer append
-    gcs_path = gcs_full(region_stats_path(model_id))
+    gcs_path = gcs_full(region_stats_path(model_id, campaign))
     existing_rows = []
     try:
         local_existing = os.path.join(tempfile.mkdtemp(), "existing.csv")
@@ -210,14 +210,14 @@ def generate_region_stats(model_id, region, period, tile_results, fs=None, logge
         logger(f"    {region} {period}: {burned_area_km2:.2f} km2 quemados ({burned_pixels:,} px)")
 
 
-def upload_to_gee(model_id, region, period, fs=None, logger=None):
+def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None):
     """Envia el mosaico regional CLASSIFIED_REGION como ImageCollection a GEE."""
     import ee
 
     if fs is None:
         fs = _get_fs()
 
-    mosaic_gcs = gcs_full(region_path(model_id, region, period))
+    mosaic_gcs = gcs_full(region_path(model_id, region, period, campaign))
     gcs_uri = f"gs://{mosaic_gcs}"
 
     if not fs.exists(mosaic_gcs):

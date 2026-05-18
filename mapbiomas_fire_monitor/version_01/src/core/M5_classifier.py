@@ -94,19 +94,20 @@ def _run_publish(queue, out):
         model_id = job['model']
         region = job['region']
         period = job['period']
+        campaign = job.get('campaign', '')
 
         try:
             with out:
                 print(f"Publishing: [{job['id']}]")
 
-            mosaic_path = merge_region_tiles(model_id, region, period, fs=fs)
+            mosaic_path = merge_region_tiles(model_id, region, period, fs=fs, campaign=campaign)
 
             if mosaic_path:
                 job['progress'] = '50% (mosaic)'
                 save_queue(queue)
 
             if job.get('upload_gee'):
-                upload_to_gee(model_id, region, period, fs=fs)
+                upload_to_gee(model_id, region, period, fs=fs, campaign=campaign)
                 job['progress'] = '100% (published)'
             else:
                 job['progress'] = '100% (mosaic)'
@@ -133,6 +134,9 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
 
     authenticate()
     fs = _get_fs()
+
+    # Extrai campanha do primeiro job (todos no grupo compartilham o mesmo periodo)
+    campaign = group_jobs[0].get('campaign', '') if group_jobs else ''
 
     parts = period.split('_')
     year = int(parts[0])
@@ -232,7 +236,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
                             qj['progress'] = f"{processed + i}/{total_cells_group} ({pct:.1%})"
                     save_queue(q)
 
-                out_rel = tile_path(model_id, region_name, cell_id, period)
+                out_rel = tile_path(model_id, region_name, cell_id, period, campaign)
                 out_full = gcs_full(out_rel)
 
                 if fs.exists(out_full):
@@ -276,8 +280,8 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
                 all_tile_results.extend(tile_results)
                 with out:
                     print(f"  Generating stats for {len(tile_results)} tiles...")
-                generate_tile_stats(model_id, region_name, period, tile_results, fs=fs)
-                generate_region_stats(model_id, region_name, period, tile_results, fs=fs)
+                generate_tile_stats(model_id, region_name, period, tile_results, fs=fs, campaign=campaign)
+                generate_region_stats(model_id, region_name, period, tile_results, fs=fs, campaign=campaign)
             else:
                 with out:
                     print(f"  No tiles classified for {region_name}.")
