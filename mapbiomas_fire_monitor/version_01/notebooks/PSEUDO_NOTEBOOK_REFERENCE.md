@@ -128,7 +128,17 @@ found_path = auto_path_setup()
 COUNTRY = "peru"
 
 from M0_auth_config import set_country, authenticate, set_global_opts
-set_global_opts(sensor='sentinel2', periodicity='monthly', personal_task_flag='MONITOR', clean_cache=False, language='en')
+
+set_country('peru')
+set_global_opts(
+    sensor='sentinel2',             # 'sentinel2', 'landsat', 'hls', 'modis'
+    periodicity='monthly',          # 'monthly', 'yearly'
+    personal_task_flag='MONITOR',   # prefix for GEE task names (e.g. MONITOR, TEST)
+    sampling_campaign='monitor_01', # campaign folder in LIBRARY_SAMPLES (GCS)
+    clean_cache=False,              # True = reset local + GCS cache at startup
+    language='en',                  # 'en', 'es', 'pt', 'fr', 'id'
+    mosaic_methods=['minnbr', 'minnbr_buffer'],  # minnbr, minnbr_buffer, median, minndvi
+)
 authenticate()
 ```
 
