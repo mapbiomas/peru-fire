@@ -121,8 +121,9 @@ class CacheManager:
         state['assets_annually'] = []
         
         bands = CONFIG.get('bands_all', ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'])
-        # Todos os métodos de mosaico disponíveis para este país
-        mosaic_methods = CONFIG.get('mosaic_methods', ['minnbr', 'minnbr_buffer'])
+        # Todos os métodos de mosaico disponíveis para este país (SEMPRE escaneia tudo)
+        from M_mosaics import all_methods as _all_mosaic_methods
+        mosaic_methods = _all_mosaic_methods()
         # CORRIGIDO: Escanear TODOS os sensores relevantes, não apenas o GLOBAL_OPTS atual
         # (o sensor padrão pode ser 'landsat' mas os dados podem ser de 'sentinel2')
         all_sensors = ['sentinel2', 'landsat']  # Expandir conforme necessário
