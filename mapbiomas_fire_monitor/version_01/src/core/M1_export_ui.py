@@ -1,4 +1,4 @@
-print("\n>>> M1_export_ui inicializando (v7.0 Tabs) <<<")
+print("\n>>> M1_export_ui initializing (v7.0 Tabs) <<<")
 import ee
 import traceback
 import threading
@@ -9,6 +9,7 @@ from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode
 import M0_auth_config as config_module
 from M_cache import CacheManager
 from M_ui_components import PipelineStepUI
+from M_lang import L as Lang
 from M1_export_logic import get_quality_mosaic, export_to_asset, export_to_gcs, clear_gcs_chunks, delete_gcs_band, delete_asset_band
 
 class ExportDispatcherUI(PipelineStepUI):
@@ -26,9 +27,9 @@ class ExportDispatcherUI(PipelineStepUI):
         self.is_refreshing = False
         
         try:
-            self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
+            self.main_area.children = [widgets.HTML(f"<i>{Lang.LOADING_INTERFACE}</i>")]
         except Exception as e:
-            print(f"ERROR CRÍTICO EN LA INTERFAZ: {e}")
+            print(f"CRITICAL ERROR IN INTERFACE: {e}")
             traceback.print_exc()
 
     def _init_data(self):
@@ -40,7 +41,7 @@ class ExportDispatcherUI(PipelineStepUI):
         else:
             self.years = list(range(curr_year, 2018, -1))
         self.bands = CONFIG['bands_all']
-        self.update_status("Cargando cache...")
+        self.update_status(Lang.LOADING_CACHE)
         self.state = CacheManager.load() or {}
         self.gcs_chunks = self.state.get('gcs_chunks', {})
 
@@ -228,7 +229,7 @@ class ExportDispatcherUI(PipelineStepUI):
                 method_tabs = widgets.Tab()
                 method_children = []
                 for k, m in enumerate(methods):
-                    placeholder = widgets.VBox([widgets.HTML(f"<i>Clique para cargar {s} {p} ({m})...</i>")], layout=L(padding='20px'))
+                    placeholder = widgets.VBox([widgets.HTML(f"<i>{Lang.CLICK_TO_LOAD.format(sensor=s, period=p, mosaic=m)}</i>")], layout=L(padding='20px'))
                     method_children.append(placeholder)
                     self.tab_map[(i, j, k)] = (s.lower(), p, m)
                 
@@ -293,7 +294,7 @@ class ExportDispatcherUI(PipelineStepUI):
         method_tabs = p_tabs.children[p_idx]
         
         target_container = method_tabs.children[m_idx]
-        if not isinstance(target_container.children[0], widgets.HTML) or "Clique para cargar" not in target_container.children[0].value:
+        if not isinstance(target_container.children[0], widgets.HTML) or "<i>" not in target_container.children[0].value:
             return
 
         grid = self._build_mosaic_grid(sensor, period, method, active_tasks)
@@ -323,7 +324,7 @@ class ExportDispatcherUI(PipelineStepUI):
 def run_ui(years=None):
     ui = ExportDispatcherUI(years=years)
     ui.display() 
-    ui.show_loader("Cargando...")
+    ui.show_loader(Lang.LOADING)
     ui._build_ui()
     ui.hide_loader()
     return ui
@@ -337,11 +338,11 @@ def start_export(ui_obj, mode=None):
                 selected.append(meta)
     
     if not selected:
-        print("⚠️ Ninguna opción seleccionada para exportación.")
+        print(" No option selected for export.")
         return
 
     from M1_export_logic import export_to_asset, export_to_gcs
-    print(f"🚀 Iniciando {len(selected)} exportaciones...")
+    print(f" Starting {len(selected)} exports...")
 
     import M1_export_logic as logic
     from M0_auth_config import CONFIG, mosaic_name
@@ -354,7 +355,7 @@ def start_export(ui_obj, mode=None):
         name_base = mosaic_name(y, m, p, mosaic=mosaic_m, sensor=sensor, band=None).replace(f"_{y}_{m:02d}", "").replace(f"_{y}", "")
         name_full = mosaic_name(y, m, p, mosaic=mosaic_m, sensor=sensor, band=band)
         
-        print(f"  [{i}/{len(selected)}] Enviando {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d} para {meta['type']}...")
+        print(f"  [{i}/{len(selected)}] Sending {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d} for {meta['type']}...")
 
         start_date = f"{y}-{m:02d}-01" if p == 'monthly' and m else f"{y}-01-01"
         end_date = (f"{y}-{m+1:02d}-01" if p == 'monthly' and m and m < 12 else f"{y+1}-01-01")
@@ -366,4 +367,4 @@ def start_export(ui_obj, mode=None):
         else:
             logic.export_to_gcs(mosaic_obj, name_base, y, m, p, bands=[band], mosaic=mosaic_m)
             
-    print(f"\n✅ Completado! {len(selected)} tareas enviadas.")
+    print(f"\n Completed! {len(selected)} tasks sent.")

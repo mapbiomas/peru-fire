@@ -22,7 +22,7 @@ def ensure_asset_path(asset_id, type_at_end='IMAGE_COLLECTION'):
             is_last = (i == len(parts))
             asset_type = type_at_end if is_last else 'FOLDER'
             try:
-                print(f"[GEE] Criando {asset_type}: {partial_path}")
+                print(f"[GEE] Creating {asset_type}: {partial_path}")
                 ee.data.createAsset({'type': asset_type}, partial_path)
             except Exception:
                 pass
@@ -156,7 +156,7 @@ def apply_inpe_buffer_mask(image, year, month):
             image
         ))
     except Exception as e:
-        print(f"[WARN] Buffer INPE não disponível para {year}/{month}: {e}")
+        print(f"[WARN] INPE buffer not available for {year}/{month}: {e}")
         return image
 
 def get_landsat_constellation(year):
@@ -285,7 +285,7 @@ def clear_gcs_chunks(year, month=None, period='monthly'):
         folder = yearly_chunk_path(year, mosaic=m_method)
         
     path = f"gs://{CONFIG['bucket']}/{folder}/"
-    print(f"[GCS] Limpando chunks antigos para evitar mistura: {path}")
+    print(f"[GCS] Cleaning old chunks to avoid mixing: {path}")
     # Deleta tudo dentro da pasta de chunks do período
     os.system(f"gsutil -m rm -rf {path}** > /dev/null 2>&1")
 
@@ -299,7 +299,7 @@ def delete_gcs_band(year, month, period, band):
     name = mosaic_name(year, month, period, mosaic=m_method)
     prefix = f"{folder}/{name}_{band}"
     path = f"gs://{CONFIG['bucket']}/{prefix}"
-    print(f"[GCS] Removendo banda {band}: {path}*")
+    print(f"[GCS] Removing band {band}: {path}*")
     os.system(f"gsutil -m rm -rf {path}* > /dev/null 2>&1")
 
 
@@ -310,14 +310,14 @@ def delete_asset_band(year, month, period, band):
     name = mosaic_name(year, month, period)
     asset_id = f"{collection_id}/{name}_{band}"
     try:
-        print(f"[GEE] Removendo Asset: {asset_id}")
+        print(f"[GEE] Removing Asset: {asset_id}")
         ee.data.deleteAsset(asset_id)
     except Exception as e:
-        print(f"[ERR] Falha ao deletar asset: {e}")
+        print(f"[ERR] Failed to delete asset: {e}")
 
 
 def export_to_gcs(mosaic_obj, name, year, month=None, period='monthly', bands=None, config_module=None, mosaic=None):
-    from M0_auth_config import CONFIG, GLOBAL_OPTS, monthly_chunk_path, yearly_chunk_path
+    from M0_auth_config import CONFIG, GLOBAL_OPTS, monthly_chunk_path, yearly_chunk_path, mosaic_name
     geometry = config_module.get_country_geometry() if config_module else mosaic_obj.geometry()
     
     m_method = mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()

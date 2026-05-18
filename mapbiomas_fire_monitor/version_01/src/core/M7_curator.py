@@ -24,7 +24,7 @@ def list_filtered_variants(region):
         f"filt_{country}_{region}_v2_2408_exp"
     ]
 
-# ─── EXPORTACIÓN DE GEE (Colección Pre-Oficial) ─────────────────────────────
+# ---- EXPORTACIÓN DE GEE (Colección Pre-Oficial) ----
 
 def publish_preofficial_to_gee(image_path, training_id, temporal_id, metadata):
     """
@@ -50,7 +50,7 @@ def publish_preofficial_to_gee(image_path, training_id, temporal_id, metadata):
     
     return "task_submit", asset_id
 
-# ─── INTERFAZ DE IPYWIDGETS ─────────────────────────────────────────────────
+# ---- INTERFAZ DE IPYWIDGETS ----
 
 class CuratorUI:
     def __init__(self, preset_votes=None):
@@ -61,7 +61,7 @@ class CuratorUI:
         from ipywidgets import HTML
         title = HTML("""
             <div style="background:linear-gradient(135deg,#2e003e,#3d0052); color:#ffb3ba;padding:14px 18px;border-radius:10px; font-family:'Courier New',monospace;font-size:13px;margin-bottom:8px;">
-                🏆 <b>Curador (M7)</b> — Publicación de Colección Pre-Oficial<br>
+                 <b>Curador (M7)</b> — Publicación de Colección Pre-Oficial<br>
                 <span style="color:#d4a5a5;font-size:11px;">Elige los candidatos ganadores (filt_...) e impúlsalos a GEE Asset.</span>
             </div>
         """)
@@ -76,7 +76,7 @@ class CuratorUI:
             preset_html += "</ul>"
             
             self.selection_panel = widgets.VBox([
-                HTML("<b>📌 Usando Votación Preset (PRESET_VOTES):</b>"),
+                HTML("<b> Usando Votación Preset (PRESET_VOTES):</b>"),
                 HTML(preset_html)
             ], layout=widgets.Layout(border='1px solid green', padding='10px', margin='10px 0'))
         else:
@@ -109,23 +109,23 @@ def run_ui(preset_votes=None):
     return ui
 
 def start_curation(ui):
-    """Ejecutar publicación final a GEE Asset."""
+    """Execute final publication to GEE Asset."""
     if not isinstance(ui, CuratorUI):
-        print("⚠️ Esta función requiere el objeto devuelto por run_ui() de M7.")
+        print(" This function requires the object returned by run_ui() from M7.")
         return
-        
+
     votes, temporal_id, training_id = ui.get_curation_selection()
-    
-    print(f"🚀 Iniciando Curaduría (Exportación Pre-Oficial)")
-    print(f"   Periodo: {temporal_id} | Training ID: {training_id}\n")
-    
+
+    print(f" Starting Curation (Pre-Official Export)")
+    print(f"   Period: {temporal_id} | Training ID: {training_id}\n")
+
     for region, variant in votes.items():
         if not variant: continue
-        print(f"  > Aprobado {region} -> {variant}")
-        
+        print(f"  > Approved {region} -> {variant}")
+
         desc = (
-            f"Periodo: {temporal_id} | Training ID: {training_id}\n"
-            f"Variante Origen: {variant}"
+            f"Period: {temporal_id} | Training ID: {training_id}\n"
+            f"Source Variant: {variant}"
         )
         metadata = {
             'country': CONFIG.get('country', 'peru'),
@@ -134,11 +134,11 @@ def start_curation(ui):
             'description': desc,
             'publish_date': datetime.now().isoformat()
         }
-        
+
         # publish_preofficial_to_gee("gs://...", training_id, temporal_id, metadata)
-        print(f"    ✅ Exportación GEE Asset iniciada para {region}.")
-        
-    print("\n✅ Resumen de Configuración Usada (PRESET):")
+        print(f"     GEE Asset export started for {region}.")
+
+    print("\n Configuration Summary Used (PRESET):")
     print("PRESET_VOTES = {")
     for r, v in votes.items():
         print(f"    '{r}': '{v}',")

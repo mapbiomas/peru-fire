@@ -18,56 +18,56 @@ var L = (function () {
     var dict = {
         es: {
             title: 'MapBiomas-Fuego | Monitor',
-            cab_config: '🌍 CONFIGURACIÓN',
-            cab_temporal: '📅 TEMPORAL',
-            cab_layers: '🗺️ CAPAS',
-            cab_samples: '🖍️ MUESTRAS',
-            lbl_country: 'País',
+            cab_config: 'CONFIGURACION',
+            cab_temporal: 'TEMPORAL',
+            cab_layers: 'CAPAS',
+            cab_samples: 'MUESTRAS',
+            lbl_country: 'Pais',
             lbl_regions: 'Regiones',
             lbl_periodicity: 'Periodicidad',
             opt_annual: 'Anual',
             opt_monthly: 'Mensual',
             lbl_asset_mosaics: 'Mosaicos classificados',
             lbl_raw_mosaics: 'Mosaicos on the fly',
-            lbl_ref_cats: 'Categorías de Referencia',
-            lbl_burned: 'Área Quemada',
+            lbl_ref_cats: 'Categorias de Referencia',
+            lbl_burned: 'Area Quemada',
             lbl_hotspots: 'Focos / Buffers',
-            cab_instructions: 'ℹ️ Cómo usar este módulo',
+            cab_instructions: 'Como usar este modulo',
             instructions: '1. Use las herramientas de dibujo en el mapa.\n' +
-                '2. Capa "fire" (rojo) = área quemada.\n' +
-                '3. Capa "notFire" (azul) = área no quemada.\n' +
-                '4. Complete los metadatos en la pestaña EXPORTAR.\n' +
+                '2. Capa "fire" (rojo) = area quemada.\n' +
+                '3. Capa "notFire" (azul) = area no quemada.\n' +
+                '4. Complete los metadatos en la pestana EXPORTAR.\n' +
                 '5. Haga clic en EXPORTAR para guardar en Asset y GCS.\n' +
-                '6. Vaya a la pestaña Tasks en GEE para ejecutar.',
-            tab_import: '📥 IMPORTAR',
-            tab_export: '📤 EXPORTAR',
+                '6. Vaya a la pestana Tasks en GEE para ejecutar.',
+            tab_import: 'IMPORTAR',
+            tab_export: 'EXPORTAR',
             btn_load: 'Cargar',
             lbl_version: 'Sample id:',
             lbl_shortname: 'Nombre corto (opcional):',
             lbl_comment: 'Comentario (metadato):',
             lbl_date: 'Fecha representada:',
-            lbl_satellites: 'Válido para satélites (opcional):',
+            lbl_satellites: 'Valido para satelites (opcional):',
             placeholder_date: 'Seleccionar fecha...',
             placeholder_asset: 'Elegir muestra existente...',
             placeholder_sn: 'apodo (ej: norte_amazonia)',
             placeholder_cmt: 'comentario (metadato libre)',
-            btn_export: '🚀 EXPORTAR (Asset + GCS)',
-            ver_checking: '🔄 Verificando...',
-            ver_suggested: '✓ sugerida: ',
-            ver_empty: '⚠ asset vacío',
-            task_created: '🚀 Tareas creadas: ',
-            task_hint: ' (vaya a la pestaña Tasks para ejecutar)',
-            err_layers: '⚠️ Faltan capas "fire" o "notFire" en el mapa.',
-            err_no_sat: '⚠️ Seleccione al menos un satélite como metadato.',
-            err_no_date: '⚠️ Seleccione la fecha representada.',
+            btn_export: 'EXPORTAR (Asset + GCS)',
+            ver_checking: 'Verificando...',
+            ver_suggested: 'sugerida: ',
+            ver_empty: 'asset vacio',
+            task_created: 'Tareas creadas: ',
+            task_hint: ' (vaya a la pestana Tasks para ejecutar)',
+            err_layers: 'Faltan capas "fire" o "notFire" en el mapa.',
+            err_no_sat: 'Seleccione al menos un satelite como metadato.',
+            err_no_date: 'Seleccione la fecha representada.',
             lbl_stats: 'Resumen de Muestras:',
             lbl_fire: 'Fuego',
             lbl_not_fire: 'No Fuego',
             lbl_total: 'Total',
-            lbl_area: 'Área (ha)',
+            lbl_area: 'Area (ha)',
             lbl_count: 'Cant.',
-            lbl_satellites_toggle: 'Satélites',
-            lbl_vis_preset: 'Visualización',
+            lbl_satellites_toggle: 'Satelites',
+            lbl_vis_preset: 'Visualizacion',
             opt_rgb_fire: '[SWIR1/NIR/RED] A',
             opt_rgb_coverage: '[SWIR1/NIR/RED] B',
             opt_rgb_false: '[NIR/SWIR1/RED]',
@@ -78,62 +78,62 @@ var L = (function () {
             opt_gray_nbr: 'NBR',
             opt_gray_ndvi: 'NDVI',
             opt_rgb_swir_alt: '[SWIR2/SWIR1/NIR]',
-            cab_satellites: '🛰️ Satélite',
-            cab_reference: '📚 Referencia',
-            loading: '🔄️'
+            cab_satellites: 'Satelite',
+            cab_reference: 'Referencia',
+            loading: ''
         },
         pt: {
             title: 'MapBiomas-Fogo | Monitor',
-            cab_config: '🌍 CONFIGURAÇÃO',
-            cab_temporal: '📅 TEMPORAL',
-            cab_layers: '🗺️ CAMADAS',
-            cab_samples: '🖍️ AMOSTRAS',
-            lbl_country: 'País',
-            lbl_regions: 'Regiões',
+            cab_config: 'CONFIGURACAO',
+            cab_temporal: 'TEMPORAL',
+            cab_layers: 'CAMADAS',
+            cab_samples: 'AMOSTRAS',
+            lbl_country: 'Pais',
+            lbl_regions: 'Regioes',
             lbl_periodicity: 'Periodicidade',
             opt_annual: 'Anual',
             opt_monthly: 'Mensal',
             lbl_asset_mosaics: 'Mosaicos classificados',
             lbl_raw_mosaics: 'Mosaicos on the fly',
-            lbl_ref_cats: 'Categorias de Referência',
-            lbl_burned: 'Área Queimada',
+            lbl_ref_cats: 'Categorias de Referencia',
+            lbl_burned: 'Area Queimada',
             lbl_hotspots: 'Focos / Buffers',
-            cab_instructions: 'ℹ️ Como usar este módulo',
+            cab_instructions: 'Como usar este modulo',
             instructions: '1. Use as ferramentas de desenho no mapa.\n' +
-                '2. Camada "fire" (vermelho) = área queimada.\n' +
-                '3. Camada "notFire" (azul) = área não queimada.\n' +
+                '2. Camada "fire" (vermelho) = area queimada.\n' +
+                '3. Camada "notFire" (azul) = area nao queimada.\n' +
                 '4. Preencha os metadados na aba EXPORTAR.\n' +
                 '5. Clique em EXPORTAR para salvar no Asset e GCS.\n' +
                 '6. Acesse a aba Tasks no GEE para executar.',
-            tab_import: '📥 IMPORTAR',
-            tab_export: '📤 EXPORTAR',
+            tab_import: 'IMPORTAR',
+            tab_export: 'EXPORTAR',
             btn_load: 'Carregar',
             lbl_version: 'Sample id:',
             lbl_shortname: 'Shortname (opcional):',
-            lbl_comment: 'Comentário (metadado):',
+            lbl_comment: 'Comentario (metadado):',
             lbl_date: 'Data representada:',
-            lbl_satellites: 'Válido para os satélites (opcional):',
+            lbl_satellites: 'Valido para os satelites (opcional):',
             placeholder_date: 'Selecionar data...',
             placeholder_asset: 'Escolher amostra existente...',
             placeholder_sn: 'apelido (ex: norte_amazonia)',
-            placeholder_cmt: 'comentário (metadado livre)',
-            btn_export: '🚀 EXPORTAR (Asset + GCS)',
-            ver_checking: '🔄 Verificando...',
-            ver_suggested: '✓ sugerida: ',
-            ver_empty: '⚠ asset vazio',
-            task_created: '🚀 Tasks criadas: ',
-            task_hint: ' (vá à aba Tasks para executar)',
-            err_layers: '⚠️ Faltam camadas "fire" ou "notFire" no mapa.',
-            err_no_sat: '⚠️ Selecione ao menos um satélite como metadato.',
-            err_no_date: '⚠️ Selecione a data representada.',
+            placeholder_cmt: 'comentario (metadado livre)',
+            btn_export: 'EXPORTAR (Asset + GCS)',
+            ver_checking: 'Verificando...',
+            ver_suggested: 'sugerida: ',
+            ver_empty: 'asset vazio',
+            task_created: 'Tasks criadas: ',
+            task_hint: ' (va a aba Tasks para executar)',
+            err_layers: 'Faltam camadas "fire" ou "notFire" no mapa.',
+            err_no_sat: 'Selecione ao menos um satelite como metadato.',
+            err_no_date: 'Selecione a data representada.',
             lbl_stats: 'Resumo das Amostras:',
             lbl_fire: 'Fogo',
-            lbl_not_fire: 'Não Fogo',
+            lbl_not_fire: 'Nao Fogo',
             lbl_total: 'Total',
-            lbl_area: 'Área (ha)',
+            lbl_area: 'Area (ha)',
             lbl_count: 'Qtd.',
-            lbl_satellites_toggle: 'Satélites',
-            lbl_vis_preset: 'Visualização',
+            lbl_satellites_toggle: 'Satelites',
+            lbl_vis_preset: 'Visualizacao',
             opt_rgb_fire: '[SWIR1/NIR/RED] A',
             opt_rgb_coverage: '[SWIR1/NIR/RED] B',
             opt_rgb_false: '[NIR/SWIR1/RED]',
@@ -144,16 +144,16 @@ var L = (function () {
             opt_gray_nbr: 'NBR',
             opt_gray_ndvi: 'NDVI',
             opt_rgb_swir_alt: '[SWIR2/SWIR1/NIR]',
-            cab_satellites: '🛰️ Satélite',
-            cab_reference: '📚 Referência',
-            loading: '🔄️'
+            cab_satellites: 'Satelite',
+            cab_reference: 'Referencia',
+            loading: ''
         },
         en: {
             title: 'MapBiomas-Fire | Monitor',
-            cab_config: '🌍 CONFIGURATION',
-            cab_temporal: '📅 TEMPORAL',
-            cab_layers: '🗺️ LAYERS',
-            cab_samples: '🖍️ SAMPLES',
+            cab_config: 'CONFIGURATION',
+            cab_temporal: 'TEMPORAL',
+            cab_layers: 'LAYERS',
+            cab_samples: 'SAMPLES',
             lbl_country: 'Country',
             lbl_regions: 'Regions',
             lbl_periodicity: 'Periodicity',
@@ -164,15 +164,15 @@ var L = (function () {
             lbl_ref_cats: 'Reference Categories',
             lbl_burned: 'Burned Area',
             lbl_hotspots: 'Hotspots / Buffers',
-            cab_instructions: 'ℹ️ How to use this module',
+            cab_instructions: 'How to use this module',
             instructions: '1. Use the map drawing tools.\n' +
                 '2. Layer "fire" (red) = burned area.\n' +
                 '3. Layer "notFire" (blue) = unburned area.\n' +
                 '4. Fill in metadata in the EXPORT tab.\n' +
                 '5. Click EXPORT to save to Asset and GCS.\n' +
                 '6. Go to the Tasks tab in GEE to run.',
-            tab_import: '📥 IMPORT',
-            tab_export: '📤 EXPORT',
+            tab_import: 'IMPORT',
+            tab_export: 'EXPORT',
             btn_load: 'Load',
             lbl_version: 'Sample id:',
             lbl_shortname: 'Short name (optional):',
@@ -183,15 +183,15 @@ var L = (function () {
             placeholder_asset: 'Choose existing sample...',
             placeholder_sn: 'alias (e.g. north_amazonia)',
             placeholder_cmt: 'comment (free metadata)',
-            btn_export: '🚀 EXPORT (Asset + GCS)',
-            ver_checking: '🔄 Checking...',
-            ver_suggested: '✓ suggested: ',
-            ver_empty: '⚠ empty asset',
-            task_created: '🚀 Tasks created: ',
+            btn_export: 'EXPORT (Asset + GCS)',
+            ver_checking: 'Checking...',
+            ver_suggested: 'suggested: ',
+            ver_empty: 'empty asset',
+            task_created: 'Tasks created: ',
             task_hint: ' (go to Tasks tab to run)',
-            err_layers: '⚠️ Missing "fire" or "notFire" layers on map.',
-            err_no_sat: '⚠️ Select at least one satellite as metadata.',
-            err_no_date: '⚠️ Select the represented date.',
+            err_layers: 'Missing "fire" or "notFire" layers on map.',
+            err_no_sat: 'Select at least one satellite as metadata.',
+            err_no_date: 'Select the represented date.',
             lbl_stats: 'Sample Summary:',
             lbl_fire: 'Fire',
             lbl_not_fire: 'Not Fire',
@@ -210,9 +210,9 @@ var L = (function () {
             opt_gray_nbr: 'NBR',
             opt_gray_ndvi: 'NDVI',
             opt_rgb_swir_alt: '[SWIR2/SWIR1/NIR]',
-            cab_satellites: '🛰️ Satellite',
-            cab_reference: '📚 Reference',
-            loading: '🔄️'
+            cab_satellites: 'Satellite',
+            cab_reference: 'Reference',
+            loading: ''
         }
     };
     return dict[APP_LANG] || dict['es'];
@@ -743,7 +743,7 @@ function user_interface() {
         stats.evaluate(function (s, err) {
             if (err) {
                 panel_stats.clear();
-                panel_stats.add(ui.Label('⚠️ Error recalculando stats', { fontSize: '10px', color: 'red' }));
+                panel_stats.add(ui.Label('Error recalculando stats', { fontSize: '10px', color: 'red' }));
                 return;
             }
             if (!s) return;
@@ -818,7 +818,7 @@ function user_interface() {
 
         // Botão Centralizar
         var btt_center_icon = ui.Button({
-            label: '📍',
+            label: 'C',
             style: { margin: '0px', padding: '0px' },
             onClick: function () {
                 var selectedNames = [];
@@ -1164,9 +1164,9 @@ function user_interface() {
 
     var btnFire = ui.Button({ label: 'Fire', style: { color: '#d32f2f', margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { setLayerMode('fire'); } });
     var btnNotFire = ui.Button({ label: 'Not Fire', style: { color: '#1a73e8', margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { setLayerMode('notFire'); } });
-    var btnHand = ui.Button({ label: '✋', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { Map.drawingTools().setShape(null); } });
-    var btnClear = ui.Button({ label: '🗑️Delete', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: clearDrawingTools });
-    var btnCenter = ui.Button({ label: '📍', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: centerDrawingTools });
+    var btnHand = ui.Button({ label: 'Hand', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { Map.drawingTools().setShape(null); } });
+    var btnClear = ui.Button({ label: 'Delete', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: clearDrawingTools });
+    var btnCenter = ui.Button({ label: 'C', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: centerDrawingTools });
 
     rowDraw.add(btnFire).add(btnNotFire).add(btnHand).add(btnClear).add(btnCenter);
 
@@ -1219,7 +1219,7 @@ function user_interface() {
     });
 
     var row_imp = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row });
-    row_imp.add(ui.Label('📁 Campaña:', { fontSize: '10px', margin: '5px 2px' }));
+    row_imp.add(ui.Label('Campana:', { fontSize: '10px', margin: '5px 2px' }));
     row_imp.add(select_campaign_imp);
     row_imp.add(select_address).add(btt_import_action);
     drawerImp.panel.add(row_imp);
@@ -1358,7 +1358,7 @@ function user_interface() {
         if (sn) parts.push(sn);
         parts.push(redundanceReplace(dt_label));
 
-        lab_export_preview.setValue('📄 ' + parts.join('_'));
+        lab_export_preview.setValue(parts.join('_'));
     }
 
     // Alias para compatibilidade com outros módulos que chamam updateExportLabel
@@ -1462,7 +1462,7 @@ function user_interface() {
     });
 
     // --- Montar o panel_export ---
-    drawerExp.panel.add(ui.Label('📁 Seleccionar Campaña:', { fontSize: '11px', fontWeight: 'bold', margin: '4px 2px 2px 2px' }));
+    drawerExp.panel.add(ui.Label('Seleccionar Campana:', { fontSize: '11px', fontWeight: 'bold', margin: '4px 2px 2px 2px' }));
     drawerExp.panel.add(select_campaign_exp);
     drawerExp.panel.add(ui.Label(L.lbl_version, styles.label));
     var rowVer = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row });

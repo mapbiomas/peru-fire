@@ -1,6 +1,6 @@
 """
-M0 - Configuração Global e Autenticação
-MapBiomas Fuego Sentinel Monitor
+M0 - Global Configuration and Authentication
+MapBiomas Fire Monitor
 """
 import ee
 import os
@@ -13,54 +13,63 @@ logging.getLogger("google.auth").setLevel(logging.ERROR)
 logging.getLogger("gcsfs").setLevel(logging.ERROR)
 logging.getLogger("fsspec").setLevel(logging.ERROR)
 
-# ─── CONFIGURAÇÃO DO PROJETO ──────────────────────────────────────────────────
+# ─── DEFAULT CONFIG ─────────────────────────────────────────
 
-def get_config(country='peru'):
-    """Retorna o dicionário de caminhos e buckets para o país escolhido."""
-    if country.lower() == 'peru':
-        return {
-            'country': 'peru',
-            'bucket': 'mapbiomas-fire',
-            'gcs_project': 'mapbiomas-fire-485203',
-            'version': 'version_01',
-            'mosaic_methods': ['minnbr', 'minnbr_buffer', 'median', 'minndvi'],
-            
-            # --- CAMINHOS LEGADOS (Mantidos provisoriamente) ---
-            'gcs_samples_old': 'sudamerica/peru/monitor/version_01/library_samples',
-            'gcs_mosaics_old': 'sudamerica/peru/monitor/version_01/library_images',
-            'gcs_models_old': 'sudamerica/peru/monitor/version_01/models',
-            'gcs_classifications_old': 'sudamerica/peru/monitor/version_01/classifications',
-            'gcs_filtered_old': 'sudamerica/peru/monitor/version_01/filtered',
-            'asset_mosaics_base_old': 'projects/mapbiomas-mosaics/assets/FIRE',
-            'asset_samples_old': 'projects/mapbiomas-peru/assets/FIRE/MONITOR_01/LIBRARY_SAMPLES',
-            'asset_classification_old': 'projects/mapbiomas-peru/assets/FIRE/MONITOR_01/CLASSIFICATIONS',
-            'asset_filtered_old': 'projects/mapbiomas-peru/assets/FIRE/MONITOR_01/FILTERED',
-            
-            # NOVOS CAMINHOS GCS (Arquitetura Singleband)
-            'gcs_library_images': 'sudamerica/peru/CATALOG_01/LIBRARY_IMAGES',
-            'gcs_library_samples': 'sudamerica/peru/CATALOG_01/LIBRARY_SAMPLES',
-            'gcs_library_models': 'sudamerica/peru/CATALOG_01/LIBRARY_MODELS',
-            'gcs_library_classifications': 'sudamerica/peru/CATALOG_01/LIBRARY_CLASSIFICATIONS',
-            'gcs_cache': 'sudamerica/peru/CATALOG_01/.CACHE',
-            'gcs_chunks': 'sudamerica/peru/CATALOG_01/CHUNKS',
-            
-            # --- NOVOS CAMINHOS GEE (Arquitetura Singleband) ---
-            'asset_monitor_base': 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01',
-            
-            # Auxiliares
-            'asset_regions': 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
-            'asset_fire_ref': 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/REFERENCES/cicatrizes_fuego_reference_2016_2024/cicatriz_fuego_',
-            'asset_hotspots': 'projects/mapbiomas-fire-485203/assets/DATABASE/monthly-focus-sul-america',
-            
-            # Parâmetros de Processamento
-            'bands_model_default': ['red', 'nir', 'swir1', 'swir2'],
-            'bands_all': ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'],
-        }
-    else:
-        raise ValueError(f"País {country} no configurado.")
+def _make_config(country='peru', bucket='mapbiomas-fire', gcs_project='mapbiomas-fire-485203',
+                  version='version_01', gee_project='mapbiomas-peru',
+                  gcs_catalog_prefix=None, gee_asset_repo=None):
+    """Build the CONFIG dict from project-level parameters."""
+    if gcs_catalog_prefix is None:
+        gcs_catalog_prefix = f"sudamerica/{country}/CATALOG_01"
+    if gee_asset_repo is None:
+        gee_asset_repo = f"projects/{gee_project}/assets/FIRE/CATALOG_01"
+
+    return {
+        'country': country,
+        'bucket': bucket,
+        'gcs_project': gcs_project,
+        'version': version,
+        'gee_project': gee_project,
+        'gee_asset_repo': gee_asset_repo,
+        'gcs_catalog_prefix': gcs_catalog_prefix,
+        'mosaic_methods': ['minnbr', 'minnbr_buffer', 'median', 'minndvi'],
+
+        # --- GCS paths (derived) ---
+        'gcs_library_images': f"{gcs_catalog_prefix}/LIBRARY_IMAGES",
+        'gcs_library_samples': f"{gcs_catalog_prefix}/LIBRARY_SAMPLES",
+        'gcs_library_models': f"{gcs_catalog_prefix}/LIBRARY_MODELS",
+        'gcs_library_classifications': f"{gcs_catalog_prefix}/LIBRARY_CLASSIFICATIONS",
+        'gcs_cache': f"{gcs_catalog_prefix}/.CACHE",
+        'gcs_chunks': f"{gcs_catalog_prefix}/CHUNKS",
+
+        # --- GEE paths (derived) ---
+        'asset_monitor_base': gee_asset_repo,
+
+        # --- Country-specific GEE assets (overridable) ---
+        'asset_regions': f'projects/{gee_project}/assets/FIRE/AUXILIARY_DATA/regiones_fuego_{country}_v1',
+        'asset_fire_ref': f'projects/{gee_project}/assets/FIRE/AUXILIARY_DATA/REFERENCES/cicatrizes_fuego_reference_2016_2024/cicatriz_fuego_',
+        'asset_hotspots': f'projects/{bucket}/assets/DATABASE/monthly-focus-sul-america',
+
+        # Processing params
+        'bands_model_default': ['red', 'nir', 'swir1', 'swir2'],
+        'bands_all': ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'],
+    }
 
 
-# ─── AUTENTICAÇÃO ─────────────────────────────────────────────────────────────
+# ─── CURRENT CONFIG ─────────────────────────────────────────
+
+CONFIG = _make_config()  # Default: Peru
+
+GLOBAL_OPTS = {
+    'SENSOR': 'landsat',
+    'PERIODICITY': 'yearly',
+    'MOSAIC_METHOD': 'minnbr',
+    'PERSONAL_TASK_FLAG': 'CATALOG',
+    'SAMPLING_CAMPAIGN': 'monitor_01'
+}
+
+
+# ─── AUTHENTICATION ─────────────────────────────────────────
 
 def authenticate(project='mapbiomas-peru', clean_cache=False):
     """Autenticar com Google Earth Engine e GCS (Suporta Local e Colab)."""
@@ -76,7 +85,7 @@ def authenticate(project='mapbiomas-peru', clean_cache=False):
     # Detecção de ambiente Colab para autenticação GCS
     try:
         import google.colab
-        print("[COLAB] Detectado entorno Google Colab. Autenticando usuario......")
+        print("[COLAB] Detected Google Colab environment. Authenticating user...")
         from google.colab import auth
         auth.authenticate_user()
     except ImportError:
@@ -86,25 +95,13 @@ def authenticate(project='mapbiomas-peru', clean_cache=False):
         ee.Initialize(project=project)
         print("[GEE] Inicializado.")
     except Exception:
-        print("Sessão GEE expirada ou nula. Iniciando autenticação...")
+        print("GEE session expired or null. Starting authentication...")
         ee.Authenticate()
         ee.Initialize(project=project)
-        print("[GEE] Autenticado com sucesso.")
+        print("[GEE] Authenticated successfully.")
     
-    print("[GCS] Autenticación GCS/ADC configurada.")
+    print("[GCS] GCS/ADC authentication configured.")
 
-
-# ─── VARIÁVEIS GLOBAIS (serão configuradas) ─────────────────────────────────
-
-CONFIG = get_config('peru')  # Padrão: Peru (compatível com notebooks existentes)
-
-GLOBAL_OPTS = {
-    'SENSOR': 'landsat',       # landsat, sentinel2, hls, modis
-    'PERIODICITY': 'yearly',   # yearly, monthly
-    'MOSAIC_METHOD': 'minnbr', # minnbr, minnbr_buffer, median, minndvi
-    'PERSONAL_TASK_FLAG': 'CATALOG',
-    'SAMPLING_CAMPAIGN': 'monitor_01'
-}
 
 def _get_fs():
     """Retorna uma instância GCSFileSystem corretamente autenticada para qualquer ambiente."""
@@ -119,17 +116,43 @@ def _get_fs():
     else:
         return gcsfs.GCSFileSystem(token='google_default', requests_timeout=10)
 
-def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='MONITOR', sampling_campaign='monitor_01', clean_cache=False, language='es'):
+def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='MONITOR', sampling_campaign='monitor_01', clean_cache=False, language='en',
+                    country=None, gee_project=None, gee_asset_repo=None,
+                    gcs_bucket=None, gcs_project=None, gcs_catalog_prefix=None):
     """
-    Configura variaveis globais do fluxo de processamento.
-    
+    Configure global processing options and project paths.
+
     Args:
-        sensor: 'landsat', 'sentinel2', 'hls' ou 'modis'
-        periodicity: 'yearly' ou 'monthly'
-        personal_task_flag: Prefixo para organizar tasks no GEE (ex: 'MONITOR')
-        language: 'es' (espanhol, padrao) — no futuro 'en'
+        sensor: 'landsat', 'sentinel2', 'hls' or 'modis'
+        periodicity: 'yearly' or 'monthly'
+        personal_task_flag: Prefix for GEE tasks (e.g. 'MONITOR')
+        sampling_campaign: Sampling campaign ID (e.g. 'monitor_01')
+        clean_cache: Reset local + GCS cache at startup
+        language: Language code: 'en' (default), 'es', 'pt', 'fr', 'id'
+        country: Country code (e.g. 'peru', 'brazil'). If None, keeps current.
+        gee_project: GEE project name (e.g. 'mapbiomas-peru')
+        gee_asset_repo: Full GEE asset path for CATALOG_01
+                        (e.g. 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01')
+        gcs_bucket: GCS bucket name (e.g. 'mapbiomas-fire')
+        gcs_project: GCS project name (e.g. 'mapbiomas-fire-485203')
+        gcs_catalog_prefix: GCS prefix for CATALOG_01
+                            (e.g. 'sudamerica/peru/CATALOG_01')
     """
-    global GLOBAL_OPTS
+    global GLOBAL_OPTS, CONFIG
+
+    # Rebuild CONFIG if any project-level param is provided
+    needs_rebuild = any(x is not None for x in [country, gee_project, gee_asset_repo,
+                                                 gcs_bucket, gcs_project, gcs_catalog_prefix])
+    if needs_rebuild:
+        CONFIG = _make_config(
+            country=country or CONFIG['country'],
+            bucket=gcs_bucket or CONFIG['bucket'],
+            gcs_project=gcs_project or CONFIG['gcs_project'],
+            gee_project=gee_project or CONFIG.get('gee_project', CONFIG['country']),
+            gcs_catalog_prefix=gcs_catalog_prefix,
+            gee_asset_repo=gee_asset_repo,
+        )
+
     GLOBAL_OPTS['SENSOR'] = sensor
     GLOBAL_OPTS['PERIODICITY'] = periodicity
     GLOBAL_OPTS['PERSONAL_TASK_FLAG'] = personal_task_flag
@@ -325,16 +348,16 @@ def ensure_gdal_path():
             test_bin = 'gdalbuildvrt.exe' if platform.system() == 'Windows' else 'gdalbuildvrt'
             if os.path.exists(os.path.join(d, test_bin)):
                 os.environ['PATH'] = d + os.pathsep + os.environ.get('PATH', '')
-                print(f"✅ GDAL encontrado e adicionado ao PATH: {d}")
+                print(f"GDAL found and added to PATH: {d}")
                 return
     
     # Se ainda não encontrou, emite aviso com instruções
-    print(f"⚠️ Aviso: Utilitários GDAL não encontrados: {missing}")
+    print(f"Warning: GDAL utilities not found: {missing}")
     if 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ:
-        print("💡 No Google Colab, execute: !apt-get install -y gdal-bin")
+        print("Tip: On Google Colab, run: !apt-get install -y gdal-bin")
     elif platform.system() == 'Windows':
-        print("💡 No Windows, certifique-se de que o GDAL está no seu PATH ou use o ambiente Conda (gdal).")
-        print(f"   Dica: Ative o ambiente correto com 'conda activate <env>' antes de iniciar o Jupyter.")
+        print("Tip: On Windows, ensure GDAL is in your PATH or use Conda environment (gdal).")
+        print(f"   Tip: Activate the correct environment with 'conda activate <env>' antes de iniciar o Jupyter.")
 
 def sample_asset_name(temporal_id, version_id):
     """
@@ -445,9 +468,16 @@ def get_sensor_scale(sensor=None):
     return scales.get(sensor, 30)
 
 def set_country(country):
-    """Atualiza a configuração global para um novo país."""
+    """Update the global configuration for a new country while preserving project-level overrides."""
     global CONFIG
-    CONFIG = get_config(country)
+    CONFIG = _make_config(
+        country=country,
+        bucket=CONFIG['bucket'],
+        gcs_project=CONFIG['gcs_project'],
+        gee_project=CONFIG.get('gee_project', country),
+        gcs_catalog_prefix=None,
+        gee_asset_repo=None,
+    )
     return CONFIG
 
 def set_edit_mode(mode):
@@ -461,7 +491,11 @@ def is_edit_mode():
 
 def print_config():
     """Imprime um resumo da configuração atual."""
-    print(f"🌍 País: {CONFIG['country'].upper()}")
-    print(f"📦 Bucket: {CONFIG['bucket']}")
-    print(f"🏷️ Versión: {CONFIG['version']}")
-    print(f"📡 Sensor: {GLOBAL_OPTS['SENSOR']} (Task Prefix: {GLOBAL_OPTS['PERSONAL_TASK_FLAG']})")
+    print(f"Country: {CONFIG['country'].upper()}")
+    print(f"GEE Project: {CONFIG.get('gee_project', 'N/A')}")
+    print(f"GEE Asset Repo: {CONFIG['asset_monitor_base']}")
+    print(f"GCS Bucket: {CONFIG['bucket']}")
+    print(f"GCS Project: {CONFIG['gcs_project']}")
+    print(f"GCS Catalog: {CONFIG['gcs_catalog_prefix']}")
+    print(f"Version: {CONFIG['version']}")
+    print(f"Sensor: {GLOBAL_OPTS['SENSOR']} | Period: {GLOBAL_OPTS['PERIODICITY']} | Task Flag: {GLOBAL_OPTS['PERSONAL_TASK_FLAG']} | Campaign: {GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'N/A')}")

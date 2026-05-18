@@ -56,7 +56,7 @@ def create_standalone_notebook():
     os.makedirs(os.path.dirname(NOTEBOOK_PATH), exist_ok=True)
     with open(NOTEBOOK_PATH, "w", encoding="utf-8") as f:
         json.dump(nb, f, indent=1)
-    print(f"Notebook criado em: {NOTEBOOK_PATH}")
+    print(f"Notebook created at: {NOTEBOOK_PATH}")
 
 
 def run_voila():
@@ -66,11 +66,11 @@ def run_voila():
     cmd = [voila_path] if voila_path else [sys.executable, "-m", "voila"]
     try:
         result = subprocess.run(cmd + ["--version"], capture_output=True, timeout=10)
-        print(f"\n Iniciando M4 com Voila em http://localhost:8866 ...")
-        print(" Pressione Ctrl+C para parar.\n")
+        print(f"\n Starting M4 with Voila at http://localhost:8866 ...")
+        print(" Press Ctrl+C to stop.\n")
         subprocess.run(cmd + [NOTEBOOK_PATH, "--port=8866"])
     except Exception as e:
-        print(f"Voila falhou ({e}). Tentando Jupyter...")
+        print(f"Voila failed ({e}). Trying Jupyter...")
         run_jupyter()
 
 
@@ -79,8 +79,8 @@ def run_jupyter():
     import shutil
     jlab_path = shutil.which("jupyter-lab") or shutil.which("jupyter")
     cmd = [jlab_path] if jlab_path else [sys.executable, "-m", "jupyterlab"]
-    print(f"\n Iniciando Jupyter Lab em http://localhost:8888 ...")
-    print(" Pressione Ctrl+C para parar.\n")
+    print(f"\n Starting Jupyter Lab at http://localhost:8888 ...")
+    print(" Press Ctrl+C to stop.\n")
     nb_dir = os.path.dirname(NOTEBOOK_PATH)
     nb_file = os.path.basename(NOTEBOOK_PATH)
     try:
@@ -93,10 +93,10 @@ def run_jupyter():
 
 if __name__ == "__main__":
     if not os.path.exists(NOTEBOOK_PATH):
-        print("Notebook standalone nao encontrado. Criando...")
+        print("Standalone notebook not found. Creating...")
         create_standalone_notebook()
 
     print("=" * 55)
-    print("  M4 Auditor Dashboard - Servidor Local")
+    print("  M4 Auditor Dashboard - Local Server")
     print("=" * 55)
     run_voila()

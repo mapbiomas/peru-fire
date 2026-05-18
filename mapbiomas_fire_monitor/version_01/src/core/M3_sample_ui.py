@@ -1,31 +1,31 @@
 """
-M3 - Gateway para el GEE Toolkit de Recolección de Muestras
+M3 - Gateway for the GEE Sample Collection Toolkit
 """
 
 def show_toolkit_links():
     """
-    Función simplificada para la etapa M3.
-    La recolección de muestras se ha migrado para realizarse exclusivamente a través del GEE JavaScript Toolkit.
+    Simplified function for the M3 stage.
+    Sample collection has been migrated to be carried out exclusively through the GEE JavaScript Toolkit.
     """
     github_link = "https://github.com/mapbiomas/peru-fire/blob/main/mapbiomas_fire_monitor/version_01/src/core/M3_toolkit.js"
     gee_link = "https://code.earthengine.google.com/?scriptPath=users%2Fmapbiomasworkspace1%2Fmapbiomas-fire%3A5-Monitor-Fuego%2FToolkit_Monitor_Fuego"
     doc_link = "https://github.com/mapbiomas/peru-fire/blob/main/mapbiomas_fire_monitor/version_01/FIRE_MONITOR_STANDARDS.md"
-    
+
     print("\n" + "="*70)
-    print(" 🖍️  M3 - COLECTA DE MUESTRAS (GEE TOOLKIT GATEWAY)")
+    print("   M3 - SAMPLE COLLECTION (GEE TOOLKIT GATEWAY)")
     print("="*70)
-    print("\n  La etapa de recolección de muestras se lleva a cabo exclusivamente")
-    print("  a través de la interfaz de JavaScript en Google Earth Engine.\n")
-    print("  🔗 1.1. Acceso al código fuente (GitHub):")
+    print("\n  The sample collection stage is carried out exclusively")
+    print("  through the JavaScript interface in Google Earth Engine.\n")
+    print("   1.1. Source code access (GitHub):")
     print(f"     {github_link}\n")
-    print("  🔗 1.2. Acceso directo (Editor GEE):")
+    print("   1.2. Direct access (GEE Editor):")
     print(f"     {gee_link}\n")
-    print("  🔗 2. Documentación y normas de uso:")
+    print("   2. Documentation and usage standards:")
     print(f"     {doc_link}")
     print("\n" + "="*70 + "\n")
     return True
 
-# Mantemos compatibilidade com notebooks antigos
+# Maintain compatibility with legacy notebooks
 def run_collection_toolkit():
     return show_toolkit_links()
 

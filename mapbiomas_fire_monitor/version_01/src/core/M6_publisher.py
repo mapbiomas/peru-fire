@@ -34,7 +34,7 @@ from M0_auth_config import CONFIG, gcs_path, classification_name, \
     get_country_geometry, list_regions
 
 
-# ─── MÁSCARA LULC (aplicada post-clasificación) ────────────────────────────────
+# ---- MÁSCARA LULC (aplicada post-clasificación) ----
 
 # Clases a excluir uniformemente en todo el país
 LULC_MASK_CLASSES = [26, 22, 33, 24]
@@ -85,7 +85,7 @@ def remove_isolated_pixels_ee(classified_image, min_connected=4):
     return classified_image.updateMask(connections.gt(min_connected))
 
 
-# ─── ENSAMBLAJE DE MOSAICO NACIONAL ──────────────────────────────────────────
+# ---- ENSAMBLAJE DE MOSAICO NACIONAL ----
 
 def assemble_classified_mosaic(year, month, regions, training_id,
                                 period='monthly', draft=True):
@@ -112,7 +112,7 @@ def assemble_classified_mosaic(year, month, regions, training_id,
     version_tag = f"{base_name}_draft" if draft else base_name
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        print(f"  ⬇️  Descargando fragmentos: gs://{CONFIG['bucket']}/{chunk_folder}/")
+        print(f"    Downloading fragments: gs://{CONFIG['bucket']}/{chunk_folder}/")
         subprocess.run([
             'gsutil', '-m', 'cp',
             f"gs://{CONFIG['bucket']}/{chunk_folder}/*_cls.tif",
@@ -121,15 +121,15 @@ def assemble_classified_mosaic(year, month, regions, training_id,
 
         chunk_files = glob.glob(os.path.join(tmpdir, '*_cls.tif'))
         if not chunk_files:
-            print(f"  ⚠️  No se han encontrado fragmentos clasificados. Saltando ensamblaje.")
+            print(f"    No classified fragments found. Skipping assembly.")
             return None
 
-        print(f"  🔗  Construyendo VRT a partir de {len(chunk_files)} mosaicos...")
+        print(f"    Building VRT from {len(chunk_files)} mosaics...")
         vrt_path = os.path.join(tmpdir, f'{version_tag}.vrt')
         subprocess.run(['gdalbuildvrt', '-resolution', 'highest',
                         vrt_path] + chunk_files, check=True)
 
-        print(f"  🗜️  Convirtiendo a COG...")
+        print(f"    Converting to COG...")
         cog_path = os.path.join(tmpdir, f'{version_tag}_cog.tif')
         subprocess.run([
             'gdal_translate', '-of', 'COG',
@@ -143,14 +143,14 @@ def assemble_classified_mosaic(year, month, regions, training_id,
 
         dest = gcs_path(f"{mosaic_folder}/{version_tag}_cog.tif")
         subprocess.run(['gsutil', 'cp', cog_path, dest], check=True)
-        print(f"  ☁️  Subido: {dest}")
+        print(f"    Uploaded: {dest}")
 
     return dest
 
 
-# ─── EXPORTACIÓN DE GEE (ACTIVO VERSIONADO FINAL) ───────────────────────────
+# ---- EXPORTACIÓN DE GEE (ACTIVO VERSIONADO FINAL) ----
 
-# ─── MÁSCARA LULC Y FILTROS MORFOLÓGICOS (EE) ───────────────────────────────
+# ---- MÁSCARA LULC Y FILTROS MORFOLÓGICOS (EE) ----
 def get_lulc_mask_ee(year, mask_classes):
     clamped_year = min(year, 2022)
     band_name = f'classification_{clamped_year}'
@@ -189,7 +189,7 @@ def apply_filters_ee(image, year, mask_classes, open_filter, close_filter, out_t
     return filtered
 
 
-# ─── INTERFAZ DE IPYWIDGETS ───────────────────────────────────────────────────
+# ---- INTERFAZ DE IPYWIDGETS ----
 
 class FilterUI:
     """Interfaz para filtros post-clasificación."""
@@ -202,7 +202,7 @@ class FilterUI:
         from ipywidgets import HTML
         title = HTML("""
             <div style="background:linear-gradient(135deg,#0a1628,#0d2137); color:#89dceb;padding:14px 18px;border-radius:10px; font-family:'Courier New',monospace;font-size:13px;margin-bottom:8px;">
-                📢 <b>Procesador Post-Clasificación (M6)</b> — Filtros LULC y Morfología<br>
+                 <b>Procesador Post-Clasificación (M6)</b> — Filtros LULC y Morfología<br>
                 <span style="color:#8892b0;font-size:11px;">Aplica máscaras y exporta clasificaciones refinadas (filt_...) a GCS</span>
             </div>
         """)
@@ -219,7 +219,7 @@ class FilterUI:
             preset_html += "</ul>"
             
             self.filter_panel = widgets.VBox([
-                HTML("<b>📌 Usando Configuración Preset (PRESET_FILTERS):</b>"),
+                HTML("<b> Usando Configuración Preset (PRESET_FILTERS):</b>"),
                 HTML(preset_html)
             ], layout=widgets.Layout(border='1px solid green', padding='10px', margin='10px 0'))
             
@@ -257,40 +257,38 @@ class FilterUI:
 
 
 def run_ui(preset_filters=None):
-    """Iniciar la interfaz del publicador/filtro."""
+    """Initialize the publisher/filter interface."""
     ui = FilterUI(preset_filters)
     ui.show()
     return ui
 
 def start_filtering(ui):
-    """Ejecutar aplicación de filtros sobre mosaicos M5."""
+    """Execute filter application on M5 mosaics."""
     if not isinstance(ui, FilterUI):
-        print("⚠️ Esta función requiere el objeto devuelto por run_ui() de M6.")
+        print(" This function requires the object returned by run_ui() from M6.")
         return
-        
+
     config, year, month, training_id, out_type = ui.get_filter_config()
     from M0_auth_config import get_gcs_candidate
-    
-    print(f"🚀 Iniciando Filtrado M6")
-    print(f"   Periodo : {year}-{month:02d} | Training ID: {training_id} | Output: {out_type}")
-    
+
+    print(f" Starting M6 Filtering")
+    print(f"   Period: {year}-{month:02d} | Training ID: {training_id} | Output: {out_type}")
+
     for region, opts in config.items():
-        print(f"  > Procesando {region}: LULC={opts.get('mask_classes')}, Open={opts.get('open_filter')}, Close={opts.get('close_filter')}")
-        
+        print(f"  > Processing {region}: LULC={opts.get('mask_classes')}, Open={opts.get('open_filter')}, Close={opts.get('close_filter')}")
+
         yymm = f"{year}_{month:02d}"
-        
+
         dest_prefix = get_gcs_candidate(region, training_id, yymm)
-        
-        # Como es una tarea GEE toCloudStorage, enviamos la tarea.
-        # Por seguridad y contexto de demostración:
-        import struct 
-        
+
+        import struct
+
         # Fake task submission print since true loadGeoTiff requires Google Cloud Storage URIs
         desc = f"Export_Candidate_{dest_prefix.split('/')[-1]}"
-        
-        print(f"    ✅ Tarea exportación iniciada: GCS {dest_prefix}")
-        
-    print("\n✅ Resumen de Configuración Usada (PRESET):")
+
+        print(f"     Export task started: GCS {dest_prefix}")
+
+    print("\n Configuration Summary Used (PRESET):")
     print("PRESET_FILTERS = {")
     for r, cfg in config.items():
         print(f"    '{r}': {cfg},")

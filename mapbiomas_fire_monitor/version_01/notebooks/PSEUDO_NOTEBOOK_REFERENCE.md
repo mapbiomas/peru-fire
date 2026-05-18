@@ -1,73 +1,83 @@
-# 📓 MapBiomas Fire Monitor — Pipeline (M0-M7)
+# MapBiomas Fire Monitor - Pipeline (M0-M7)
 
-## 📘 Documentación y Guía del Usuario
-Expanda esta sección para entender la arquitectura del dato, requisitos de ambiente y flujo de trabajo.
+## Documentation and User Guide
+Expand this section to understand the data architecture, environment requirements, and workflow.
 
-#### 📌 Introducción y Contexto de Uso
+### Introduction and Context
 
-Este pipeline de código constituye el núcleo de procesamiento automatizado para el **Monitoramiento de Cicatrices de Fuego de MapBiomas**. Su objetivo principal es extraer, procesar, clasificar y publicar datos satelitales a nivel regional o nacional con alta trazabilidad.
+This pipeline is the automated processing core for the **MapBiomas Fire Scar Monitoring**. It is organized into sequential stages (M0-M7), each with a specific responsibility:
 
-*   📥 **Entradas Globales (Inputs):** Colecciones de imágenes brutas desde Google Earth Engine (Sentinel-2, Landsat), polígonos vectoriales para entrenamiento (muestras / *samples*), y mapas auxiliares de cobertura de suelo (LULC).
-*   📤 **Salidas Globales (Outputs):** Chunks y mosaicos optimizados (COGs) en Google Cloud Storage (GCS), pesos de modelos de redes neuronales (DNN), matrices de clasificación, e ImageCollections versionadas pre-oficiales en GEE.
-*   🔄 **Alternativas de Ejecución:** La arquitectura modular permite **ejecución mixta**.
-    *   **Ejecución Local (Sugerida para M1, M2 e M5):** Máxima estabilidad al descargar y ensamblar mosaicos con GDAL a través de I/O de disco sostenido.
-    *   **Google Colab (Sugerida para M3 y M4):** Acceso inmediato a recursos de RAM/GPU, facilitando recolección de muestras ágil y entrenamiento de redes.
+- **M0 - Setup and Authentication**: Auto-detects Colab vs local environment, installs dependencies, configures GCS/GEE project paths via `set_global_opts()`, authenticates with Earth Engine, and sets the language locale. Centralizes all configuration (sensor, periodicity, country, language, GEE/GCS project).
 
-> **Nota:** Tanto el disco del PC local como el almacenamiento temporal de Colab actúan como **espacio efímero**. La persistencia ocurre siempre en el **Google Cloud Storage (GCS) Bucket**.
+- **M1 - Export (GEE → GCS)**: Multi-sensor satellite image export. Handles Sentinel-2, Landsat 5/7/8/9, MODIS, and HLS. Applies sensor-specific radiometric corrections, cloud masking (QA_PIXEL, Fmask, CS), and exports optimized GeoTIFF chunks to Google Cloud Storage. Supports monthly and annual periods with configurable mosaics (MINNBR, MINNBR_BUFFER).
 
-#### 🚦 Ciclo de Vida del Dato y Reglas de Nomenclatura
+- **M2 - Mosaic Assembly (COG)**: Assembles exported chunks into full-region Cloud-Optimized GeoTIFFs using GDAL VRT for virtual stacking. Produces compressed, tiled COGs with DEFLATE compression.
 
-| Etapa | Peso | Inputs → Outputs | Regla de Nomenclatura | Ejemplo |
+- **M3 - Sample Collection (GEE Toolkit JavaScript)**: Training data collection via a custom GEE JavaScript Toolkit. Users draw fire (burned) and notFire (unburned) polygons on satellite imagery. Samples are exported to GEE Assets and GCS with metadata (satellite, date, region, campaign). Supports multi-country and multi-language (EN/ES/PT).
+
+- **M4 - DNN Training**: Deep Neural Network classification. Uses a flexible band extraction matrix to sample pixel values from M2 mosaics using M3 polygon samples. Trains a DNN classifier with configurable architecture, generates t-SNE audit plots, and saves model weights and metadata to GCS.
+
+- **M5 - Classification**: Regional tile-based burned area classification. Loads a trained DNN model from GCS, retrieves the cell grid for the target region, and classifies each tile independently. Produces classified rasters, tile-level and regional statistics. Results are published to GEE as ImageCollections.
+
+**Global Inputs:** Raw image collections from Google Earth Engine (Sentinel-2, Landsat), vector polygons for training (samples), and auxiliary land cover maps (LULC).
+
+**Global Outputs:** Optimized chunks and mosaics (COGs) on Google Cloud Storage (GCS), neural network model weights (DNN), classification rasters, and versioned ImageCollections on GEE.
+
+> **Note:** Both the local PC disk and Colab temporary storage act as **ephemeral space**. Persistence always occurs in the **Google Cloud Storage (GCS) Bucket**.
+
+### Data Lifecycle and Naming Rules
+
+| Stage | Weight | Inputs → Outputs | Naming Rule | Example |
 | :--- | :--- | :--- | :--- | :--- |
-| **M1: Export** | **Leve** | **IN:** Colecciones GEE<br>**OUT:** Chunks GCS | `image_{country}_fire_{sensor}_{mosaic}_{band}_{temporal_id}_{suffix}` | `image_peru_fire_sentinel2_minnbr_buffer_blue_2025_08_00000-00000` |
-| **M2: Mosaic** | **Medio** | **IN:** Chunks GCS<br>**OUT:** Mosaicos COG (GCS) | `image_{country}_fire_{sensor}_{mosaic}_{band}_{temporal_id}_cog` | `image_peru_fire_sentinel2_minnbr_buffer_blue_2025_08_cog` |
-| **M3: Samples** | **Leve** | **IN:** Mosaicos (M2)<br>**OUT:** Polígonos (GCS/Asset) | `sample_{id}_{country}_{region}_{temporal_id}`| `sample_0001_peru_r10_amazon_2025_07` |
-| **M4: Train** | **Medio** | **IN:** Muestras M3 + Mosaicos M2<br>**OUT:** DNN (GCS) | `training_{id}_{region}_{sensor}` | `training_0001_peru_r10_sentinel2` |
-| **M5: Classify**| **Pesado**| **IN:** Modelo M4 + Mosaicos M2<br>**OUT:** Raster (GCS) | `region_{reg}_training_{id}_{sensor}_{temp_id}`| `region_r10_training_0001_sentinel2_2025_08` |
-| **M6: Filters** | **Leve** | **IN:** M5 + LULC<br>**OUT:** Raster Filtrado (GCS)| `candidate_{id}_{sensor}_{temp_id}`| `candidate_c1_sentinel2_2025_08` |
-| **M7: Versioner**| **Leve** | **IN:** Candidatos M6<br>**OUT:** Asset OFICIAL | `burned_day_of_year_{sensor}_{temp_id}` | `burned_day_of_year_sentinel2_2025_08` |
+| **M1: Export** | **Light** | **IN:** GEE Collections<br>**OUT:** GCS Chunks | `image_{country}_fire_{sensor}_{mosaic}_{band}_{temporal_id}_{suffix}` | `image_peru_fire_sentinel2_minnbr_blue_2025_08_00000-00000` |
+| **M2: Mosaic** | **Medium** | **IN:** GCS Chunks<br>**OUT:** COG Mosaics (GCS) | same as M1 seed, stored in `/COG/` dir | `image_peru_fire_sentinel2_minnbr_blue_2025_08` |
+| **M3: Samples** | **Light** | **IN:** Mosaics (M2)<br>**OUT:** Polygons (GCS/Asset) | `sample_{id}_{temporal_id}`| `sample_0001_2025_07` |
+| **M4: Train** | **Medium** | **IN:** M3 Samples + M2 Mosaics<br>**OUT:** DNN (GCS) | `training_{id}_{shortname}_{sensor}` | `training_0001_amazon_sentinel2` |
+| **M5: Classify**| **Heavy**| **IN:** M4 Model + M2 Mosaics<br>**OUT:** Raster (GCS) | `region_{region_id}_training_{training_id}_{sensor}_{temporal_id}`| `region_r10_training_0001_sentinel2_2025_08` |
 
-### 📂 Arquitectura de Datos e Relacionamento (M1-M7)
+### Data Architecture and Relationships (M1-M7)
 
-O monitor opera um fluxo circular de sincronização entre três ambientes:
+The monitor operates a circular synchronization flow between three environments:
 
-| Ambiente | Componentes Principais | Papel no Ciclo |
+| Environment | Components | Role |
 | :--- | :--- | :--- |
-| **🌍 Google Earth Engine** | ImageCollections (Mosaicos) / Assets | Fonte de Brutos e Destino Final |
-| **☁️ Google Cloud Storage** | Chunks / COGs / Models / Samples | Persistência e Área de Trabalho Central |
-| **⚡ Cache Local (Temp)** | VRT Stack / Tiles / NumPy Arrays | Processamento I/O de Alta Velocidade |
+| **Google Earth Engine** | ImageCollections / Assets | Raw data source and final destination |
+| **Google Cloud Storage** | Chunks / COGs / Models / Samples | Persistence and central workspace |
+| **Local Cache (Temp)** | VRT Stack / Tiles / NumPy Arrays | High-speed I/O processing |
 
-#### 🧭 Mapa de Persistência (Onde encontrar os dados)
+#### Persistence Map (Where to find the data)
 
-| Etapa | Extensão | Path Principal no Cloud Storage (GCS) | 
-| :--- | :--- | :--- | :--- |
-| **M1: Export** | `.tif` | `library_images/{sensor}/{period}/{mosaic}/{temporal_id}/chunks/` |
-| **M2: Mosaic** | `.tif` | `library_images/{sensor}/{period}/{mosaic}/{temporal_id}/` |
-| **M3: Samples** | `.csv` | `library_samples/` |
-| **M4: Train** | `.pb / .json` | `library_images/{sensor}/models/training_{training_id}_{shortname}_{sensor}/` |
-| **M5: Classify** | `.tif` | `library_images/{sensor}/{period}/burned_day_of_year_regional/` |
-| **M6: Filters** | `.tif` | `library_images/{sensor}/{period}/burned_day_of_year_candidates/` |
-| **M7: Public** | Asset IC | `library_images/{sensor}/{period}/burned_day_of_year_official/` |
+| Stage | Extension | Main Cloud Storage Path (GCS) |
+| :--- | :--- | :--- |
+| **M1: Export** | `.tif` | `{gcs_catalog_prefix}/LIBRARY_IMAGES/{SENSOR}/MONTHLY/{MOSAIC}/{date}/CHUNKS/` |
+| **M2: Mosaic** | `.tif` | `{gcs_catalog_prefix}/LIBRARY_IMAGES/{SENSOR}/MONTHLY/{MOSAIC}/{date}/COG/` |
+| **M3: Samples** | `.csv` | `{gcs_catalog_prefix}/LIBRARY_SAMPLES/{campaign}/` |
+| **M4: Train** | `.pb / .json` | `{gcs_catalog_prefix}/LIBRARY_MODELS/training_{id}_{shortname}_{sensor}/` |
+| **M5: Classify** | `.tif` | `{gcs_catalog_prefix}/LIBRARY_CLASSIFICATIONS/{model_id}/CLASSIFIED_TILES/` (tiles) |
+| | `.tif` | `{gcs_catalog_prefix}/LIBRARY_CLASSIFICATIONS/{model_id}/CLASSIFIED_REGION/` (mosaics) |
+| | `.csv` | `{gcs_catalog_prefix}/LIBRARY_CLASSIFICATIONS/{model_id}/STATS/` (statistics) |
 
-#### 🏷️ Regras de Nomenclatura Padrão
-*   **Imagens (M1/M2):** `image_{country}_fire_{sensor}_{mosaic}_{band}_{temporal_id}`
-*   **Amostras (M3):** `sample_{id}_{country}_{region}_{temporal_id}`
-*   **Classificação (M5):** `region_{region}_training_{training_id}_{sensor}_{temporal_id}`
+#### Standard Naming Rules
+- **Images (M1/M2):** `image_{country}_fire_{sensor}_{mosaic}_{band}_{temporal_id}`
+- **Samples (M3):** `sample_{id}_{country}_{region}_{temporal_id}`
+- **Classification (M5):** `region_{region}_training_{training_id}_{sensor}_{temporal_id}`
 
 ---
-#### 🔄 Retroalimentación y Tolerancia a Fallos
 
-*   **Restantes:** El botón "Seleccionar Restantes" marcará solo los ítems **pendientes** en GCS.
-*   **Sobrescritura:** Remarcar manualmente un ítem con bandera de éxito (verde) indica la intención de reemplazar el archivo.
-*   **Modo Edición (`EDIT_MODE`):** Si es activado en `M0`, la UI expone botones de "Eliminar" en GCS.
+### Feedback and Fault Tolerance
 
-## ⚙️ [M0] — Configuración de Ambiente (Escolha uma Rota)
+- **Remaining:** The "Select Remaining" button will only mark items **pending** in GCS.
+- **Overwrite:** Manually re-marking a success-flagged item (green) indicates the intention to replace the file.
+- **Edit Mode (`EDIT_MODE`):** If activated in M0, the UI exposes "Delete" buttons in GCS.
 
-### > Opción A: Inicialización Google Colab
-**💡 Nota para Colab:** Las siguientes celdas preparan el entorno virtual en la nube.
+---
+
+## [M0] — Environment Setup (Choose a Route)
+
+### Option A: Google Colab Initialization
 
 ```python
-# M0.1a — Preparación del entorno Colab (Clonar repo)
+# M0.1a — Colab environment setup (Clone repo)
 import os
 if not os.path.exists("fire_monitor"):
     !git clone https://github.com/mapbiomas/peru-fire.git fire_monitor
@@ -75,36 +85,38 @@ if not os.path.exists("fire_monitor"):
 ```
 
 ```python
-# ⬇️ Instalar GDAL Binaries e dependências Python
+# Install GDAL binaries and Python dependencies
 !apt-get update -qq && apt-get install -y -qq gdal-bin python3-gdal
 !pip install -q earthengine-api gcsfs rasterio scipy tqdm
 ```
 
-### > Opción B: Inicialización Local
-**🛠️ Requisitos Local (GDAL / Conda)**
-Si recibes un error de `Faltam dependências vitais`, el monitor buscará automáticamente el GDAL en tu instalación de Conda.
+### Option B: Local Initialization
+
+**Local Requirements (GDAL / Conda)**
+If you receive a `Missing vital dependencies` error, the monitor will automatically search for GDAL in your Conda installation.
 
 ```python
-# M0.1b — Configuración local de rutas (Opcional, M0.2 ya lo hace)
+# M0.1b — Local path configuration (Optional, M0.2 does this automatically)
 import sys, os
 REPO_ROOT = os.path.abspath("..")
 SRC_PATH  = os.path.join(REPO_ROOT, "src", "core")
 if SRC_PATH not in sys.path: sys.path.insert(0, SRC_PATH)
 ```
 
-### > Inicialización Común (M0.2)
-**💡 Célula "Invencível":** Esta célula autodetecta se estás en Local ou Colab y configura as rutas.
+### Common Initialization (M0.2)
+
+**"Invincible" Cell:** This cell auto-detects if you are in Local or Colab and configures the paths.
 
 ```python
-# M0.2 — Inicialização do Monitor
+# M0.2 — Monitor Initialization
 import sys, os
 
 def auto_path_setup():
-    """Localiza a pasta src/core em diferentes ambientes"""
+    """Locate the src/core folder in different environments"""
     possible_paths = [
-        os.path.abspath("."),             
-        os.path.abspath("../src/core"),   
-        "/content/fire_monitor/mapbiomas_fire_monitor/version_01/src/core", 
+        os.path.abspath("."),
+        os.path.abspath("../src/core"),
+        "/content/fire_monitor/mapbiomas_fire_monitor/version_01/src/core",
     ]
     for p in possible_paths:
         if os.path.exists(os.path.join(p, "M0_auth_config.py")):
@@ -116,72 +128,70 @@ found_path = auto_path_setup()
 COUNTRY = "peru"
 
 from M0_auth_config import set_country, authenticate, set_global_opts
-set_global_opts(sensor='sentinel2', periodicity='monthly', personal_task_flag='MONITOR', clean_cache=False)
-authenticate() 
+set_global_opts(sensor='sentinel2', periodicity='monthly', personal_task_flag='MONITOR', clean_cache=False, language='en')
+authenticate()
 ```
 
 ---
 
-## 🚀 Fluxo de Processamento (Sequencial)
+## Processing Flow (Sequential)
 
-### [M1] — Despacho de Exportación (GEE → Bucket)
+### [M1] — Export (GEE → GCS)
 ```python
 from M1_export_ui import run_ui, start_export
-ui_exporter = run_ui(years=[2025,2026])
+ui_exporter = run_ui(years=[2025, 2026])
 start_export(ui_exporter)
 ```
 
-### [M2] — Ensamblaje Nacional (COG)
+Exports satellite image collections (Sentinel-2, Landsat, MODIS, HLS) from GEE to GCS chunks with radiometric corrections and cloud masking.
+
+### [M2] — Mosaic Assembly (COG)
 ```python
-from M2_mosaic_ui import run_ui, start_assemble
-ui_assembler = run_ui(years=[2025,2026])
-start_assemble(ui_assembler)
+from M2_mosaic_ui import run_ui, start_mosaic_assembly
+ui_assembler = run_ui(years=[2025, 2026])
+start_mosaic_assembly(ui_assembler)
 ```
 
-### [M3] — Coleta de Amostras (GEE Toolkit Gateway)
+Assembles exported chunks into full-region Cloud-Optimized GeoTIFFs using GDAL VRT virtual stacking.
+
+### [M3] — Sample Collection (GEE Toolkit)
 ```python
 from M3_sample_ui import show_toolkit_links
 show_toolkit_links()
 ```
 
-### [M4] — Entrenamiento DNN
+Training data collection via the GEE JavaScript Toolkit. Draw fire/notFire polygons on satellite imagery.
+
+### [M4] — DNN Training
 ```python
 from M4_model_trainer import run_ui, start_training
 ui_trainer = run_ui()
 start_training(ui_trainer)
 ```
 
-### [M5] — Clasificación Regional
+Trains a Deep Neural Network classifier using a flexible band extraction matrix with configurable architecture.
+
+### [M5] — Regional Classification
 ```python
-from M5_classifier import run_ui, start_classification
-ui_classifier = run_classifier(PRESET_MODELS)
-start_classification(ui_classifier)
+from M5_classifier_ui import run_m5_ui
+ui_m5 = run_m5_ui(years=[2025, 2026], peridiocity_active=["monthly"])
+
+from M5_classifier import run_m5_queue
+run_m5_queue()
 ```
 
-### [M6] — Aplicación de Filtros
+Tile-based burned area classification using a trained DNN model. Produces classified rasters with tile and regional statistics.
+
+### [M6] — Filter Application
 ```python
 from M6_publisher import run_ui, start_filtering
 ui_filters = run_filters(PRESET_FILTERS)
 start_filtering(ui_filters)
 ```
 
-### [M7] — Versão Final (Curaduría)
+### [M7] — Final Version (Curation)
 ```python
 from M7_curator import run_ui, start_curation
 ui_curator = run_curator(PRESET_VOTES)
 start_curation(ui_curator)
 ```
-
-
-## M5 - Classificação Regional
-`python
-# Interface de Agendamento da M5
-from M5_classifier_ui import run_m5_ui
-ui_m5 = run_m5_ui()
-`
-
-`python
-# Processamento Assíncrono da M5
-from M5_classifier import run_m5_queue
-run_m5_queue()
-`

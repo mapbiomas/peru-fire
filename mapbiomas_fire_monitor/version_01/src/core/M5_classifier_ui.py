@@ -30,62 +30,62 @@ class M5QueueUI:
         self.chk_regions = []
         self.chk_periods = []
 
-        self.btn_add = widgets.Button(description='Agregar Lote a la Cola', button_style='primary', icon='plus', layout=L(width='200px'))
+        self.btn_add = widgets.Button(description=Lang.ADD_BATCH, button_style='primary', icon='plus', layout=L(width='200px'))
         self.btn_add.on_click(self._on_add_click)
 
-        self.btn_refresh = widgets.Button(description='Actualizar Vista', icon='refresh', layout=L(width='150px'))
+        self.btn_refresh = widgets.Button(description=Lang.REFRESH_VIEW, icon='refresh', layout=L(width='150px'))
         self.btn_refresh.on_click(lambda _: self._refresh_ui())
 
         self.w_task_name = widgets.Text(
             value='',
-            placeholder='Ej: Clasificar Amazonia Baja 2025 (Lucas)',
-            description='Nombre Tarea:',
+            placeholder=Lang.TASK_NAME_PLACEHOLDER,
+            description=Lang.DROP_TASK_NAME,
             disabled=False,
             layout=L(width='600px')
         )
 
-        self.f_pend_task = widgets.Dropdown(description='Tarea:', options=['Todas'], layout=L(width='300px'))
+        self.f_pend_task = widgets.Dropdown(description=Lang.DROP_TASK, options=[Lang.ALL_F], layout=L(width='300px'))
         self.f_pend_task.observe(lambda _: self._render_pending(), names='value')
 
-        self.f_pub_task = widgets.Dropdown(description='Tarea:', options=['Todas'], layout=L(width='300px'))
+        self.f_pub_task = widgets.Dropdown(description=Lang.DROP_TASK, options=[Lang.ALL_F], layout=L(width='300px'))
         self.f_pub_task.observe(lambda _: self._render_publish(), names='value')
 
-        self.f_done_task = widgets.Dropdown(description='Tarea:', options=['Todas'], layout=L(width='300px'))
+        self.f_done_task = widgets.Dropdown(description=Lang.DROP_TASK, options=[Lang.ALL_F], layout=L(width='300px'))
         self.f_done_task.observe(lambda _: self._render_done(), names='value')
 
         self.w_guide = widgets.HTML()
 
         self.w_pend_rows = widgets.VBox()
         self.tab_pending = widgets.VBox()
-        self.f_pend_model = widgets.Dropdown(description='Modelo:', options=['Todos'], layout=L(width='250px'))
-        self.f_pend_region = widgets.Dropdown(description='Region:', options=['Todas'], layout=L(width='250px'))
-        self.f_pend_year = widgets.Dropdown(description='Anio:', options=['Todos'], layout=L(width='200px'))
+        self.f_pend_model = widgets.Dropdown(description=Lang.DROP_MODEL, options=[Lang.ALL], layout=L(width='250px'))
+        self.f_pend_region = widgets.Dropdown(description=Lang.DROP_REGION, options=[Lang.ALL_F], layout=L(width='250px'))
+        self.f_pend_year = widgets.Dropdown(description=Lang.DROP_YEAR, options=[Lang.ALL], layout=L(width='200px'))
         for f in [self.f_pend_model, self.f_pend_region, self.f_pend_year]:
             f.observe(lambda _: self._render_pending(), names='value')
 
         self.w_pub_rows = widgets.VBox()
         self.tab_publish = widgets.VBox()
-        self.f_pub_model = widgets.Dropdown(description='Modelo:', options=['Todos'], layout=L(width='250px'))
-        self.f_pub_region = widgets.Dropdown(description='Region:', options=['Todas'], layout=L(width='250px'))
-        self.f_pub_year = widgets.Dropdown(description='Anio:', options=['Todos'], layout=L(width='200px'))
+        self.f_pub_model = widgets.Dropdown(description=Lang.DROP_MODEL, options=[Lang.ALL], layout=L(width='250px'))
+        self.f_pub_region = widgets.Dropdown(description=Lang.DROP_REGION, options=[Lang.ALL_F], layout=L(width='250px'))
+        self.f_pub_year = widgets.Dropdown(description=Lang.DROP_YEAR, options=[Lang.ALL], layout=L(width='200px'))
         for f in [self.f_pub_model, self.f_pub_region, self.f_pub_year]:
             f.observe(lambda _: self._render_publish(), names='value')
 
         self.w_mapa_rows = widgets.VBox()
         self.tab_mapa = widgets.VBox()
-        self.f_mapa_model = widgets.Dropdown(description='Modelo:', options=['Todos'], layout=L(width='250px'))
-        self.f_mapa_region = widgets.Dropdown(description='Region:', options=['Todas'], layout=L(width='250px'))
-        self.f_mapa_year = widgets.Dropdown(description='Anio:', options=['Todos'], layout=L(width='200px'))
-        self.btn_mapa_refresh = widgets.Button(description='Actualizar Mapa', icon='refresh', layout=L(width='150px'))
+        self.f_mapa_model = widgets.Dropdown(description=Lang.DROP_MODEL, options=[Lang.ALL], layout=L(width='250px'))
+        self.f_mapa_region = widgets.Dropdown(description=Lang.DROP_REGION, options=[Lang.ALL_F], layout=L(width='250px'))
+        self.f_mapa_year = widgets.Dropdown(description=Lang.DROP_YEAR, options=[Lang.ALL], layout=L(width='200px'))
+        self.btn_mapa_refresh = widgets.Button(description=Lang.REFRESH_MAP, icon='refresh', layout=L(width='150px'))
         self.btn_mapa_refresh.on_click(lambda _: self._render_mapa())
         for f in [self.f_mapa_model, self.f_mapa_region, self.f_mapa_year]:
             f.observe(lambda _: self._render_mapa(), names='value')
 
         self.w_done_rows = widgets.VBox()
         self.tab_done = widgets.VBox()
-        self.f_done_model = widgets.Dropdown(description='Modelo:', options=['Todos'], layout=L(width='250px'))
-        self.f_done_region = widgets.Dropdown(description='Region:', options=['Todas'], layout=L(width='250px'))
-        self.f_done_year = widgets.Dropdown(description='Anio:', options=['Todos'], layout=L(width='200px'))
+        self.f_done_model = widgets.Dropdown(description=Lang.DROP_MODEL, options=[Lang.ALL], layout=L(width='250px'))
+        self.f_done_region = widgets.Dropdown(description=Lang.DROP_REGION, options=[Lang.ALL_F], layout=L(width='250px'))
+        self.f_done_year = widgets.Dropdown(description=Lang.DROP_YEAR, options=[Lang.ALL], layout=L(width='200px'))
         for f in [self.f_done_model, self.f_done_region, self.f_done_year]:
             f.observe(lambda _: self._render_done(), names='value')
 
@@ -190,19 +190,19 @@ class M5QueueUI:
             <p>Clasifica multiples regiones (cartas <b>cim-world-1-250000</b>) usando modelos del M4.</p>
             <h4>Flujo:</h4>
             <ol style='line-height:1.6;'>
-                <li><b>Registrar</b> — seleccione modelo + regiones + periodos.</li>
-                <li><b>Pendientes</b> — siga la clasificacion tile a tile.</li>
-                <li><b>Para Publicar</b> — trabajos COMPLETED con gestion de tiles.</li>
-                <li><b>Mapa</b> — visibilidad general del progreso.</li>
-                <li><b>Finalizadas</b> — trabajos FINISHED con timeline de cobertura.</li>
+                <li><b>""" + Lang.TAB_REGISTER + """</b> — seleccione modelo + regiones + periodos.</li>
+                <li><b>""" + Lang.TAB_PENDING + """</b> — siga la clasificacion tile a tile.</li>
+                <li><b>""" + Lang.TAB_PUBLISH + """</b> — trabajos COMPLETED con gestion de tiles.</li>
+                <li><b>""" + Lang.TAB_MAP + """</b> — visibilidad general del progreso.</li>
+                <li><b>""" + Lang.TAB_DONE + """</b> — trabajos FINISHED con timeline de cobertura.</li>
                 <li>Ejecute <code>run_m5_queue()</code> en el notebook para procesar.</li>
             </ol>
             <h4>Eliminacion granular:</h4>
             <ul>
-                <li><b>Pendientes</b> — elimine trabajos individuales de la cola.</li>
-                <li><b>Para Publicar</b> — elimine tiles individuales o todos de un trabajo.</li>
-                <li><b>Finalizadas</b> — elimine por region o modelo completo.</li>
-                <li>Despues de eliminar, registre nuevamente el trabajo en <b>Registrar</b>.</li>
+                <li><b>""" + Lang.TAB_PENDING + """</b> — elimine trabajos individuales de la cola.</li>
+                <li><b>""" + Lang.TAB_PUBLISH + """</b> — elimine tiles individuales o todos de un trabajo.</li>
+                <li><b>""" + Lang.TAB_DONE + """</b> — elimine por region o modelo completo.</li>
+                <li>Despues de eliminar, registre nuevamente el trabajo en <b>""" + Lang.TAB_REGISTER + """</b>.</li>
             </ul>
         </div>
         """
@@ -421,7 +421,7 @@ class M5QueueUI:
             years = sorted(set(p.split('_')[0] for p in periods))
             label = f" Modelo: {model} | Regiones: {', '.join(regions)} | Periodos: {', '.join(years)}"
 
-            btn_cargar = widgets.Button(description='Cargar a la Cola', button_style='success', layout=L(width='150px', height='28px'))
+            btn_cargar = widgets.Button(description=Lang.LOAD_TO_QUEUE, button_style='success', layout=L(width='150px', height='28px'))
             def _make_cargar(m, regs, pers):
                 def _h(_):
                     self.queue = load_queue()
@@ -511,14 +511,14 @@ class M5QueueUI:
         filter_box = widgets.HBox([self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task], layout=L(margin='0 0 10px 0'))
         filtered = self._apply_filters(jobs, self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task)
 
-        btn_clear = widgets.Button(description='Limpiar Tareas Temporales', button_style='warning', icon='trash', layout=L(width='200px'))
+        btn_clear = widgets.Button(description=Lang.CLEAR_TEMP_TASKS, button_style='warning', icon='trash', layout=L(width='200px'))
         btn_clear.on_click(lambda _: self._on_clear_click())
 
         tarea_section = self._tarea_section()
 
         if not filtered:
             pend_vbox = widgets.VBox([tarea_section, filter_box, btn_clear,
-                make_empty_state(L.NO_TASKS)])
+                make_empty_state(Lang.NO_TASKS)])
         else:
             grouped = {}
             for j in filtered:
@@ -570,12 +570,12 @@ class M5QueueUI:
                 tareas = list_tareas(fs=_get_fs())
                 tarea_exists = any(t.get('model') == model_name for t in tareas)
                 if tarea_exists:
-                    btn_tarea = widgets.Button(description='Excluir Tarea GCS', button_style='warning', layout=L(width='150px', height='28px', font_size='12px'))
+                    btn_tarea = widgets.Button(description=Lang.EXCLUDE_TASK_GCS, button_style='warning', layout=L(width='150px', height='28px', font_size='12px'))
                     btn_tarea.on_click(lambda _, m=model_name: self._tarea_delete_click(m))
                 else:
-                    btn_tarea = widgets.Button(description='Guardar Tarea GCS', button_style='info', layout=L(width='150px', height='28px', font_size='12px'))
+                    btn_tarea = widgets.Button(description=Lang.SAVE_TASK_GCS, button_style='info', layout=L(width='150px', height='28px', font_size='12px'))
                     btn_tarea.on_click(lambda _, m=model_name: self._tarea_save_click(m))
-                btn_del_model = widgets.Button(description='Eliminar Modelo', button_style='danger', layout=L(width='140px', height='28px', font_size='12px'))
+                btn_del_model = widgets.Button(description=Lang.DELETE_MODEL, button_style='danger', layout=L(width='140px', height='28px', font_size='12px'))
                 btn_del_model.on_click(lambda b, m=model_name: inline_confirm(b, lambda: (self._delete_model_all(m), self._refresh_ui())))
 
                 # -- tarefas (nomes) em badges --
@@ -706,11 +706,11 @@ class M5QueueUI:
         done_n = len(done_set)
         pct = f"{done_n}/{total} ({done_n/total:.0%})" if total else '0/0'
 
-        lines = [f"<tr><td style='padding:2px 8px;'>Modelo</td><td style='padding:2px 8px;'><b>{model}</b></td></tr>",
-                 f"<tr><td style='padding:2px 8px;'>Region</td><td style='padding:2px 8px;'><b>{region}</b></td></tr>",
-                 f"<tr><td style='padding:2px 8px;'>Progreso</td><td style='padding:2px 8px;'><b>{pct}</b></td></tr>"]
+        lines = [f"<tr><td style='padding:2px 8px;'>{Lang.MODEL}</td><td style='padding:2px 8px;'><b>{model}</b></td></tr>",
+                 f"<tr><td style='padding:2px 8px;'>{Lang.REGION}</td><td style='padding:2px 8px;'><b>{region}</b></td></tr>",
+                 f"<tr><td style='padding:2px 8px;'>{Lang.PROGRESS}</td><td style='padding:2px 8px;'><b>{pct}</b></td></tr>"]
         if current:
-            lines.append(f"<tr><td style='padding:2px 8px;'>Tile actual</td><td style='padding:2px 8px;'><span style='color:#e67e22;font-weight:bold;'>{current}</span></td></tr>")
+            lines.append(f"<tr><td style='padding:2px 8px;'>{Lang.CURRENT_TILE}</td><td style='padding:2px 8px;'><span style='color:#e67e22;font-weight:bold;'>{current}</span></td></tr>")
 
         # tiles completados
         if done_set:
@@ -718,11 +718,11 @@ class M5QueueUI:
             done_html = ', '.join(done_cells[:10])
             if len(done_cells) > 10:
                 done_html += f' ... (+{len(done_cells)-10} mas)'
-            lines.append(f"<tr><td style='padding:2px 8px;'>Completados</td><td style='padding:2px 8px;color:#27ae60;'>{done_html}</td></tr>")
+            lines.append(f"<tr><td style='padding:2px 8px;'>{Lang.COMPLETED}</td><td style='padding:2px 8px;color:#27ae60;'>{done_html}</td></tr>")
 
         html = (f'<div style="margin:8px 0;padding:10px;border:2px solid #e67e22;border-radius:6px;'
                 f'background:#fef9e7;">'
-                f'<b style="color:#e67e22;">Procesando en vivo</b>'
+                f'<b style="color:#e67e22;">{Lang.LIVE_PROCESSING}</b>'
                 f'<table style="font-size:12px;color:#555;border-collapse:collapse;margin-top:6px;">'
                 f'{"".join(lines)}</table></div>')
 
@@ -784,18 +784,18 @@ class M5QueueUI:
         self.tab_publish.children = [filter_box, self.w_pub_rows]
 
     def _build_tile_expander(self, job, tiles_container):
-        btn = widgets.Button(description='Ver Tiles', icon='list', layout=L(width='110px', height='28px'), button_style='info')
+        btn = widgets.Button(description=Lang.VIEW_TILES, icon='list', layout=L(width='110px', height='28px'), button_style='info')
         expanded = [False]
         def _toggle(_):
             if not expanded[0]:
                 expanded[0] = True
-                btn.description = 'Ocultar'
+                btn.description = Lang.HIDE_TILES
                 btn.button_style = ''
-                tiles_container.children = [widgets.HTML("<i>Cargando tiles...</i>")]
+                tiles_container.children = [widgets.HTML(f"<i>{Lang.LOADING_TILES}</i>")]
                 self._refresh_tile_list(job, tiles_container)
             else:
                 expanded[0] = False
-                btn.description = 'Ver Tiles'
+                btn.description = Lang.VIEW_TILES
                 btn.button_style = 'info'
                 tiles_container.children = []
         btn.on_click(_toggle)
@@ -825,7 +825,7 @@ class M5QueueUI:
             chk = widgets.Checkbox(value=False, description=tname, indent=False, style={'description_width': 'initial'}, layout=L(width='auto', margin='0'))
             tile_chks.append(chk)
         chk_box = widgets.VBox(tile_chks, layout=L(margin='5px 0 5px 20px'))
-        btn_del_sel = widgets.Button(description='Eliminar Seleccionados', button_style='danger', layout=L(width='180px', height='26px'))
+        btn_del_sel = widgets.Button(description=Lang.DELETE_SELECTED, button_style='danger', layout=L(width='180px', height='26px'))
         def _del_sel(_):
             to_rm = [fp for fp, chk in zip(tile_fqpaths, tile_chks) if chk.value]
             if to_rm:
@@ -839,7 +839,7 @@ class M5QueueUI:
                     clear_output()
                     display(HTML("<span style='color:orange;'>Seleccione tiles para eliminar.</span>"))
         btn_del_sel.on_click(_del_sel)
-        btn_del_all = widgets.Button(description='Eliminar Todos', button_style='warning', layout=L(width='130px', height='26px'))
+        btn_del_all = widgets.Button(description=Lang.DELETE_ALL, button_style='warning', layout=L(width='130px', height='26px'))
         def _del_all(_):
             n = self._delete_tiles(tile_fqpaths, fs)
             with self.out_msg:
@@ -908,8 +908,10 @@ class M5QueueUI:
             grid_table = ""
             if count_rows:
                 grid_table = ('<div style="margin:8px 0;"><table style="font-size:12px;color:#555;border-collapse:collapse;">'
-                              '<tr><th style="padding:2px 8px;border-bottom:1px solid #ccc;text-align:left;">Region</th>'
-                              f'<th style="padding:2px 8px;border-bottom:1px solid #ccc;text-align:right;">Celdas cim-world</th></tr>'
+                              '<tr><th style="padding:2px 8px;border-bottom:1px solid #ccc;text-align:left;">'
+                              f'{Lang.GRID_REGION}</th>'
+                              f'<th style="padding:2px 8px;border-bottom:1px solid #ccc;text-align:right;">'
+                              f'{Lang.GRID_CELLS}</th></tr>'
                               f'{count_rows}</table></div>')
 
             legenda = """
@@ -982,7 +984,7 @@ class M5QueueUI:
                                 border_bottom='1px solid #f1f5f9'))
                     region_lines.append(line)
 
-                btn_del_model = widgets.Button(description='Eliminar Modelo', button_style='danger', layout=L(width='150px', height='28px'))
+                btn_del_model = widgets.Button(description=Lang.DELETE_MODEL, button_style='danger', layout=L(width='150px', height='28px'))
                 btn_del_model.on_click(lambda b, m=model_name: inline_confirm(b, lambda: (self._delete_model_all(m), self._refresh_ui())))
 
                 header = widgets.VBox([
@@ -1076,16 +1078,16 @@ class M5QueueUI:
         ], layout=L(padding='20px'))
 
         self.tabs.children = [self.w_guide, form, self.tab_pending, self.tab_publish, self.tab_mapa, self.tab_done]
-        self.tabs.set_title(0, 'Guia')
-        self.tabs.set_title(1, 'Registrar')
+        self.tabs.set_title(0, Lang.TAB_GUIDE)
+        self.tabs.set_title(1, Lang.TAB_REGISTER)
 
         n_pend = len([j for j in self.queue if j['status'] in ('PENDING', 'RUNNING')])
-        self.tabs.set_title(2, f'Pendientes ({n_pend})')
-        self.tabs.set_title(3, 'Para Publicar')
-        self.tabs.set_title(4, 'Mapa')
+        self.tabs.set_title(2, f"{Lang.TAB_PENDING} ({n_pend})")
+        self.tabs.set_title(3, Lang.TAB_PUBLISH)
+        self.tabs.set_title(4, Lang.TAB_MAP)
 
         n_done = len([j for j in self.queue if j['status'] == 'FINISHED'])
-        self.tabs.set_title(5, f'Finalizadas ({n_done})')
+        self.tabs.set_title(5, f"{Lang.TAB_DONE} ({n_done})")
 
         header_actions = widgets.HBox([
             widgets.HTML("<b style='color:#2c3e50; font-size:14px; margin-right:15px;'>Acciones Globales:</b>"),

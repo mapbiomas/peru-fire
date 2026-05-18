@@ -29,7 +29,7 @@ class CacheManager:
                 CacheManager._state = None
                 return True
             except Exception as e:
-                print(f"Erro ao limpar cache: {e}")
+                print(f"Error clearing cache: {e}")
                 return False
 
     @staticmethod
@@ -94,7 +94,7 @@ class CacheManager:
                                 json.dump(data, lf, indent=2)
                         except: pass
                 else:
-                    print(f"Cache não encontrado em {gcs_path}.")
+                    print(f"Cache not found at {gcs_path}.")
             except Exception as e:
                 # Silencioso no local para evitar poluir a UI
                 pass
@@ -336,11 +336,11 @@ class CacheManager:
         if os.path.exists(CacheManager.CACHE_FILE):
             try:
                 os.remove(CacheManager.CACHE_FILE)
-                print(f"🧹 Cache local removido: {CacheManager.CACHE_FILE}")
+                print(f" Local cache removed: {CacheManager.CACHE_FILE}")
             except Exception as e:
-                print(f"⚠️ Erro ao remover cache local: {e}")
+                print(f" Error removing local cache: {e}")
         else:
-            print("ℹ️ Cache local não encontrado.")
+            print("Local cache not found.")
 
     @staticmethod
     def save(state=None):
@@ -372,7 +372,7 @@ class CacheManager:
                 CacheManager._state = state
             except Exception as e:
                 # Aviso limpo sem traceback assustador
-                print(f"Aviso: Cache local OK (GCS sync pendente) - Erro: {e}")
+                print(f"Warning: Local cache OK (GCS sync pending) - Error: {e}")
             finally:
                 _gcsfs_logger.setLevel(_prev_level)
 

@@ -19,7 +19,7 @@ def run_m5_queue(phases=None, progress_callback=None):
         phases = ['classification', 'publish']
 
     if not isinstance(phases, list) or not any(p in VALID_PHASES for p in phases):
-        print(f"Atencion: Argumento 'phases' invalido. Use {VALID_PHASES}.")
+        print(f"Warning: Invalid 'phases' argument. Use {VALID_PHASES}.")
         return
 
     from IPython.display import display, HTML, clear_output
@@ -44,11 +44,11 @@ def _run_classification(queue, out, progress_callback=None):
     if not pending:
         with out:
             clear_output()
-            display(HTML("<b style='color:green;'>Ningun trabajo pendiente para clasificar.</b>"))
+            display(HTML("<b style='color:green;'>No pending jobs to classify.</b>"))
         return
 
     with out:
-        print("--- FASE 1: CLASIFICACION ---")
+        print("--- PHASE 1: CLASSIFICATION ---")
 
     for job in pending:
         job['status'] = 'RUNNING'
@@ -56,7 +56,7 @@ def _run_classification(queue, out, progress_callback=None):
 
         try:
             with out:
-                print(f"Iniciando: [{job['id']}]")
+                print(f"Starting: [{job['id']}]")
 
             _process_job(job, out, progress_callback)
 
@@ -65,13 +65,13 @@ def _run_classification(queue, out, progress_callback=None):
             save_queue(queue)
 
             with out:
-                print(f"OK: {job['id']} completado.")
+                print(f"OK: {job['id']} completed.")
 
         except Exception as e:
             job['status'] = 'FAILED'
             save_queue(queue)
             with out:
-                print(f"ERROR en {job['id']}: {e}")
+                print(f"ERROR in {job['id']}: {e}")
             break
 
 
@@ -81,11 +81,11 @@ def _run_publish(queue, out):
 
     if not to_publish:
         with out:
-            print("Ningun trabajo COMPLETED para publicar.")
+            print("No COMPLETED jobs to publish.")
         return
 
     with out:
-        print("--- FASE 2: PUBLICACION (mosaico + stats + GEE) ---")
+        print("--- PHASE 2: PUBLISH (mosaic + stats + GEE) ---")
 
     fs = _get_fs()
     for job in to_publish:
@@ -95,29 +95,29 @@ def _run_publish(queue, out):
 
         try:
             with out:
-                print(f"Publicando: [{job['id']}]")
+                print(f"Publishing: [{job['id']}]")
 
             mosaic_path = merge_region_tiles(model_id, region, period, fs=fs)
 
             if mosaic_path:
-                job['progress'] = '50% (mosaico)'
+                job['progress'] = '50% (mosaic)'
                 save_queue(queue)
 
             if job.get('upload_gee'):
                 upload_to_gee(model_id, region, period, fs=fs)
-                job['progress'] = '100% (publicado)'
+                job['progress'] = '100% (published)'
             else:
-                job['progress'] = '100% (mosaico)'
+                job['progress'] = '100% (mosaic)'
 
             job['status'] = 'FINISHED'
             save_queue(queue)
 
             with out:
-                print(f"OK: {job['id']} finalizado.")
+                print(f"OK: {job['id']} finished.")
 
         except Exception as e:
             with out:
-                print(f"ERROR al publicar {job['id']}: {e}")
+                print(f"ERROR publishing {job['id']}: {e}")
 
 
 def _process_job(job, out, progress_callback=None):
@@ -140,15 +140,15 @@ def _process_job(job, out, progress_callback=None):
 
     # 2. Obtener grid de celdas de la region
     with out:
-        print(f"  Grid GEE para '{region_name}'...")
+        print(f"  GEE grid for '{region_name}'...")
 
     cells = _get_region_cells(region_name)
     if not cells:
-        raise ValueError(f"Ninguna celda encontrada para {region_name}.")
+        raise ValueError(f"No cells found for {region_name}.")
 
     total = len(cells)
     with out:
-        print(f"  {total} tiles para procesar.")
+        print(f"  {total} tiles to process.")
 
     # 3. Clasificar cada tile
     tile_results = []
@@ -198,12 +198,12 @@ def _process_job(job, out, progress_callback=None):
     # 4. Generar estadisticas de los tiles
     if tile_results:
         with out:
-            print(f"  Generando estadisticas de {len(tile_results)} tiles...")
+            print(f"  Generating stats for {len(tile_results)} tiles...")
         generate_tile_stats(model_id, region_name, period, tile_results, fs=fs)
         generate_region_stats(model_id, region_name, period, tile_results, fs=fs)
     else:
         with out:
-            print(f"  Ningun tile clasificado (todos fallaron).")
+            print(f"  No tiles classified (all failed).")
 
 
 def _get_region_cells(region_name):
@@ -221,5 +221,5 @@ def _get_region_cells(region_name):
         names = intersected.aggregate_array('name').getInfo()
         return [{'name': str(n)} for n in names]
     except Exception as e:
-        print(f"Error al buscar grilla en GEE: {e}")
+        print(f"Error searching grid in GEE: {e}")
         return []

@@ -89,7 +89,7 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
 
     missing = check_m2_dependencies()
     if missing:
-        msg = f"❌ Faltam dependências vitais: {missing}"
+        msg = f" Faltam dependências vitais: {missing}"
         if logger: logger(msg, "error")
         return []
 
@@ -169,7 +169,7 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
                 dest = f"gs://{CONFIG['bucket']}/{mosaic_prefix}/{cog_remote_name}"
                 run_cmd([gsutil_cmd, 'cp', cog_local_path, dest], label=f"Upload ({b_name})")
                 
-                if logger: logger(f"✅ Éxito: {cog_remote_name}", "success")
+                if logger: logger(f" Éxito: {cog_remote_name}", "success")
                 results.append(dest)
             finally:
                 if os.path.exists(band_tmp): shutil.rmtree(band_tmp)

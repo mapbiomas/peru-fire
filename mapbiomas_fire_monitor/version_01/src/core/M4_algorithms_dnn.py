@@ -245,7 +245,7 @@ class ModelTrainer:
         # Caminho completo para o gcsfs (ex: bucket/models/...)
         full_path = f"{CONFIG['bucket']}/{base_uri}"
         
-        print(f" Eliminando carpeta del modelo (GCSFS): {full_path}")
+        print(f" Deleting model folder (GCSFS): {full_path}")
         try:
             if fs.exists(full_path):
                 fs.rm(full_path, recursive=True)
@@ -431,6 +431,6 @@ class ModelTrainer:
                 fs.put(tmp_file, f"{CONFIG['bucket']}/{path}")
             return True
         except Exception as e:
-            print(f"[ERRO] Erro ao atualizar metadados: {e}")
+            print(f"[ERR] Error updating metadata: {e}")
             return False
 

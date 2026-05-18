@@ -1,4 +1,4 @@
-print("\n>>> M2_mosaic_ui inicializando (v7.0 Tabs) <<<")
+print("\n>>> M2_mosaic_ui initializing (v7.0 Tabs) <<<")
 import ee
 import traceback
 import threading
@@ -9,6 +9,7 @@ from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode
 import M0_auth_config as config_module
 from M_cache import CacheManager
 from M_ui_components import PipelineStepUI
+from M_lang import L as Lang
 from M2_mosaic_logic import assemble_country_mosaic
 
 class MosaicAssemblerUI(PipelineStepUI):
@@ -26,9 +27,9 @@ class MosaicAssemblerUI(PipelineStepUI):
         self.search_query = ""
         
         try:
-            self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
+            self.main_area.children = [widgets.HTML(f"<i>{Lang.LOADING_INTERFACE}</i>")]
         except Exception as e:
-            print(f"ERRO CRITICO NA INTERFACE M2: {e}")
+            print(f"CRITICAL ERROR IN M2 INTERFACE: {e}")
             traceback.print_exc()
 
     def _init_data(self):
@@ -213,7 +214,7 @@ class MosaicAssemblerUI(PipelineStepUI):
                 method_tabs = widgets.Tab()
                 method_children = []
                 for k, m in enumerate(methods):
-                    placeholder = widgets.VBox([widgets.HTML(f"<i>Clique para cargar {s} {p} ({m})...</i>")], layout=L(padding='20px'))
+                    placeholder = widgets.VBox([widgets.HTML(f"<i>{Lang.CLICK_TO_LOAD.format(sensor=s, period=p, mosaic=m)}</i>")], layout=L(padding='20px'))
                     method_children.append(placeholder)
                     self.tab_map[(i, j, k)] = (s.lower(), p, m)
                 
@@ -277,7 +278,7 @@ class MosaicAssemblerUI(PipelineStepUI):
         method_tabs = p_tabs.children[p_idx]
         
         target_container = method_tabs.children[m_idx]
-        if not isinstance(target_container.children[0], widgets.HTML) or "Clique para cargar" not in target_container.children[0].value:
+        if not isinstance(target_container.children[0], widgets.HTML) or "<i>" not in target_container.children[0].value:
             return
 
         grid = self._build_mosaic_grid(sensor, period, method)
@@ -318,7 +319,7 @@ class MosaicAssemblerUI(PipelineStepUI):
 def run_ui(years=None):
     ui = MosaicAssemblerUI(years=years)
     ui.display() 
-    ui.show_loader("Cargando...")
+    ui.show_loader(Lang.LOADING)
     ui._build_ui()
     ui.hide_loader()
     return ui
@@ -326,17 +327,17 @@ def run_ui(years=None):
 def start_mosaic_assembly(ui_obj):
     selected = [chk._meta for chk in ui_obj.chk_dict.values() if chk.value]
     if not selected:
-        print("[WARNING] Ningún mosaico selecionado.")
+        print("[WARNING] No mosaic selected.")
         return
     
-    print(f"[INFO] Iniciando montaje de {len(selected)} bandas COG...")
+    print(f"[INFO] Starting assembly of {len(selected)} COG bands...")
     
     from M2_mosaic_logic import assemble_country_mosaic
     
     try:
         for item in selected:
             d_label = f"{item['year']}_{item['month']:02d}" if item['month'] else f"{item['year']}"
-            print(f"\n--- Procesando: {item['sensor']} {d_label} {item['band']} ---")
+            print(f"\n--- Processing: {item['sensor']} {d_label} {item['band']} ---")
             
             assemble_country_mosaic(
                 year=item['year'],
@@ -347,7 +348,7 @@ def start_mosaic_assembly(ui_obj):
                 bands=[item['band']],
                 logger=print
             )
-        print("\n[SUCCESS] 🚀 Montaje concluida com éxito!")
+        print("\n[SUCCESS] Assembly completed successfully!")
     except Exception as e:
-        print(f"\n[ERROR] ❌ Erroe en el montaje: {e}")
+        print(f"\n[ERROR] Error in assembly: {e}")
         traceback.print_exc()

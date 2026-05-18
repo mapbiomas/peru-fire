@@ -405,7 +405,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
         else:
             _render_content()
     except Exception as e:
-        msg = f"[ERRO] Erro ao carregar analíticos: {e}"
+        msg = f"[ERR] Error loading analytics: {e}"
         if out_widget:
             with out_widget: print(msg)
         else: print(msg)

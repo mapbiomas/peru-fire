@@ -1307,13 +1307,13 @@ class ModelTrainerUI(PipelineStepUI):
         btn_none_canvas.on_click(lambda _: self._on_canvas_batch_action('none'))
         
         sidebar_vbox = widgets.VBox([
-            widgets.HTML("<b style='font-size:13px; color:#2c3e50;'>🏆 Ranking / Repositorio</b>"),
+            widgets.HTML("<b style='font-size:13px; color:#2c3e50;'>Ranking / Repositorio</b>"),
             self.w_canvas_search,
             self.w_canvas_sort,
             btn_sync,
             self.canvas_available_box,
             widgets.HBox([btn_all_canvas, btn_none_canvas], layout=widgets.Layout(justify_content='space-between', margin='5px 0')),
-            widgets.HTML("<b style='font-size:13px; color:#2c3e50; margin-top:10px;'>✅ Seleccionados em Canvas</b>"),
+            widgets.HTML("<b style='font-size:13px; color:#2c3e50; margin-top:10px;'>Seleccionados em Canvas</b>"),
             self.canvas_selected_box
         ], layout=widgets.Layout(width='320px', padding='10px', background_color='#fcfcfc', border_right='2px solid #eee'))
 
@@ -1581,7 +1581,7 @@ class ModelTrainerUI(PipelineStepUI):
         selected_widgets = []
         for s, chk in self.chk_dict.items():
             if chk.value:
-                btn = widgets.Button(description=f"✓ {s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#e3f2fd'})
+                btn = widgets.Button(description=s, layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#e3f2fd'})
                 def _remove(b, name=s):
                     self.chk_dict[name].value = False
                     self._refresh_samples_panes()

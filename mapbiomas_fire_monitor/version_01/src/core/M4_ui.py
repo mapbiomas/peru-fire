@@ -6,6 +6,7 @@ from IPython.display import display, clear_output, HTML
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
 from M_ui_components import PipelineStepUI, make_spinner, Layout, make_empty_state, make_sync_button, make_select_all_none, make_search_box
+from M_lang import L as Lang
 
 from M4_data_extractor import extract_pixels_from_gcs, list_sample_collections_gcs, list_campaigns_gcs
 from M4_algorithms_dnn import ModelTrainer, _get_tf
@@ -58,7 +59,7 @@ class ModelTrainerUI(PipelineStepUI):
         self.w_global_slider.observe(self._on_global_slider_change, names='value')
         
         self.w_apply_btn = widgets.Button(
-            description="Aplicar Visibilidad", icon="play",
+            description=Lang.APPLY_VISIBILITY, icon="play",
             button_style='success', layout=widgets.Layout(width='180px')
         )
         self.w_apply_btn.on_click(lambda _: self._update_canvas())
@@ -67,7 +68,7 @@ class ModelTrainerUI(PipelineStepUI):
         self.canvas_available_box = widgets.VBox([], layout=widgets.Layout(flex='1', border='1px solid #ddd', overflow_y='auto'))
         self.canvas_selected_box = widgets.VBox([], layout=widgets.Layout(flex='1', border='1px solid #ddd', overflow_y='auto'))
         
-        self.main_area.children = [widgets.HTML("<i>Cargando interfaz...</i>")]
+        self.main_area.children = [widgets.HTML(f"<i>{Lang.LOADING_INTERFACE}</i>")]
 
     def _load_config_into_widgets(self, hp):
         """Carrega os parâmetros de um modelo de volta para os widgets de configuração."""
@@ -113,25 +114,25 @@ class ModelTrainerUI(PipelineStepUI):
         self.extraction_area = self._build_extraction_matrix()
         
         self.new_training_tab = widgets.VBox([
-            widgets.HTML("<h2 style='color:#2c3e50;'> 1. Selección de Muestras</h2>"),
+            widgets.HTML(f"<h2 style='color:#2c3e50;'> 1. {Lang.SAMPLE_SELECTION}</h2>"),
             self.samples_area,
-            widgets.HTML("<br><h2 style='color:#2c3e50;'> 2. Matriz de Extracción (Multisensor GCS)</h2>"),
+            widgets.HTML(f"<br><h2 style='color:#2c3e50;'> 2. {Lang.EXTRACTION_TITLE}</h2>"),
             self.extraction_area,
-            widgets.HTML("<br><h2 style='color:#2c3e50;'> 3. Configuración do Modelo</h2>"),
+            widgets.HTML(f"<br><h2 style='color:#2c3e50;'> 3. {Lang.MODEL_CONFIG}</h2>"),
             hp_sec,
-            widgets.HTML("<br><h2 style='color:#2c3e50;'> 4. Destino GCS</h2>"),
+            widgets.HTML(f"<br><h2 style='color:#2c3e50;'> 4. {Lang.GCS_DEST}</h2>"),
             dest_sec,
         ], layout=widgets.Layout(padding='20px', background_color='white'))
         
         # 2. CANVAS (Visualização + Ranking Sidebar)
         # --- SIDEBAR (ESQUERDA) ---
-        self.w_canvas_search = widgets.Text(placeholder='Buscar en repositorio...', layout=widgets.Layout(width='100%'))
+        self.w_canvas_search = widgets.Text(placeholder=Lang.SEARCH_REPO, layout=widgets.Layout(width='100%'))
         self.w_canvas_search.observe(lambda c: self._on_canvas_search_change(c['new']), names='value')
         
         self.w_canvas_sort = widgets.Dropdown(
             options=[('Acurácia', 'acc'), ('F1-Fire', 'f1'), ('ID', 'id')],
             value=self.canvas_sort_col,
-            description='Ordenar:',
+            description=Lang.SORT_BY,
             layout=widgets.Layout(width='100%'),
             style={'description_width': '60px'}
         )
@@ -140,26 +141,26 @@ class ModelTrainerUI(PipelineStepUI):
             self._refresh_canvas_hub()
         self.w_canvas_sort.observe(_on_sort_change, names='value')
 
-        btn_sync, _ = make_sync_button("Sincronizar GCS", "refresh", lambda: self._sync_repository(show_loader=True, force_refresh=True), width='100%', button_style='primary')
+        btn_sync, _ = make_sync_button(Lang.REPO_SYNC, "refresh", lambda: self._sync_repository(show_loader=True, force_refresh=True), width='100%', button_style='primary')
 
-        btn_all_canvas = widgets.Button(description="Todos", icon="check-square", layout=widgets.Layout(width='48%'), button_style='info')
-        btn_none_canvas = widgets.Button(description="Limpiar", icon="square-o", layout=widgets.Layout(width='48%'), button_style='warning')
+        btn_all_canvas = widgets.Button(description=Lang.ALL, icon="check-square", layout=widgets.Layout(width='48%'), button_style='info')
+        btn_none_canvas = widgets.Button(description=Lang.CLEAR, icon="square-o", layout=widgets.Layout(width='48%'), button_style='warning')
         btn_all_canvas.on_click(lambda _: self._on_canvas_batch_action('all'))
         btn_none_canvas.on_click(lambda _: self._on_canvas_batch_action('none'))
         
         sidebar_vbox = widgets.VBox([
-            widgets.HTML("<b style='font-size:13px; color:#2c3e50;'>🏆 Ranking / Repositorio</b>"),
+            widgets.HTML(f"<b style='font-size:13px; color:#2c3e50;'> {Lang.REPO_TITLE}</b>"),
             self.w_canvas_search,
             self.w_canvas_sort,
             btn_sync,
             self.canvas_available_box,
             widgets.HBox([btn_all_canvas, btn_none_canvas], layout=widgets.Layout(justify_content='space-between', margin='5px 0')),
-            widgets.HTML("<b style='font-size:13px; color:#2c3e50; margin-top:10px;'>✅ Seleccionados em Canvas</b>"),
+            widgets.HTML(f"<b style='font-size:13px; color:#2c3e50; margin-top:10px;'> {Lang.SELECTED_CANVAS}</b>"),
             self.canvas_selected_box
         ], layout=widgets.Layout(width='320px', padding='10px', background_color='#fcfcfc', border_right='2px solid #eee'))
 
         main_canvas_vbox = widgets.VBox([
-            widgets.HTML("<h3 style='color:#2c3e50; margin:0 0 10px 0;'> Centro de Treinamentos y Auditoría</h3>"),
+            widgets.HTML(f"<h3 style='color:#2c3e50; margin:0 0 10px 0;'> {Lang.CANVAS_TITLE}</h3>"),
             self._build_viz_toolbar(), 
             self.w_global_slider,      
             self.canvas_output         
@@ -175,9 +176,9 @@ class ModelTrainerUI(PipelineStepUI):
             self.new_training_tab,
             self.canvas_area,
         ]
-        self.tab.set_title(0, ' Guia de Uso')
-        self.tab.set_title(1, ' Novo Treinamento')
-        self.tab.set_title(2, ' Treinamentos')
+        self.tab.set_title(0, f' {Lang.USAGE_GUIDE}')
+        self.tab.set_title(1, f' {Lang.NEW_TRAINING}')
+        self.tab.set_title(2, f' {Lang.TRAININGS}')
         
         self.tab.selected_index = 0
         self.main_area.children = [self.tab]
@@ -331,7 +332,7 @@ class ModelTrainerUI(PipelineStepUI):
         # BARRA DE BUSCA E SELETOR DE CAMPANHA
         self.txt_search_samples = widgets.Text(
             value=self.search_query_samples,
-            placeholder='Buscar muestras...',
+            placeholder=Lang.SEARCH_SAMPLES,
             layout=L(width='100%')
         )
         self.txt_search_samples.observe(self._on_search_samples_change, names='value')
@@ -419,7 +420,7 @@ class ModelTrainerUI(PipelineStepUI):
         selected_widgets = []
         for s, chk in self.chk_dict.items():
             if chk.value:
-                btn = widgets.Button(description=f"✓ {s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#e3f2fd'})
+                btn = widgets.Button(description=f" {s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#e3f2fd'})
                 def _remove(b, name=s):
                     self.chk_dict[name].value = False
                     self._refresh_samples_panes()
@@ -435,12 +436,12 @@ class ModelTrainerUI(PipelineStepUI):
         
         # --- CABEÇALHO COM BOTÃO DE SYNC ---
         def _sync_body():
-            print("Escaneando GCS... Aguarde.")
+            print(Lang.REPO_SCANNING)
             CacheManager.build_cache_from_gcs()
             self._refresh_matrix_only()
-            print("¡Catálogo Sincronizado!")
+            print(Lang.REPO_SCAN_DONE)
 
-        btn_sync, sync_out = make_sync_button("Sincronizar Catálogo (GCS)", "sync", _sync_body, width='220px', height='30px')
+        btn_sync, sync_out = make_sync_button(Lang.SYNC_CATALOG, "sync", _sync_body, width='220px', height='30px')
         
         header = widgets.HBox([
             widgets.HTML("<b style='font-size:14px; color:#2c3e50;'>2. Matriz de Extracción (Multisensor GCS)</b>"),
@@ -576,7 +577,7 @@ class ModelTrainerUI(PipelineStepUI):
     def _build_dest_section(self):
         L = widgets.Layout
         next_id = self._suggest_next_id()
-        self.w_training_id = widgets.Text(value=next_id, description='ID Training:', style={'description_width': '120px'}, layout=L(width='300px'))
+        self.w_training_id = widgets.Text(value=next_id, description=Lang.TRAINING_ID, style={'description_width': '120px'}, layout=L(width='300px'))
         self.w_shortname = widgets.Text(value='peru_v1', description='Nome:', layout=L(width='200px'))
         
         # Smart Naming Hook
@@ -591,7 +592,7 @@ class ModelTrainerUI(PipelineStepUI):
         for chk in self.band_chk_map.values():
             chk.observe(_hook_smart_naming, names='value')
 
-        self.w_comment = widgets.Textarea(placeholder='Comentários...', layout=L(width='98%', height='60px'))
+        self.w_comment = widgets.Textarea(placeholder=Lang.COMMENTS, layout=L(width='98%', height='60px'))
         
         return widgets.VBox([
             widgets.HTML("<b style='font-size:14px; color:#2c3e50;'>Destino de los Resultados</b>"),
@@ -603,7 +604,7 @@ class ModelTrainerUI(PipelineStepUI):
         self._refresh_models_list(show_loader=True)
         
 
-    def make_spinner(self, msg="Cargando..."):
+    def make_spinner(self, msg=Lang.LOADING):
         return make_spinner(msg=msg)
 
     def _on_canvas_batch_action(self, mode):
@@ -888,11 +889,11 @@ class ModelTrainerUI(PipelineStepUI):
         
         # 1. Labels e Criação
         labels = {
-            'title': 'Metadatos', 'scores': 'KPIs', 'cm': 'Confusion', 
-            'history': 'Historial', 'prob': 'Prob', 'pr': 'PR-Curve', 
+            'title': Lang.VIZ_METADATA, 'scores': Lang.VIZ_KPIS, 'cm': Lang.VIZ_CONFUSION, 
+            'history': Lang.VIZ_HISTORY, 'prob': Lang.VIZ_PROB, 'pr': Lang.VIZ_PR_CURVE, 
             'pca2d': 'PCA 2D', 'pca3d_static': 'PCA 3D (Est)', 'pca3d': 'PCA 3D (Int)',
             'tsne3d_static': 't-SNE 3D (Est)', 'tsne3d': 't-SNE 3D (Int)',
-            'management': 'Gestión'
+            'management': Lang.VIZ_MANAGEMENT
         }
         
         chks = {}
@@ -919,13 +920,13 @@ class ModelTrainerUI(PipelineStepUI):
         row2 = _make_row("Estatísticas Básicas", ['cm', 'history', 'prob', 'pr'])
         row3 = _make_row("Espaço Latente PCA", ['pca2d', 'pca3d_static', 'pca3d'])
         row4 = _make_row("Espaço Latente t-SNE", ['tsne3d_static', 'tsne3d'])
-        row5 = _make_row("Gestión", ['management'])
+        row5 = _make_row(Lang.VIZ_MANAGEMENT, ['management'])
         
         chk_container = widgets.VBox([row1, row2, row3, row4, row5])
         
         # 3. Botões de Ação na parte inferior
-        btn_all = widgets.Button(description="Todos", layout=L(width='70px'), button_style='info')
-        btn_none = widgets.Button(description="Nenhum", layout=L(width='70px'), button_style='warning')
+        btn_all = widgets.Button(description=Lang.ALL, layout=L(width='70px'), button_style='info')
+        btn_none = widgets.Button(description=Lang.NONE, layout=L(width='70px'), button_style='warning')
         btn_all.on_click(lambda _: _set_all(True))
         btn_none.on_click(lambda _: _set_all(False))
         
@@ -945,7 +946,7 @@ class ModelTrainerUI(PipelineStepUI):
         
         with self.canvas_output:
             if not self.selected_models and not self.trainer_instance:
-                display(HTML("<div style='padding:100px; text-align:center; background:white; border-radius:8px;'> <span style='font-size:50px;'></span><br><h3 style='color:#999;'>Canvas vazio</h3><p style='color:#ccc;'>Busque y seleccione modelos en el panel lateral para visualizarlos aquí.</p></div>"))
+                display(HTML(f"<div style='padding:100px; text-align:center; background:white; border-radius:8px;'> <span style='font-size:50px;'></span><br><h3 style='color:#999;'>{Lang.CANVAS_EMPTY}</h3><p style='color:#ccc;'>{Lang.CANVAS_HINT}</p></div>"))
                 return
             
             # --- AJUSTE DINÂMICO DO SLIDER GLOBAL ---
@@ -979,13 +980,13 @@ def start_training(ui):
     tf_avail = _get_tf(force=True)
     if tf_avail is None:
         print("\n" + "="*70)
-        print(" [AVISO] AMBIENTE LOCAL INCOMPATIBLE")
-        print(" O seu processador não possui as instruções AVX/AVX2 requeridas pelo TensorFlow.")
-        print(" POR FAVOR: Execute este treinamento no Google Colab.")
+        print(" [WARNING] INCOMPATIBLE LOCAL ENVIRONMENT")
+        print(" Your CPU does not support AVX/AVX2 instructions required by TensorFlow.")
+        print(" PLEASE: Run this training on Google Colab.")
         print("="*70 + "\n")
         return
     # -----------------------------------------------------------------
-    # 1⃣ Retraining intent (checked via the UI state)
+    # 1 Retraining intent (checked via the UI state)
     # -----------------------------------------------------------------
     intent = ui.retrain_intent
     if intent.get('mode'):
@@ -997,7 +998,7 @@ def start_training(ui):
         
         # If 'borrar' mode is selected, delete the target model first.
         if intent['mode'] == 'borrar':
-            print(f" Borrando modelo previo: {target_id} ({target_short})")
+            print(f" Deleting previous model: {target_id} ({target_short})")
             ModelTrainer.delete_model(target_id, target_short)
             
         # If hp is provided, load its full configuration into the widgets.
@@ -1005,7 +1006,7 @@ def start_training(ui):
             ui._load_config_into_widgets(hp)
             selected_samples = hp.get('sample_collections', [])
             
-        print(f" Modo '{intent['mode']}' activado para {target_id}")
+        print(f" Mode '{intent['mode']}' activated for {target_id}")
         
         # Reset the intent so it does not fire again accidentally.
         ui.retrain_intent = {'mode': None, 'hp': None}
@@ -1015,15 +1016,15 @@ def start_training(ui):
             cb.value = False
             cb.observe(ui._on_intent_cb_change, names='value')
     
-    # 2⃣ Get parameters from UI
+    # 2 Get parameters from UI
     if not intent.get('mode') or not hp:
         selected_samples = [name for name, chk in ui.chk_dict.items() if chk.value]
 
     if not selected_samples:
-        print("Error: Ninguna muestra seleccionada.")
+        print("Error: No samples selected.")
         return
 
-    # 3⃣ Constrói o dicionário de configuração de bandas a partir da Matriz Dinâmica
+    # 3 Constrói o dicionário de configuração de bandas a partir da Matriz Dinâmica
     bands_config = {}
     sensors_used = set()
     for (s, m, p, b), chk in ui.band_chk_map.items():
@@ -1039,7 +1040,7 @@ def start_training(ui):
             sensors_used.add(s)
             
     if not bands_config:
-        print("Error: No se han seleccionado bandas en la Matriz de Extracción.")
+        print("Error: No bands selected in the Extraction Matrix.")
         return
         
     # Atualiza o sensor global para refletir o que está sendo usado no treinamento
@@ -1070,7 +1071,7 @@ def start_training(ui):
     batch = int(ui.w_batch.value)
     lr = float(ui.w_lr.value)
     
-    print(f"Extrayendo píxeles de {len(selected_samples)} colecciones usando Matriz Flexible ({len(bands_config)} bandas). Aguarde...")
+    print(f"Extracting pixels from {len(selected_samples)} collections using Flexible Matrix ({len(bands_config)} bands). Please wait...")
     
     def _logger(msg, level="info"):
         print(msg)
@@ -1078,10 +1079,10 @@ def start_training(ui):
     X, y = extract_pixels_from_gcs(selected_samples, bands_config, logger=_logger)
     
     if len(X) == 0:
-        print("Fallo al extraer píxeles.")
+        print("Failed to extract pixels.")
         return
         
-    print(f"Éxito: {len(X)} píxeles extraídos (Fuego: {y.sum()} | No-fuego: {(y==0).sum()}).")
+    print(f"Success: {len(X)} pixels extracted (Fire: {y.sum()} | No-fire: {(y==0).sum()}).")
     
     from sklearn.model_selection import train_test_split
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -1092,7 +1093,7 @@ def start_training(ui):
     ui.trainer_instance._sample_collections = selected_samples
     ui.trainer_instance._sample_count = {'burned': int(y.sum()), 'not_burned': int((y==0).sum())}
     
-    print("Entrenando DNN...")
+    print("Training DNN...")
     
     # Snapshot Directory
     m_id = ui.w_training_id.value
@@ -1109,7 +1110,7 @@ def start_training(ui):
                               update_chart_fn=update_chart, snapshot_dir=snap_dir)
     
     # --- AUDITORIA FINAL COM t-SNE (INTERATIVO) ---
-    print("\n Entrenamiento completado. Generando auditoría t-SNE final de alta resolución...")
+    print("\n Training completed. Generating high-resolution t-SNE audit...")
     ui._live_initialized = False
     ui._live_plots_out.clear_output(wait=True)
     with ui._live_plots_out:
@@ -1126,13 +1127,13 @@ def start_training(ui):
             emb_v = ui.trainer_instance.get_embeddings(X_v_sub)
             prd_v = ui.trainer_instance.predict(X_v_sub)
             
-            print("  - Calculando manifold t-SNE (esto puede tardar)...")
+            print("  - Computing t-SNE manifold (this may take a while)...")
             tsne = TSNE(n_components=3, perplexity=30, random_state=42, max_iter=1000)
             coords_tsne = tsne.fit_transform(emb_v)
             
             ui.trainer_instance.tsne_snapshot = coords_tsne.tolist()
             
-            print("  - Generando figura interactiva...")
+            print("  - Generating interactive figure...")
             fig_tsne = go.Figure(data=[go.Scatter3d(
                 x=coords_tsne[:,0], y=coords_tsne[:,1], z=coords_tsne[:,2],
                 mode='markers',
@@ -1144,14 +1145,14 @@ def start_training(ui):
                 scene=dict(xaxis_title='t-SNE 1', yaxis_title='t-SNE 2', zaxis_title='t-SNE 3')
             )
             display(HTML(fig_tsne.to_html(include_plotlyjs=True, full_html=False)))
-            print("[OK] Auditoría t-SNE lista.")
+            print("[OK] t-SNE audit ready.")
         except Exception as e:
-            print(f"[AVISO] No se pudo gerar t-SNE final: {e}")
+            print(f"[WARNING] Could not generate final t-SNE: {e}")
 
-    print("Guardando estructura (muestras, píxeles, metadatos, métricas) en GCS...")
+    print("Saving structure (samples, pixels, metadata, metrics) to GCS...")
     try:
         ui.trainer_instance.save(ui.w_training_id.value, ui.w_shortname.value, comment=ui.w_comment.value, logger=_logger)
-        print("¡Modelo y Model Card guardados exitosamente!")
+        print("Model and Model Card saved successfully!")
         
         # Inserir o modelo fresquinho na Mesa do Canvas automaticamente
         final_id = f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{GLOBAL_OPTS['SENSOR'].lower()}"
@@ -1165,7 +1166,7 @@ def start_training(ui):
         ui._update_canvas()  # Pinta o card final!
         
     except Exception as e:
-        print(f"Error al guardar: {e}")
+        print(f"Error saving: {e}")
 
 def run_ui():
     ui = ModelTrainerUI()
