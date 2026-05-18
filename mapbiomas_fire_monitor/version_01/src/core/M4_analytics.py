@@ -3,7 +3,7 @@ import json
 import numpy as np
 import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML
-import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 import time
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
@@ -18,7 +18,6 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
         viz_config = {k: True for k in ['cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d', 'pca3d_static', 'tsne3d_static']}
     from sklearn.metrics import confusion_matrix, precision_recall_curve, average_precision_score
     from sklearn.decomposition import PCA
-    import matplotlib.pyplot as plt
 
     try:
         y_true_f = y_true.flatten() if len(y_true) > 0 else np.array([])
@@ -59,7 +58,7 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
                 rows, cols = r + 1, r + 1
                 break
     
-    fig = plt.figure(figsize=(18, 4.5 * rows))
+    fig = Figure(figsize=(18, 4.5 * rows))
     
     for idx, ptype in enumerate(active_plots):
         if ptype == 'cm':
@@ -136,56 +135,100 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
                 ax.set_title(f"{t} (Ang {azim}°)", fontsize=9, weight='bold')
                 ax.set_xticks([]); ax.set_yticks([]); ax.set_zticks([])
 
-    plt.tight_layout()
+    fig.tight_layout()
     if not save_path:
         display(fig)
-    plt.close(fig)
 
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         fig.savefig(save_path, dpi=100, bbox_inches='tight')
 
 def render_model_card_html(hp, metrics, only_header=False):
-    """Gera o HTML do card de metadados sem emojis."""
+    """Gera o HTML dos cards de metadados sem emojis.
+    only_header=True: apenas o cabeçalho.
+    only_header=False: card principal + card colapsável com todos os parâmetros.
+    """
+    import hashlib
+    _uid = hashlib.md5(str(hp.get('training_id', '')).encode()).hexdigest()[:8]
     style = """
     <style>
         .dash-card-header { background: #2c3e50; color: white; padding: 10px 15px; font-size: 14px; font-weight: bold; border-radius: 8px 8px 0 0; border: 1px solid #2c3e50; }
         .dash-card-body { border: 1px solid #dee2e6; border-top: none; background: white; padding: 15px; font-family: sans-serif; }
         .meta-text { margin: 3px 0; font-size: 12px; color: #444; }
         .meta-label { font-weight: bold; color: #222; width: 110px; display: inline-block; }
+        .dash-card-advanced { border: 1px solid #dee2e6; background: #f8f9fa; padding: 15px; font-family: sans-serif; border-radius: 0 0 8px 8px; margin-top: -1px; }
+        .dash-toggle { cursor: pointer; color: #3498db; font-size: 12px; text-decoration: none; display: inline-block; margin-top: 8px; }
+        .dash-toggle:hover { text-decoration: underline; }
     </style>
     """
     if only_header:
         return f"{style}<div class='dash-card-header'>Ficha del modelo: {hp.get('training_id')} / {hp.get('shortname')}</div>"
-    
+
     date_str = hp.get('training_date', 'Entrenando...')
     if date_str and 'T' in date_str: date_str = date_str[:16].replace('T', ' ')
-    
-    html_content = f"""
-    {style}
+
+    rep = metrics.get('classification_report', {}) if metrics else {}
+    acc = f"{rep.get('accuracy', 0):.1%}"
+    f1 = f"{rep.get('1', {}).get('f1-score', 0):.1%}"
+
+    n_iters = hp.get('n_iters', '?')
+    batch   = hp.get('batch_size', '?')
+    lr      = hp.get('lr', '?')
+    layers  = hp.get('layers', '?')
+    sensor  = hp.get('sensor', GLOBAL_OPTS.get('SENSOR', ['?'])[0])
+
+    param_rows = ""
+    for k, v in sorted(hp.items()):
+        if k in ('history', 'metrics', 'norm_stats', 'bands_config', 'sample_count', '_last_saved_metadata'):
+            continue
+        if isinstance(v, (dict, list)):
+            v_str = json.dumps(v, default=str)
+        else:
+            v_str = str(v)
+        if len(v_str) > 120:
+            v_str = v_str[:120] + '…'
+        param_rows += f"<tr><td style='padding:2px 8px; font-weight:bold; color:#555; vertical-align:top; white-space:nowrap;'>{k}</td><td style='padding:2px 8px; color:#333; word-break:break-all; font-family:monospace; font-size:11px;'>{v_str}</td></tr>"
+
+    main_card = f"""
     <div class="dash-card-body">
         <div style="display: flex; flex-wrap: wrap; gap: 15px;">
             <div style="flex: 2; min-width: 300px;">
-                <p class="meta-text"><span class="meta-label">Estado/Fecha:</span> {date_str}</p>
+                <p class="meta-text"><span class="meta-label">Data:</span> {date_str}</p>
+                <p class="meta-text"><span class="meta-label">Sensor:</span> {sensor}</p>
+                <p class="meta-text"><span class="meta-label">Camadas:</span> {layers} | <b>LR:</b> {lr}</p>
+                <p class="meta-text"><span class="meta-label">Iterações:</span> {n_iters} | <b>Batch:</b> {batch}</p>
+                <p class="meta-text"><span class="meta-label">Acurácia:</span> {acc} | <b>F1:</b> {f1}</p>
                 <p class="meta-text"><span class="meta-label">Muestras:</span> {', '.join(hp.get('sample_collections', []))}</p>
-                <p class="meta-text"><span class="meta-label">Bandas:</span> {', '.join([f"{b} ({hp.get('bands_config', {}).get(b, {}).get('sensor', 'N/A').upper()})" for b in hp.get('bands_input', [])])}</p>
-                <p class="meta-text"><span class="meta-label">Capas:</span> {hp.get('layers')} | <b>LR:</b> {hp.get('lr')}</p>
-                <p class="meta-text"><span class="meta-label">Píxeles:</span> {hp.get('sample_count', {}).get('burned', 0)} (F) | {hp.get('sample_count', {}).get('not_burned', 0)} (NF)</p>
                 <div style="margin-top:8px; padding:8px; background:#fff3cd; border-radius:4px; border:1px solid #ffeeba;">
                     <p class="meta-text" style="color:#856404; font-weight:bold; margin-bottom:3px;">Comentario:</p>
                     <p class="meta-text" style="color:#856404; font-style:italic;">{hp.get('comment', 'Sin comentarios.')}</p>
                 </div>
             </div>
         </div>
+        <a class="dash-toggle" onclick="
+            var el = document.getElementById('advanced_params_{_uid}');
+            var btn = this;
+            if (el.style.display === 'none' || el.style.display === '') {{
+                el.style.display = 'block';
+                btn.innerText = '▲ Ocultar parámetros avanzados';
+            }} else {{
+                el.style.display = 'none';
+                btn.innerText = '▼ Mostrar todos los parámetros';
+            }}
+        ">▼ Mostrar todos los parámetros</a>
+    </div>
+    <div id="advanced_params_{_uid}" class="dash-card-advanced" style="display:none;">
+        <table style="width:100%; border-collapse:collapse;">{param_rows}</table>
     </div>
     """
-    return html_content
+    return style + main_card
 
-def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=None, epoch_index=None):
+def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=None, epoch_index=None, hp_override=None):
     """
     Visualiza as métricas e o card de um modelo salvo no GCS.
     viz_config: dict opcional com flags de visibilidade.
     epoch_index: índice da época para renderizar dados passados (Time Machine).
+    hp_override: dict opcional com metadados para evitar leitura do GCS (pós-treino).
     """
     if viz_config is None:
         viz_config = {k: True for k in ['title', 'scores', 'cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d', 'tsne3d']}
@@ -199,11 +242,15 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
         clean_path = m_path.replace('gs://', '').replace('mapbiomas-fire/', '').lstrip('/')
         if 'b/' in clean_path and '/o/' in clean_path: clean_path = clean_path.split('/o/')[-1]
         
-        # 1. Carrega Metadados e Métricas Base
-        with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f: hp = json.load(f)
-        try:
-            with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
-        except: metrics = {}
+        if hp_override:
+            hp = hp_override
+            metrics = hp.get('metrics', {})
+        else:
+            # 1. Carrega Metadados e Métricas Base
+            with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f: hp = json.load(f)
+            try:
+                with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
+            except: metrics = {}
 
         # 2. Carrega Dados de Snapshots para o Time Machine se solicitado
         snap_data = None

@@ -436,6 +436,8 @@ class ModelTrainer:
             dest = gcs_path(f"{base_path}/samples/{coll}.csv")
             subprocess.run(['gsutil', 'cp', src, dest], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+        self._last_saved_metadata = hp
+        self._last_saved_metadata['metrics'] = metrics
         return hp
 
     @staticmethod

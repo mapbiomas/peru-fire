@@ -704,9 +704,9 @@ class ModelTrainerUI(PipelineStepUI):
             self._live_header_html.value = ""
 
         # Atualiza SOMENTE o sub-container de gráficos
-        self._live_plots_out.clear_output(wait=True)
         with self._live_plots_out:
-            
+            self._live_plots_out.clear_output(wait=True)
+
             # Atualiza métricas no ranking lateral (LIVE)
             if hasattr(self, 'live_training_info') and self.live_training_info:
                 self.live_training_info['acc'] = history['val_acc'][-1] if history['val_acc'] else 0
@@ -953,7 +953,8 @@ class ModelTrainerUI(PipelineStepUI):
             # --- AJUSTE DINÂMICO DO SLIDER GLOBAL ---
             max_steps = 1
             for mid, info in self.selected_models.items():
-                h = info.get('history', {})
+                hp_override = info.get('_hp_override')
+                h = hp_override.get('history', {}) if hp_override else info.get('history', {})
                 if 'steps' in h and len(h['steps']) > 0:
                     max_steps = max(max_steps, len(h['steps']))
             self.w_global_slider.max = max_steps - 1
@@ -966,7 +967,7 @@ class ModelTrainerUI(PipelineStepUI):
                     border='1px solid #eee', padding='10px', border_radius='8px', background_color='#fff'
                 ))
                 with card_out:
-                    view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config, epoch_index=self.canvas_slider_val)
+                    view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config, epoch_index=self.canvas_slider_val, hp_override=info.get('_hp_override'))
                 cards.append(card_out)
             
             # Grid responsivo: ocupa o espaço disponível, quebrando linhas conforme necessário
@@ -1152,13 +1153,17 @@ def start_training(ui):
 
     print("Saving structure (samples, pixels, metadata, metrics) to GCS...")
     try:
-        ui.trainer_instance.save(ui.w_training_id.value, ui.w_shortname.value, comment=ui.w_comment.value, logger=_logger)
+        saved_meta = ui.trainer_instance.save(ui.w_training_id.value, ui.w_shortname.value, comment=ui.w_comment.value, logger=_logger)
         print("Model and Model Card saved successfully!")
         
         # Inserir o modelo fresquinho na Mesa do Canvas automaticamente
         final_id = f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{GLOBAL_OPTS['SENSOR'][0].lower()}"
         ui.selected_models = {
-            final_id: {'training_id': final_id, 'path': model_path(ui.w_training_id.value, ui.w_shortname.value)}
+            final_id: {
+                'training_id': final_id,
+                'path': model_path(ui.w_training_id.value, ui.w_shortname.value),
+                '_hp_override': saved_meta
+            }
         }
         
         ui.live_training_info = None  # Remove o status de LIVE após conclusão
