@@ -68,7 +68,7 @@ class ExportDispatcherUI(PipelineStepUI):
             if not chk.disabled: chk.value = False
 
     def _on_select_row(self, btn):
-        prefix = f"{btn._sensor}_{btn._period}_{btn._mosaic}_{btn._date}_"
+        prefix = f"{btn._sensor}_{btn._period}_{btn._mosaic}_{btn._date}_{btn._type}_"
         row_chks = [chk for key, chk in self.chk_dict.items() if key.startswith(prefix) and not chk.disabled]
         if not row_chks: return
         any_on = any(chk.value for chk in row_chks)
@@ -124,7 +124,7 @@ class ExportDispatcherUI(PipelineStepUI):
                     ]
                     
                     btn_s = widgets.Button(description='[S]', layout=L(width='40px', height='28px', padding='0'))
-                    btn_s._sensor, btn_s._period, btn_s._mosaic, btn_s._date = sensor, period, mosaic_method, date_str
+                    btn_s._sensor, btn_s._period, btn_s._mosaic, btn_s._date, btn_s._type = sensor, period, mosaic_method, date_str, row_type
                     btn_s.on_click(self._on_select_row)
                     cells.append(btn_s)
 

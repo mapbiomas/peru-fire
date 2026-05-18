@@ -146,24 +146,34 @@ class CacheManager:
         def fetch_assets(task_info):
             col_id, period_type = task_info
             assets_found = []
-            page_token = None
             try:
+                # 1. Lista sub-coleções de bandas (ex: .../MINNBR/blue)
+                band_paths = []
+                page_token = None
                 while True:
                     params = {'parent': col_id}
                     if page_token: params['pageToken'] = page_token
-                    
                     result = ee.data.listAssets(params)
                     for a in result.get('assets', []):
-                        # O asset já tem nome completo incluindo a banda
-                        # Normalizar para lowercase para compatibilidade com a UI
-                        asset_name = a['name'].split('/')[-1].lower()
-                        assets_found.append((period_type, asset_name))
-                    
+                        band_paths.append(a['name'])
                     page_token = result.get('nextPageToken')
                     if not page_token: break
+
+                # 2. Dentro de cada banda, lista imagens reais
+                for band_path in band_paths:
+                    inner_token = None
+                    while True:
+                        params = {'parent': band_path}
+                        if inner_token: params['pageToken'] = inner_token
+                        result = ee.data.listAssets(params)
+                        for a in result.get('assets', []):
+                            asset_name = a['name'].split('/')[-1].lower()
+                            if asset_name:
+                                assets_found.append((period_type, asset_name))
+                        inner_token = result.get('nextPageToken')
+                        if not inner_token: break
                 return assets_found
             except Exception as e:
-                # Log silencioso ou aviso se a coleção não existir
                 return []
 
         # Executar em paralelo (máximo 8 threads para não sobrecarregar quota GEE)
