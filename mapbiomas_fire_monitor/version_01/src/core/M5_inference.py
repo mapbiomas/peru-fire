@@ -162,7 +162,7 @@ def classify_cell(cell_id, predict_fn, bands_config, norm_stats, year, month, ou
     except Exception as e:
         if logger:
             logger(f"    [ERROR] Fallo al clasificar {cell_id}: {e}")
-        return None
+        raise
     finally:
         for s in sources.values():
             s.close()

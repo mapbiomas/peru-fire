@@ -192,10 +192,15 @@ def _process_job(job, out, progress_callback=None):
         if progress_callback:
             progress_callback(model_id, region_name, cell_id, i, total, 'processing')
 
-        stats = classify_cell(
-            cell_id, predict_fn, bands_config, norm_stats,
-            year, month, out_full, logger=lambda m, l=None: out.append_display_data(m)
-        )
+        try:
+            stats = classify_cell(
+                cell_id, predict_fn, bands_config, norm_stats,
+                year, month, out_full, logger=lambda m, l=None: out.append_display_data(m)
+            )
+        except Exception as e:
+            with out:
+                print(f"    [ERROR] {cell_id}: {e}")
+            stats = None
 
         if stats:
             stats['tile_id'] = cell_id
