@@ -76,8 +76,8 @@ class ModelTrainerUI(PipelineStepUI):
         self.w_shortname.value = hp.get('shortname', '')
         self.w_layers.value = ",".join(map(str, hp.get('layers', [64, 32])))
         self.w_lr.value = str(hp.get('lr', 0.001))
-        self.w_iters.value = str(hp.get('iters', 5000))
-        self.w_batch.value = str(hp.get('batch', 1000))
+        self.w_iters.value = str(hp.get('n_iters', 5000))
+        self.w_batch.value = str(hp.get('batch_size', 1000))
         self.w_comment.value = hp.get('comment', '')
         
         # Muestras

@@ -79,6 +79,10 @@ class ModelTrainer:
         
         batch_size = batch_size or CONFIG.get('model_batch', 1000)
         n_iters    = n_iters    or CONFIG.get('model_iters', 5000)
+        self._batch_size = batch_size
+        self._n_iters = n_iters
+        self._keep_prob = keep_prob
+        self._split_ratio = 0.2
 
         # Normalização baseada SEMPRE no conjunto de treino para evitar data leakage
         self.norm_stats = compute_normalizer(X_train)
@@ -194,11 +198,12 @@ class ModelTrainer:
             with open(os.path.join(tmpdir, 'metadata.json')) as f:
                 hp = json.load(f)
                 
-            self.num_input = hp['num_input']
-            self.layers = hp['layers']
-            self.lr = hp.get('lr', 0.001)
-            self._bands_input = hp.get('bands_input')
-            self.norm_stats = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
+            self.num_input   = hp['num_input']
+            self.layers      = hp['layers']
+            self.lr          = hp['lr']
+            self.seed        = hp.get('seed', 42)
+            self._bands_input = hp['bands_input']
+            self.norm_stats  = {int(k): tuple(v) for k, v in hp['norm_stats'].items()}
             
             self._saved_vars = dict(np.load(os.path.join(tmpdir, 'weights.npz')))
             
@@ -300,22 +305,49 @@ class ModelTrainer:
 
             # 2. Metadata
             hp = {
+                # Versão
+                'metadata_version': 2,
+                'training_date': datetime.now().isoformat(),
+
+                # Identificação
                 'training_id':  training_id,
                 'shortname':    shortname,
                 'country':      CONFIG['country'],
                 'sensor':       ', '.join(GLOBAL_OPTS['SENSOR']) if isinstance(GLOBAL_OPTS['SENSOR'], list) else GLOBAL_OPTS['SENSOR'],
+                'comment':      comment,
+
+                # Dados de entrada
                 'bands_input':  getattr(self, '_bands_input', CONFIG['bands_model_default']),
-                'bands_config': getattr(self, '_bands_config', {}), # Nova configuração multisensor
-                'num_input':    self.num_input,
-                'layers':       self.layers,
-                'lr':           self.lr,
-                'training_date': datetime.now().isoformat(),
-                'norm_stats':   {str(k): list(v) for k, v in self.norm_stats.items()},
-                'history':      self._history,
+                'bands_config': getattr(self, '_bands_config', {}),
                 'sample_collections': getattr(self, '_sample_collections', []),
                 'sample_count': getattr(self, '_sample_count', {}),
-                'comment':      comment,
-                'rating':       0, 
+                'num_input':    self.num_input,
+
+                # Hiperparâmetros da rede
+                'layers':       self.layers,
+                'lr':           self.lr,
+                'seed':         self.seed,
+                'optimizer':    'Adam',
+
+                # Hiperparâmetros de treino
+                'n_iters':      self._n_iters,
+                'batch_size':   self._batch_size,
+                'keep_prob':    self._keep_prob,
+                'split_ratio':  self._split_ratio,
+
+                # Resultados
+                'norm_stats':   {str(k): list(v) for k, v in self.norm_stats.items()},
+                'history':      self._history,
+                'rating':       0,
+
+                # Snapshot do contexto global
+                'global_opts': {
+                    'sensor': GLOBAL_OPTS['SENSOR'],
+                    'periodicity': GLOBAL_OPTS['PERIODICITY'],
+                    'mosaic_methods': CONFIG['mosaic_methods'],
+                    'sampling_campaign': GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', ''),
+                    'language': GLOBAL_OPTS.get('LANGUAGE', 'en'),
+                },
             }
             with open(os.path.join(tmpdir, 'metadata.json'), 'w') as f:
                 json.dump(hp, f, indent=2)
