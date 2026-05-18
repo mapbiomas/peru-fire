@@ -631,7 +631,7 @@ class ModelTrainer:
                 'training_id':  training_id,
                 'shortname':    shortname,
                 'country':      CONFIG['country'],
-                'sensor':       GLOBAL_OPTS['SENSOR'],
+                'sensor':       ', '.join(GLOBAL_OPTS['SENSOR']) if isinstance(GLOBAL_OPTS['SENSOR'], list) else GLOBAL_OPTS['SENSOR'],
                 'bands_input':  getattr(self, '_bands_input', CONFIG['bands_model_default']),
                 'bands_config': getattr(self, '_bands_config', {}), # Nova configuração multisensor
                 'num_input':    self.num_input,
@@ -2237,16 +2237,16 @@ def start_training(ui):
         
     # Atualiza o sensor global para refletir o que está sendo usado no treinamento
     if len(sensors_used) == 1:
-        GLOBAL_OPTS['SENSOR'] = list(sensors_used)[0]
+        GLOBAL_OPTS['SENSOR'] = [list(sensors_used)[0]]
     elif len(sensors_used) > 1:
-        GLOBAL_OPTS['SENSOR'] = 'multisensor'
+        GLOBAL_OPTS['SENSOR'] = ['multisensor']
         
     # --- PREPARAR INTERFACE PARA NOVO TREINO ---
     ui.selected_models = {}       # Limpa seleções anteriores
     ui.tab.selected_index = 2     # Vai para a aba Treinamentos (renomeada)
     
     # Registra o treino como "LIVE" para aparecer no ranking lateral
-    sensor_suffix = GLOBAL_OPTS['SENSOR'].lower()
+    sensor_suffix = GLOBAL_OPTS['SENSOR'][0].lower()
     ui.live_training_info = {
         'id': f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{sensor_suffix}",
         'shortname': ui.w_shortname.value,
@@ -2347,7 +2347,7 @@ def start_training(ui):
         print("¡Modelo y Model Card guardados exitosamente!")
         
         # Inserir o modelo fresquinho na Mesa do Canvas automaticamente
-        final_id = f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{GLOBAL_OPTS['SENSOR'].lower()}"
+        final_id = f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{GLOBAL_OPTS['SENSOR'][0].lower()}"
         ui.selected_models = {
             final_id: {'training_id': final_id, 'path': model_path(ui.w_training_id.value, ui.w_shortname.value)}
         }

@@ -303,7 +303,7 @@ class ModelTrainer:
                 'training_id':  training_id,
                 'shortname':    shortname,
                 'country':      CONFIG['country'],
-                'sensor':       GLOBAL_OPTS['SENSOR'],
+                'sensor':       ', '.join(GLOBAL_OPTS['SENSOR']) if isinstance(GLOBAL_OPTS['SENSOR'], list) else GLOBAL_OPTS['SENSOR'],
                 'bands_input':  getattr(self, '_bands_input', CONFIG['bands_model_default']),
                 'bands_config': getattr(self, '_bands_config', {}), # Nova configuração multisensor
                 'num_input':    self.num_input,

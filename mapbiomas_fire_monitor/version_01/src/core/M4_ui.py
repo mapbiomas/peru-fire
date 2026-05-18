@@ -1046,16 +1046,16 @@ def start_training(ui):
         
     # Atualiza o sensor global para refletir o que está sendo usado no treinamento
     if len(sensors_used) == 1:
-        GLOBAL_OPTS['SENSOR'] = list(sensors_used)[0]
+        GLOBAL_OPTS['SENSOR'] = [list(sensors_used)[0]]
     elif len(sensors_used) > 1:
-        GLOBAL_OPTS['SENSOR'] = 'multisensor'
+        GLOBAL_OPTS['SENSOR'] = ['multisensor']
         
     # --- PREPARAR INTERFACE PARA NOVO TREINO ---
     ui.selected_models = {}       # Limpa seleções anteriores
     ui.tab.selected_index = 2     # Vai para a aba Treinamentos (renomeada)
     
     # Registra o treino como "LIVE" para aparecer no ranking lateral
-    sensor_suffix = GLOBAL_OPTS['SENSOR'].lower()
+    sensor_suffix = GLOBAL_OPTS['SENSOR'][0].lower()
     ui.live_training_info = {
         'id': f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{sensor_suffix}",
         'shortname': ui.w_shortname.value,
@@ -1156,7 +1156,7 @@ def start_training(ui):
         print("Model and Model Card saved successfully!")
         
         # Inserir o modelo fresquinho na Mesa do Canvas automaticamente
-        final_id = f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{GLOBAL_OPTS['SENSOR'].lower()}"
+        final_id = f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{GLOBAL_OPTS['SENSOR'][0].lower()}"
         ui.selected_models = {
             final_id: {'training_id': final_id, 'path': model_path(ui.w_training_id.value, ui.w_shortname.value)}
         }

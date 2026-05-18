@@ -240,7 +240,7 @@ def export_to_asset(mosaic_obj, name, year, month=None, period='monthly', config
         'year': year, 'month': month or 0,
         'period': period, 'name': name,
         'country': CONFIG['country'],
-        'sensor': GLOBAL_OPTS['SENSOR'].lower(),
+        'sensor': GLOBAL_OPTS['SENSOR'][0].lower() if isinstance(GLOBAL_OPTS['SENSOR'], list) else GLOBAL_OPTS['SENSOR'].lower(),
         'mosaic': GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower() + ("_buffer" if GLOBAL_OPTS.get('FIRE_POTENTIAL_FILTER', False) else ""),
         'band': band or 'all',
         'produced_for': 'mapbiomas-fire'

@@ -71,9 +71,9 @@ def run_cmd(args, label="Comando"):
 
 def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sensor=None, mosaic_method='minnbr', logger=None, progress_idx=0, progress_total=0, start_time=None):
     import shutil
-    from M0_auth_config import GLOBAL_OPTS
+    from M0_auth_config import GLOBAL_OPTS, _single
 
-    s = sensor or GLOBAL_OPTS['SENSOR']
+    s = sensor or _single(GLOBAL_OPTS['SENSOR'])
     m_method = mosaic_method or 'minnbr'
 
     if period == 'monthly':
