@@ -10,8 +10,8 @@ import logging
 # Silenciar avisos de autenticação do Google e loggers verbosos do GCSFS
 warnings.filterwarnings("ignore", message="Your application has authenticated using end user credentials")
 logging.getLogger("google.auth").setLevel(logging.ERROR)
-logging.getLogger("gcsfs").setLevel(logging.ERROR)
-logging.getLogger("fsspec").setLevel(logging.ERROR)
+logging.getLogger("gcsfs").setLevel(logging.CRITICAL)
+logging.getLogger("fsspec").setLevel(logging.CRITICAL)
 
 # ─── DEFAULT CONFIG ─────────────────────────────────────────
 
@@ -78,7 +78,8 @@ def authenticate(project='mapbiomas-peru', clean_cache=False):
     global _AUTHENTICATED
 
     if clean_cache:
-        _AUTHENTICATED = False
+_AUTHENTICATED = False
+_GCS_CREDENTIALS = None
         from M_cache import CacheManager
         CacheManager.clear()
     
@@ -97,6 +98,9 @@ def authenticate(project='mapbiomas-peru', clean_cache=False):
         print("[COLAB] Detected Google Colab environment. Authenticating user...")
         from google.colab import auth
         auth.authenticate_user()
+        import google.auth
+        global _GCS_CREDENTIALS
+        _GCS_CREDENTIALS, _ = google.auth.default()
     except ImportError:
         pass # Ambiente local, assume Application Default Credentials (ADC)
     
@@ -118,13 +122,13 @@ def _get_fs():
     import gcsfs
     project = CONFIG['gcs_project']
     is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
+
     if is_colab:
-        try:
-            return gcsfs.GCSFileSystem(token='google_default', project=project, requests_timeout=5)
-        except ValueError:
-            return gcsfs.GCSFileSystem(token='google_default', requests_timeout=5)
+        if _GCS_CREDENTIALS is not None:
+            return gcsfs.GCSFileSystem(project=project, token=_GCS_CREDENTIALS, requests_timeout=5)
+        return gcsfs.GCSFileSystem(project=project, requests_timeout=5)
     else:
-        return gcsfs.GCSFileSystem(token='google_default', requests_timeout=10)
+        return gcsfs.GCSFileSystem(project=project, requests_timeout=10)
 
 def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='MONITOR', sampling_campaign='monitor_01', clean_cache=False, language='en',
                     country=None, gee_project=None, gee_asset_repo=None,
@@ -197,7 +201,7 @@ def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='
         if not state.get('updated_at') or not state.get('cogs_monthly'):
             CacheManager.build_full_cache()
     except Exception as e:
-        print(f"Warning: cache sync skipped ({e}). Run manual sync if needed.")
+        print(f"Cache sync deferred (GCS auth pending). Run manual sync in M1/M2 if needed.")
     
     return GLOBAL_OPTS
 
