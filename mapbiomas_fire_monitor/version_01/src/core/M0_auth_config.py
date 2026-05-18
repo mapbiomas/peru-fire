@@ -32,7 +32,7 @@ def _make_config(country='peru', bucket='mapbiomas-fire', gcs_project='mapbiomas
         'gee_project': gee_project,
         'gee_asset_repo': gee_asset_repo,
         'gcs_catalog_prefix': gcs_catalog_prefix,
-        'mosaic_methods': ['minnbr', 'minnbr_buffer', 'median', 'minndvi'],
+        'mosaic_methods': ['minnbr'],
 
         # --- GCS paths (derived) ---
         'gcs_library_images': f"{gcs_catalog_prefix}/LIBRARY_IMAGES",
@@ -131,9 +131,22 @@ def _get_fs():
     else:
         return gcsfs.GCSFileSystem(project=project, requests_timeout=10)
 
-def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='MONITOR', sampling_campaign='monitor_01', clean_cache=False, language='en',
-                    country=None, gee_project=None, gee_asset_repo=None,
-                    gcs_bucket=None, gcs_project=None, gcs_catalog_prefix=None):
+def set_global_opts(
+    sensor='sentinel2',             # 'sentinel2', 'landsat', 'hls', 'modis'
+    periodicity='monthly',          # 'monthly', 'yearly'
+    personal_task_flag='MONITOR',   # prefix for GEE task names (e.g. MONITOR, TEST)
+    sampling_campaign='monitor_01', # campaign folder in LIBRARY_SAMPLES (GCS)
+    clean_cache=False,              # True = reset local + GCS cache at startup
+    language='en',                  # 'en', 'es', 'pt', 'fr', 'id'
+    mosaic_methods=None,            # None = keep current, or list e.g. ['minnbr','minnbr_buffer']
+                                    # available: minnbr, minnbr_buffer, median, minndvi
+    country=None,                   # country code (e.g. 'peru', 'brazil')
+    gee_project=None,               # GEE project name (e.g. 'mapbiomas-peru')
+    gee_asset_repo=None,            # full GEE asset path for CATALOG_01
+    gcs_bucket=None,                # GCS bucket name (e.g. 'mapbiomas-fire')
+    gcs_project=None,               # GCS project name (e.g. 'mapbiomas-fire-485203')
+    gcs_catalog_prefix=None,        # GCS prefix for CATALOG_01 (e.g. 'sudamerica/peru/CATALOG_01')
+):
     """
     Configure global processing options and project paths.
 
@@ -174,10 +187,17 @@ def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='
     GLOBAL_OPTS['SAMPLING_CAMPAIGN'] = sampling_campaign
     GLOBAL_OPTS['LANGUAGE'] = language
 
+    # Aplica filtro de métodos de mosaico se passado
+    if mosaic_methods is not None:
+        from M_mosaics import all_methods as _all_mosaic_methods
+        valid = set(_all_mosaic_methods())
+        CONFIG['mosaic_methods'] = [m for m in mosaic_methods if m in valid]
+
     from M_lang import L
     L.load_locale(language)
-    
-    print(f"Global options: {sensor.upper()} | {periodicity.upper()} | Campaign: {sampling_campaign} | Task Flag: {personal_task_flag}")
+
+    mosaics_str = ', '.join(CONFIG['mosaic_methods'])
+    print(f"Global options: {sensor.upper()} | {periodicity.upper()} | Mosaics: {mosaics_str} | Campaign: {sampling_campaign} | Task Flag: {personal_task_flag}")
 
     if clean_cache:
         try:
