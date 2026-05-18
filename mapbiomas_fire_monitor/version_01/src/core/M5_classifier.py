@@ -68,13 +68,13 @@ def _run_classification(queue, out, progress_callback=None):
         except Exception as e:
             with out:
                 print(f"[FATAL] Group {model_id} | {period} failed: {e}")
+            q = load_queue()
             for job in group:
-                q = load_queue()
                 for qj in q:
                     if qj['id'] == job['id']:
                         qj['status'] = 'FAILED'
-                save_queue(q)
-            break
+            save_queue(q)
+            continue
 
 
 def _run_publish(queue, out):
@@ -102,9 +102,16 @@ def _run_publish(queue, out):
 
             mosaic_path = merge_region_tiles(model_id, region, period, fs=fs, campaign=campaign)
 
-            if mosaic_path:
-                job['progress'] = '50% (mosaic)'
+            if not mosaic_path:
+                job['status'] = 'FAILED'
+                job['progress'] = 'error: no mosaic generated'
                 save_queue(queue)
+                with out:
+                    print(f"  No tiles to mosaic for {job['id']}, marking FAILED.")
+                continue
+
+            job['progress'] = '50% (mosaic)'
+            save_queue(queue)
 
             if job.get('upload_gee'):
                 upload_to_gee(model_id, region, period, fs=fs, campaign=campaign)
@@ -156,7 +163,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
     band_paths = build_band_paths(bands_config, year, month)
     bands_sorted = sorted(bands_config.keys())
 
-    period_type = 'monthly' if month else 'yearly'
+    period_type = 'monthly' if month else 'annually'
     state = CacheManager.get_state()
     known_cogs = set(state.get(f'cogs_{period_type}', []))
 

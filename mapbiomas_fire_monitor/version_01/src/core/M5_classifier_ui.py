@@ -409,7 +409,6 @@ class M5QueueUI:
                         fs.rm(p)
                 except Exception:
                     pass
-            break
         self.queue = [j for j in self.queue if not (j['model'] == model and j['region'] == region)]
         save_queue(self.queue)
         return total_tiles, len(jobs)
@@ -573,7 +572,6 @@ class M5QueueUI:
 
                 # contar tiles processados
                 fs = _get_fs()
-                t_dir = gcs_full(classified_tiles_dir(model_name, campaign))
                 for j in jobs_list:
                     if j['status'] == 'RUNNING' and j.get('progress', '0%') != '0%':
                         try:
