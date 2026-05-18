@@ -455,12 +455,13 @@ class M5QueueUI:
             btn_cargar = widgets.Button(description=Lang.LOAD_TO_QUEUE, button_style='success', layout=L(width='150px', height='28px'))
             def _make_cargar(m, regs, pers):
                 def _h(_):
+                    campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
                     self.queue = load_queue()
                     added = 0
                     skipped = 0
                     for r in regs:
                         for p in pers:
-                            jid = make_job_id(m, r, p)
+                            jid = make_job_id(m, r, p, campaign)
                             if any(job['id'] == jid for job in self.queue):
                                 skipped += 1
                                 continue
@@ -590,7 +591,7 @@ class M5QueueUI:
 
                 # -- checkbox de habilitacion --
                 chk = widgets.Checkbox(
-                    value=self._card_checkboxes.get(model_name, False),
+                    value=self._card_checkboxes.get(model_name, False).value if isinstance(self._card_checkboxes.get(model_name, False), widgets.Checkbox) else self._card_checkboxes.get(model_name, False),
                     description='',
                     indent=False,
                     layout=L(width='24px', margin='2px 6px 0 0')

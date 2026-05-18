@@ -59,7 +59,7 @@ def _run_classification(queue, out, progress_callback=None):
     for j in pending:
         groups[(j['model'], j['period'])].append(j)
 
-    for (model_id, period), group in groups:
+    for (model_id, period), group in groups.items():
         with out:
             print(f"\nGroup: model={model_id} | period={period} | {len(group)} region(s)")
 
@@ -208,7 +208,11 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
             region_name = job['region']
 
             job['status'] = 'RUNNING'
-            save_queue(load_queue())
+            q = load_queue()
+            for qj in q:
+                if qj['id'] == job['id']:
+                    qj['status'] = 'RUNNING'
+            save_queue(q)
 
             with out:
                 print(f"\n  Region [{job_idx+1}/{len(group_jobs)}]: {region_name}")
