@@ -2,9 +2,10 @@ import os
 import base64
 from IPython.display import display, HTML, clear_output
 import ipywidgets as widgets
-from M0_auth_config import CONFIG, _get_fs
+from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs
 from M5_queue import load_queue, save_queue, make_job_id, new_job, gcs_full, classified_tiles_dir, \
     tarea_path, save_tarea, delete_tarea, list_tareas
+from M4_data_extractor import list_campaigns_gcs
 from M_ui_components import inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output
 from M_lang import L as Lang
 from M_regions import REGION_NAME_PROPERTY
@@ -44,6 +45,14 @@ class M5QueueUI:
             disabled=False,
             layout=L(width='600px')
         )
+
+        self.w_campaign = widgets.Dropdown(
+            options=['carregando...'],
+            value='carregando...',
+            description='Campanha:',
+            layout=L(width='400px')
+        )
+        self.w_campaign.observe(self._on_campaign_change, names='value')
 
         self.f_pend_task = widgets.Dropdown(description=Lang.DROP_TASK, options=[Lang.ALL_F], layout=L(width='300px'))
         self.f_pend_task.observe(lambda _: self._render_pending(), names='value')
@@ -268,6 +277,17 @@ class M5QueueUI:
         box, self.chk_periods = self._create_checkbox_grid(periods, "3. Seleccione Periodos (Anio / Anio_Mes):", bg_color='#ebf5eb', columns=4)
         self.w_period_box.children = box.children
 
+        # Campaign dropdown
+        try:
+            campaigns = list_campaigns_gcs()
+            current = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+            val = current if current in campaigns else (campaigns[0] if campaigns else '')
+            self.w_campaign.options = campaigns
+            self.w_campaign.value = val
+        except Exception:
+            self.w_campaign.options = ['monitor_01']
+            self.w_campaign.value = 'monitor_01'
+
     # --- REGISTRAR ---
 
     def _on_add_click(self, b):
@@ -288,9 +308,10 @@ class M5QueueUI:
             return
         added = 0
         skipped = 0
+        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
         for r in regions:
             for period in periods:
-                job_id = make_job_id(model, r, period)
+                job_id = make_job_id(model, r, period, campaign)
                 if any(job['id'] == job_id for job in self.queue):
                     skipped += 1
                     continue
@@ -310,6 +331,12 @@ class M5QueueUI:
                 display(HTML(f"<b style='color:orange;'>Atencion: {skipped} tareas ya estaban en la cola.</b>"))
         self._refresh_ui()
 
+    def _on_campaign_change(self, change):
+        campaign = change['new']
+        if campaign and campaign != 'carregando...':
+            GLOBAL_OPTS['SAMPLING_CAMPAIGN'] = campaign
+            self._refresh_ui()
+
     # --- DELECAO ---
 
     def _delete_tiles(self, tile_fqpaths, fs):
@@ -325,13 +352,14 @@ class M5QueueUI:
         from M5_queue import region_path
         fs = _get_fs()
         r, p, m = job['region'], job['period'], job['model']
-        reg_full = gcs_full(region_path(m, r, p))
+        c = job.get('campaign', '')
+        reg_full = gcs_full(region_path(m, r, p, c))
         try:
             if fs.exists(reg_full):
                 fs.rm(reg_full)
         except Exception:
             pass
-        t_dir = gcs_full(classified_tiles_dir(m))
+        t_dir = gcs_full(classified_tiles_dir(m, c))
         tile_list = []
         try:
             tile_list = [t for t in fs.glob(f"{t_dir}/tile_{r}_{p}.tif") if not t.endswith('.aux.xml')]
@@ -349,8 +377,9 @@ class M5QueueUI:
         from M5_queue import region_path, stats_dir
         fs = _get_fs()
         r, p, m = job['region'], job['period'], job['model']
+        c = job.get('campaign', '')
         n_tiles = self._delete_job_tiles_region(job)
-        s_dir = gcs_full(stats_dir(m))
+        s_dir = gcs_full(stats_dir(m, c))
         for csv_name in ['stats_tile.csv', 'stats_region.csv']:
             csv_path = f"{s_dir}/{csv_name}"
             try:
@@ -370,8 +399,9 @@ class M5QueueUI:
             if job['status'] in ('COMPLETED', 'FINISHED'):
                 total_tiles += self._delete_job_tiles_region(job)
         from M5_queue import stats_dir
-        for job in jobs:
-            s_dir = gcs_full(stats_dir(model))
+        campaigns = set(j.get('campaign', '') for j in jobs)
+        for c in campaigns:
+            s_dir = gcs_full(stats_dir(model, c))
             for csv_name in ['stats_tile.csv', 'stats_region.csv']:
                 try:
                     p = f"{s_dir}/{csv_name}"
@@ -507,7 +537,8 @@ class M5QueueUI:
 
     def _render_pending(self):
         self.queue = load_queue()
-        jobs = [j for j in self.queue if j['status'] in ('PENDING', 'RUNNING')]
+        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+        jobs = [j for j in self.queue if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)]
 
         filter_box = widgets.HBox([self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task], layout=L(margin='0 0 10px 0'))
         filtered = self._apply_filters(jobs, self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task)
@@ -541,7 +572,7 @@ class M5QueueUI:
 
                 # contar tiles processados
                 fs = _get_fs()
-                t_dir = gcs_full(classified_tiles_dir(model_name))
+                t_dir = gcs_full(classified_tiles_dir(model_name, campaign))
                 for j in jobs_list:
                     if j['status'] == 'RUNNING' and j.get('progress', '0%') != '0%':
                         try:
@@ -739,7 +770,8 @@ class M5QueueUI:
 
     def _render_publish(self):
         self.queue = load_queue()
-        jobs = [j for j in self.queue if j['status'] == 'COMPLETED']
+        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+        jobs = [j for j in self.queue if j['status'] == 'COMPLETED' and (not campaign or j.get('campaign', '') == campaign)]
         filter_box = widgets.HBox([self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task], layout=L(margin='0 0 15px 0'))
         filtered = self._apply_filters(jobs, self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task)
 
@@ -809,7 +841,8 @@ class M5QueueUI:
     def _refresh_tile_list(self, job, container):
         fs = _get_fs()
         r, p, m = job['region'], job['period'], job['model']
-        t_dir = gcs_full(classified_tiles_dir(m))
+        c = job.get('campaign', '')
+        t_dir = gcs_full(classified_tiles_dir(m, c))
         tile_fqpaths = []
         try:
             tile_fqpaths = sorted([t for t in fs.glob(f"{t_dir}/tile_{r}_{p}.tif") if not t.endswith('.aux.xml')])
@@ -859,6 +892,7 @@ class M5QueueUI:
 
     def _render_mapa(self):
         self.queue = load_queue()
+        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
         filter_box = widgets.HBox([self.f_mapa_model, self.f_mapa_region, self.f_mapa_year, self.btn_mapa_refresh], layout=L(margin='0 0 15px 0'))
 
         try:
@@ -898,7 +932,8 @@ class M5QueueUI:
             scale_html = self._build_scale_bar(img_w, bounds_info)
 
             # grid counts table
-            region_names = sorted(set(j['region'] for j in self.queue))
+            campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+            region_names = sorted(set(j['region'] for j in self.queue if not campaign or j.get('campaign', '') == campaign))
             if not region_names:
                 try:
                     region_names = all_regions.aggregate_array(REGION_NAME_PROPERTY).distinct().getInfo()
@@ -937,7 +972,8 @@ class M5QueueUI:
 
     def _render_done(self):
         self.queue = load_queue()
-        jobs = [j for j in self.queue if j['status'] == 'FINISHED']
+        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+        jobs = [j for j in self.queue if j['status'] == 'FINISHED' and (not campaign or j.get('campaign', '') == campaign)]
         filter_box = widgets.HBox([self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task], layout=L(margin='0 0 15px 0'))
         filtered = self._apply_filters(jobs, self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task)
 
@@ -1046,21 +1082,23 @@ class M5QueueUI:
             else:
                 f.value = new_ops[0]
 
+        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
         for status, f_m, f_r, f_y, f_t in [
             (['PENDING', 'RUNNING'], self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task),
             (['COMPLETED'], self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task),
             (['FINISHED'], self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task),
         ]:
-            subset = [j for j in self.queue if j['status'] in status]
+            subset = [j for j in self.queue if j['status'] in status and (not campaign or j.get('campaign', '') == campaign)]
             _safe_update(f_m, ['Todos'] + sorted(set(j['model'] for j in subset)))
             _safe_update(f_r, ['Todas'] + sorted(set(j['region'] for j in subset)))
             _safe_update(f_y, ['Todos'] + sorted(set(j['period'].split('_')[0] for j in subset), reverse=True))
             _safe_update(f_t, ['Todas'] + sorted(set(j.get('task_name', '') for j in subset if j.get('task_name', ''))))
 
         # Mapa filters
-        all_models = sorted(set(j['model'] for j in self.queue))
-        all_regions = sorted(set(j['region'] for j in self.queue))
-        all_years = sorted(set(j['period'].split('_')[0] for j in self.queue), reverse=True)
+        filtered_queue = [j for j in self.queue if not campaign or j.get('campaign', '') == campaign]
+        all_models = sorted(set(j['model'] for j in filtered_queue))
+        all_regions = sorted(set(j['region'] for j in filtered_queue))
+        all_years = sorted(set(j['period'].split('_')[0] for j in filtered_queue), reverse=True)
         for f_m, f_r, f_y in [(self.f_mapa_model, self.f_mapa_region, self.f_mapa_year)]:
             _safe_update(f_m, ['Todos'] + all_models)
             _safe_update(f_r, ['Todas'] + all_regions)
@@ -1077,7 +1115,7 @@ class M5QueueUI:
 
         form = widgets.VBox([
             self.w_model_box, self.w_region_box, self.w_period_box,
-            widgets.VBox([self.w_task_name], layout=L(margin='15px 0 5px 0')),
+            widgets.VBox([self.w_campaign, self.w_task_name], layout=L(margin='15px 0 5px 0')),
             widgets.HBox([self.btn_add], layout=L(margin='5px 0 10px 0', align_items='center')),
             self.out_msg
         ], layout=L(padding='20px'))
