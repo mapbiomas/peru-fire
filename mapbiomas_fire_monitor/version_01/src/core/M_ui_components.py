@@ -4,6 +4,7 @@ MapBiomas Fire Monitor Pipeline - ASCII Version
 """
 import ipywidgets as widgets
 from IPython.display import display, clear_output
+from M_lang import L
 
 class PipelineStepUI:
     """
@@ -16,13 +17,13 @@ class PipelineStepUI:
         
         # Loader CSS
         self.loader_html = widgets.HTML(
-            value='''
+            value=f'''
             <div id="mfm-loader" style="display:none; align-items:center; margin-left:15px;">
                 <div class="spinner"></div>
-                <span style="margin-left:8px; font-size:11px; color:#666;">Processando...</span>
+                <span style="margin-left:8px; font-size:11px; color:#666;">{L.PROCESSING}</span>
             </div>
             <style>
-            .spinner {
+            .spinner {{
                 border: 3px solid #f3f3f3;
                 border-top: 3px solid #3498db;
                 border-radius: 50%;
@@ -31,11 +32,11 @@ class PipelineStepUI:
                 animation: mfm-spin 1s linear infinite;
                 display: inline-block;
                 vertical-align: middle;
-            }
-            @keyframes mfm-spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
+            }}
+            @keyframes mfm-spin {{
+                0% {{ transform: rotate(0deg); }}
+                100% {{ transform: rotate(360deg); }}
+            }}
             </style>
             '''
         )
@@ -70,8 +71,10 @@ class PipelineStepUI:
         """Renderiza o componente no notebook."""
         display(self.container)
         
-    def show_loader(self, message="Processando..."):
+    def show_loader(self, message=None):
         """Mostra o spinner de carregamento."""
+        if message is None:
+            message = L.PROCESSING
         self.loader_html.value = self.loader_html.value.replace('display:none', 'display:flex')
         if message:
             import re
@@ -174,8 +177,10 @@ _SPINNER_STYLE = """
 </style>"""
 
 
-def make_spinner(msg="Cargando..."):
+def make_spinner(msg=None):
     """Retorna um widget HTML com spinner animado e mensagem."""
+    if msg is None:
+        msg = L.LOADING
     return widgets.HTML(f"""
         <div style="display: flex; align-items: center; gap: 8px;">
             <div class="mfm-loader-mini"></div>
@@ -208,18 +213,18 @@ def inline_confirm(btn, on_confirm, on_cancel=None):
         return
 
     btn_voltar = widgets.Button(
-        description='Voltar',
+        description=L.BACK,
         button_style='',
         layout=widgets.Layout(width='70px', height='26px', padding='0', font_size='11px'))
     btn_ok = widgets.Button(
-        description='OK',
+        description=L.OK,
         button_style='danger',
         layout=widgets.Layout(width='50px', height='26px', padding='0', font_size='11px'))
 
     confirm_box = widgets.HBox([btn_voltar, btn_ok],
                                 layout=widgets.Layout(align_items='center', gap='3px'))
 
-    spinner = make_spinner(msg='Eliminando...')
+    spinner = make_spinner(msg=L.DELETING)
 
     def _restore(_):
         if on_cancel:

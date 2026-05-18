@@ -119,22 +119,27 @@ def _get_fs():
     else:
         return gcsfs.GCSFileSystem(token='google_default', requests_timeout=10)
 
-def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='MONITOR', sampling_campaign='monitor_01', clean_cache=False):
+def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='MONITOR', sampling_campaign='monitor_01', clean_cache=False, language='es'):
     """
-    Configura variáveis globais do fluxo de processamento.
+    Configura variaveis globais do fluxo de processamento.
     
     Args:
         sensor: 'landsat', 'sentinel2', 'hls' ou 'modis'
         periodicity: 'yearly' ou 'monthly'
         personal_task_flag: Prefixo para organizar tasks no GEE (ex: 'MONITOR')
+        language: 'es' (espanhol, padrao) — no futuro 'en'
     """
     global GLOBAL_OPTS
     GLOBAL_OPTS['SENSOR'] = sensor
     GLOBAL_OPTS['PERIODICITY'] = periodicity
     GLOBAL_OPTS['PERSONAL_TASK_FLAG'] = personal_task_flag
     GLOBAL_OPTS['SAMPLING_CAMPAIGN'] = sampling_campaign
+    GLOBAL_OPTS['LANGUAGE'] = language
+
+    from M_lang import L
+    L.load_locale(language)
     
-    print(f"✅ Opciones globales: {sensor.upper()} | {periodicity.upper()} | Campaign: {sampling_campaign} | Task Flag: {personal_task_flag}")
+    print(f"Global options: {sensor.upper()} | {periodicity.upper()} | Campaign: {sampling_campaign} | Task Flag: {personal_task_flag}")
 
     if clean_cache:
         try:
@@ -146,11 +151,11 @@ def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='
             gcs_path = f"gs://{CONFIG['bucket']}/{CONFIG['gcs_cache']}/{cache_file}"
             if fs.exists(gcs_path):
                 fs.rm(gcs_path)
-                print(f"🧹 Caché GCS eliminado: {gcs_path}")
+                print(f"GCS cache cleared: {gcs_path}")
             else:
-                print("ℹ️ Cache GCS no encontrado (nada para limpar).")
+                print("GCS cache not found (nothing to clear).")
         except Exception as e:
-            print(f"⚠️ Aviso al limpiar caché: {e}")
+            print(f"Warning while clearing cache: {e}")
     
     return GLOBAL_OPTS
 
