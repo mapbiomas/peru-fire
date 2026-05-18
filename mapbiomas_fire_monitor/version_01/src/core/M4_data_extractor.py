@@ -7,35 +7,36 @@ from shapely.geometry import shape
 import rasterio
 from rasterio.mask import mask
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
-from M_cache import _get_fs
-from M4_hub_manager import _load_m4_cache, _save_m4_cache
+from M_cache import CacheManager, _get_fs
 
 
 def list_sample_collections_gcs(force_refresh=False):
-    """Lista amostras com prioridade TOTAL offline. Só toca no GCS se force_refresh=True."""
-    cache = _load_m4_cache()
-    if cache.get('known_samples') and not force_refresh:
-        return cache['known_samples']
-    
+    """Lista coleções de amostras usando CacheManager como fonte principal."""
+    state = CacheManager.get_state()
+    samples = state.get('sample_collections', [])
+
+    if samples and not force_refresh:
+        return samples
+
     try:
         from M0_auth_config import CONFIG, GLOBAL_OPTS
-        # Timeout curtíssimo para não travar a UI se a rede estiver lenta
         fs = _get_fs()
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
         path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{campaign}"
-        
+
         if not fs.exists(path):
             return []
-            
-        files = fs.ls(path) # ls simples não costuma travar tanto quanto find
+
+        files = fs.ls(path)
         samples = sorted([f.split('/')[-1].replace('.csv', '') for f in files if f.endswith('.csv')], reverse=True)
-        
-        cache['known_samples'] = samples
-        _save_m4_cache(cache)
+
+        # Atualiza CacheManager
+        state['sample_collections'] = samples
+        CacheManager._state = state
+        CacheManager.save()
         return samples
     except Exception:
-        # Se falhar qualquer coisa (rede, timeout), usa o que tem no cache ou vazio
-        return cache.get('known_samples', [])
+        return samples
 
 def list_campaigns_gcs():
     """Lista as campanhas (subpastas) disponíveis em LIBRARY_SAMPLES no GCS."""

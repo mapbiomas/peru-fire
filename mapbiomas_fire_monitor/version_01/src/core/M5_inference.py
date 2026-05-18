@@ -2,6 +2,9 @@ import os
 import numpy as np
 import rasterio
 from rasterio.mask import mask
+from shapely.geometry import shape, mapping
+from shapely.ops import transform
+from pyproj import Transformer
 from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _get_fs
 from M4_data_extractor import normalize
 
@@ -67,46 +70,47 @@ def build_band_paths(bands_config, year, month):
         paths[b] = f"{CONFIG['bucket']}/{rel_folder}/{cog_name}"
     return paths
 
-def classify_cell(cell_id, predict_fn, bands_config, norm_stats, year, month, out_gcs_path, logger=None):
-    """Clasifica un tile cim-world, guarda GeoTIFF 2 bandas (clase + probabilidad)."""
-    import ee
+def _reproject_geometry(geom_coords, src_crs):
+    """Reprojecta geometria EPSG:4326 -> src_crs. Retorna lista [geojson] para mask()."""
+    if src_crs and str(src_crs).upper() != 'EPSG:4326':
+        geom_shape = shape(geom_coords)
+        transformer = Transformer.from_crs('EPSG:4326', src_crs, always_xy=True)
+        geom_proj = transform(transformer.transform, geom_shape)
+        return [mapping(geom_proj)]
+    return [geom_coords]
 
+def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_gcs_path, cogs, logger=None):
+    """Clasifica un tile cim-world usando COGs ya descargados.
+
+    Args:
+        cogs: dict {banda: ruta_local_o_vsig} con los COGs listos para abrir.
+    """
+    import ee
     fs = _get_fs()
-    periodicity = 'monthly' if month else 'yearly'
+    bands_sorted = sorted(bands_config.keys())
 
     cim = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
     cell_feature = cim.filter(ee.Filter.eq('name', cell_id)).first()
     cell_geom = cell_feature.geometry()
 
-    band_paths = build_band_paths(bands_config, year, month)
-    bands_sorted = sorted(bands_config.keys())
-    is_colab = 'COLAB_RELEASE_TAG' in os.environ
-
     sources = {}
-    local_files = []
-
     try:
         geom_coords = cell_geom.getInfo()
 
         for b in bands_sorted:
-            cog_full = f"gs://{band_paths[b]}"
+            sources[b] = rasterio.open(cogs[b])
 
-            if is_colab:
-                src_path = f"/vsigs/{band_paths[b]}"
-            else:
-                local_file = os.path.join(get_temp_dir(), os.path.basename(band_paths[b]))
-                if not os.path.exists(local_file):
-                    fs.get(cog_full, local_file)
-                src_path = local_file
-                local_files.append(local_file)
-
-            sources[b] = rasterio.open(src_path)
+        src_crs = sources[bands_sorted[0]].crs
+        clip_geom = _reproject_geometry(geom_coords, src_crs)
 
         band_data = {}
         profile = None
 
         for b in bands_sorted:
-            out_image, out_transform = mask(sources[b], [geom_coords], crop=True, filled=True, nodata=sources[b].nodata or -9999)
+            out_image, out_transform = mask(
+                sources[b], clip_geom, crop=True, filled=True,
+                nodata=sources[b].nodata or -9999
+            )
             band_data[b] = out_image.data[0]
             if profile is None:
                 profile = sources[b].profile.copy()
@@ -120,7 +124,7 @@ def classify_cell(cell_id, predict_fn, bands_config, norm_stats, year, month, ou
 
         if total_valid == 0:
             if logger:
-                logger(f"    [AVISO] Ningun pixel valido en {cell_id}")
+                logger(f"    [AVISO] Ningun pixel valido en {cell_id} (CRS COG: {src_crs})")
             return None
 
         X_norm = normalize(valid_pixels, norm_stats)
@@ -134,12 +138,7 @@ def classify_cell(cell_id, predict_fn, bands_config, norm_stats, year, month, ou
         output_class[valid_mask] = (probs > 0.5).astype(np.uint8)
         output_prob[valid_mask] = probs.astype(np.float32)
 
-        profile.update(
-            dtype=rasterio.float32,
-            count=2,
-            compress='lzw',
-            nodata=-9999
-        )
+        profile.update(dtype=rasterio.float32, count=2, compress='lzw', nodata=-9999)
 
         local_tmp = os.path.join(get_temp_dir(), f"{cell_id}.tif")
         with rasterio.open(local_tmp, 'w', **profile) as dst:
@@ -166,6 +165,34 @@ def classify_cell(cell_id, predict_fn, bands_config, norm_stats, year, month, ou
     finally:
         for s in sources.values():
             s.close()
-        for f in local_files:
-            if os.path.exists(f):
-                os.remove(f)
+
+def classify_cell(cell_id, predict_fn, bands_config, norm_stats, year, month, out_gcs_path, logger=None):
+    """Clasifica un tile cim-world (descarga COGs internamente, compatible con codigo legacy)."""
+    fs = _get_fs()
+    band_paths = build_band_paths(bands_config, year, month)
+    bands_sorted = sorted(bands_config.keys())
+    is_colab = 'COLAB_RELEASE_TAG' in os.environ
+
+    cogs = {}
+    local_files = []
+
+    try:
+        for b in bands_sorted:
+            cog_full = f"gs://{band_paths[b]}"
+            if is_colab:
+                cogs[b] = f"/vsigs/{band_paths[b]}"
+            else:
+                local_file = os.path.join(get_temp_dir(), os.path.basename(band_paths[b]))
+                if not os.path.exists(local_file):
+                    fs.get(cog_full, local_file)
+                local_files.append(local_file)
+                cogs[b] = local_file
+
+        return classify_cell_with_cogs(
+            cell_id, predict_fn, bands_config, norm_stats, out_gcs_path, cogs, logger=logger
+        )
+    finally:
+        if not is_colab:
+            for f in local_files:
+                if os.path.exists(f):
+                    os.remove(f)

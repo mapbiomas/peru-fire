@@ -5,6 +5,9 @@ Each country maps to the GEE asset path of its region featureCollection.
 The actual region names are stored inside each featureCollection (not hardcoded here).
 """
 
+# The property name used to filter regions in GEE FeatureCollections.
+REGION_NAME_PROPERTY = 'region_nam'
+
 REGION_ASSETS = {
     'peru':     'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
     'bolivia':  'projects/mapbiomas-bolivia/assets/FIRE/AUXILIARY_DATA/regiones_fuego_bolivia_v1',

@@ -190,23 +190,25 @@ def make_spinner(msg=None):
     """)
 
 
-def inline_confirm(btn, on_confirm, on_cancel=None):
-    """Substitui o botao *btn* por [ Voltar ] [ OK ] no mesmo lugar.
-    
+def inline_confirm(btn, on_confirm, on_cancel=None, container=None):
+    """Substitui o botao *btn* por [ Voltar ] [ OK ] no mesmo container.
+
     Parametros
     ----------
     btn : widgets.Button
-        Botao a ser substituido. Deve estar inserido em um container
-        (VBox / HBox) que jah tenha sido exibido.
+        Botao a ser substituido.
     on_confirm : callable
         Executada quando o usuario clica OK (sem argumentos).
     on_cancel : callable, opcional
         Executada quando o usuario clica Voltar.
+    container : widgets.HBox ou VBox, opcional
+        Container que contem o botao. Omissao significa usar btn.parent.
     """
-    parent = btn.parent
-    if parent is None:
+    if container is None:
+        container = getattr(btn, 'parent', None)
+    if container is None:
         return
-    children = list(parent.children)
+    children = list(container.children)
     try:
         idx = children.index(btn)
     except ValueError:
@@ -229,15 +231,15 @@ def inline_confirm(btn, on_confirm, on_cancel=None):
     def _restore(_):
         if on_cancel:
             on_cancel()
-        parent.children = tuple(children[:idx] + [btn] + children[idx + 1:])
+        container.children = tuple(children[:idx] + [btn] + children[idx + 1:])
 
     def _do_confirm(_):
-        parent.children = tuple(children[:idx] + [spinner] + children[idx + 1:])
+        container.children = tuple(children[:idx] + [spinner] + children[idx + 1:])
         on_confirm()
 
     btn_voltar.on_click(_restore)
     btn_ok.on_click(_do_confirm)
-    parent.children = tuple(children[:idx] + [confirm_box] + children[idx + 1:])
+    container.children = tuple(children[:idx] + [confirm_box] + children[idx + 1:])
 
 
 # ---------------------------------------------------------------------------

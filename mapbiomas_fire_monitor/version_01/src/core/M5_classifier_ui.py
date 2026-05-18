@@ -7,6 +7,7 @@ from M5_queue import load_queue, save_queue, make_job_id, new_job, gcs_full, cla
     tarea_path, save_tarea, delete_tarea, list_tareas
 from M_ui_components import inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output
 from M_lang import L as Lang
+from M_regions import REGION_NAME_PROPERTY
 
 L = widgets.Layout
 
@@ -132,7 +133,7 @@ class M5QueueUI:
             grid = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
 
             if regions is not None:
-                all_regions = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.inList('region_nam', regions))
+                all_regions = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.inList(REGION_NAME_PROPERTY, regions))
             else:
                 all_regions = ee.FeatureCollection(CONFIG['asset_regions'])
 
@@ -245,7 +246,7 @@ class M5QueueUI:
                 authenticate()
             asset = CONFIG.get('asset_regions', 'projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000')
             fc = ee.FeatureCollection(asset)
-            names = fc.aggregate_array('region_nam').distinct().getInfo()
+            names = fc.aggregate_array(REGION_NAME_PROPERTY).distinct().getInfo()
             if names:
                 regions = sorted([n for n in names if n])
         except Exception:
@@ -466,7 +467,7 @@ class M5QueueUI:
             if region_name.lower() == 'peru':
                 fc = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(ee.Filter.eq('ADM0_NAME', 'Peru'))
             else:
-                fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.eq('region_nam', region_name))
+                fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.eq(REGION_NAME_PROPERTY, region_name))
             n = cim.filterBounds(fc.geometry()).size().getInfo()
             self._grid_count_cache[region_name] = n
             return n
@@ -576,7 +577,8 @@ class M5QueueUI:
                     btn_tarea = widgets.Button(description=Lang.SAVE_TASK_GCS, button_style='info', layout=L(width='150px', height='28px', font_size='12px'))
                     btn_tarea.on_click(lambda _, m=model_name: self._tarea_save_click(m))
                 btn_del_model = widgets.Button(description=Lang.DELETE_MODEL, button_style='danger', layout=L(width='140px', height='28px', font_size='12px'))
-                btn_del_model.on_click(lambda b, m=model_name: inline_confirm(b, lambda: (self._delete_model_all(m), self._refresh_ui())))
+                hbox_actions = widgets.HBox([btn_tarea, btn_del_model], layout=L(align_items='center', gap='6px', margin='0 0 6px 28px'))
+                btn_del_model.on_click(lambda b, m=model_name, c=hbox_actions: inline_confirm(b, lambda: (self._delete_model_all(m), self._refresh_ui()), container=c))
 
                 # -- tarefas (nomes) em badges --
                 tarefas_assinadas = sorted(set(j.get('task_name', '') for j in jobs_list if j.get('task_name', '')))
@@ -590,7 +592,7 @@ class M5QueueUI:
                                      layout=L(margin='0 10px 0 0')),
                     ], layout=L(align_items='center', margin='0 0 4px 0')),
                     widgets.HTML(f"<div style='margin:2px 0 6px 28px;'>{task_badges}</div>" if task_badges else ''),
-                    widgets.HBox([btn_tarea, btn_del_model], layout=L(align_items='center', gap='6px', margin='0 0 6px 28px')),
+                    hbox_actions,
                 ], layout=L(width='auto'))
 
                 # -- linhas de regiao --
@@ -616,7 +618,6 @@ class M5QueueUI:
 
                     btn_del = widgets.Button(description='', icon='trash', button_style='danger',
                                              layout=L(width='32px', height='26px', padding='0'))
-                    btn_del.on_click(lambda b, m=model_name, rg=r: inline_confirm(b, lambda: (self._delete_model_region(m, rg), self._refresh_ui())))
 
                     row = widgets.HBox([
                         widgets.HTML(f'<span style="display:inline-block;width:10px;height:10px;'
@@ -629,6 +630,7 @@ class M5QueueUI:
                         btn_del
                     ], layout=L(align_items='center', padding='5px 8px', margin='2px 0',
                                 border_bottom='1px solid #f1f5f9'))
+                    btn_del.on_click(lambda b, m=model_name, rg=r, c=row: inline_confirm(b, lambda: (self._delete_model_region(m, rg), self._refresh_ui()), container=c))
                     region_lines.append(row)
 
                 right_col = widgets.VBox([header] + region_lines, layout=L(flex='1', margin='0 0 0 12px'))
@@ -680,18 +682,21 @@ class M5QueueUI:
 
     def _on_tile_progress(self, model, region, cell_id, i, total, status):
         """Callback chamado de M5_classifier a cada tile."""
-        self._processing_state = {
-            'running': True,
-            'model': model,
-            'region': region,
-            'current': cell_id,
-            'total': total,
-            'completed': sorted(set(self._processing_state.get('completed', []) + ([cell_id] if status in ('done', 'skipped') else []))),
-            'current_i': i,
-            'last_status': status,
-        }
-        self._render_mapa_live()
-        self.tabs.selected_index = 4
+        try:
+            self._processing_state = {
+                'running': True,
+                'model': model,
+                'region': region,
+                'current': cell_id,
+                'total': total,
+                'completed': sorted(set(self._processing_state.get('completed', []) + ([cell_id] if status in ('done', 'skipped') else []))),
+                'current_i': i,
+                'last_status': status,
+            }
+            self._render_mapa_live()
+            self.tabs.selected_index = 4
+        except Exception:
+            pass
 
     def _render_mapa_live(self):
         """Renderiza Mapa con estado de procesamiento en vivo."""
@@ -772,10 +777,10 @@ class M5QueueUI:
                     chk_gee.observe(lambda change, jid=job['id']: self._toggle_gee(change, jid), names='value')
                     lbl_status = widgets.HTML(f"<span style='color:#16a34a;font-weight:700;font-size:12px;'>{job['status']}</span>")
                     btn_del_all = widgets.Button(description='', icon='trash', button_style='danger', layout=L(width='32px', height='26px', padding='0'))
-                    btn_del_all.on_click(lambda b, jb=job: inline_confirm(b, lambda: (self._delete_job_tiles_region(jb), self._remove_from_queue(jb['id']), self._refresh_ui())))
                     top = widgets.HBox([chk_gee, lbl_status, btn_tiles, btn_del_all],
                                        layout=L(align_items='center', padding='5px 8px', margin='2px 0',
                                                 border_bottom='1px solid #f1f5f9'))
+                    btn_del_all.on_click(lambda b, jb=job, c=top: inline_confirm(b, lambda: (self._delete_job_tiles_region(jb), self._remove_from_queue(jb['id']), self._refresh_ui()), container=c))
                     rows.append(widgets.VBox([top, tile_out]))
 
                 right_col = widgets.VBox([header] + rows, layout=L(flex='1', margin='0 0 0 12px'))
@@ -875,7 +880,7 @@ class M5QueueUI:
 
             region_val = self.f_mapa_region.value
             if region_val and region_val != 'Todas':
-                sel = all_regions.filter(ee.Filter.eq('region_nam', region_val))
+                sel = all_regions.filter(ee.Filter.eq(REGION_NAME_PROPERTY, region_val))
                 sel_style = sel.style(**{'color': 'e74c3c', 'width': 2, 'fillColor': 'e74c3c20'})
                 overlay = ee.ImageCollection([overlay, sel_style]).mosaic()
 
@@ -896,7 +901,7 @@ class M5QueueUI:
             region_names = sorted(set(j['region'] for j in self.queue))
             if not region_names:
                 try:
-                    region_names = all_regions.aggregate_array('region_nam').distinct().getInfo()
+                    region_names = all_regions.aggregate_array(REGION_NAME_PROPERTY).distinct().getInfo()
                     region_names = sorted([n for n in region_names if n])
                 except Exception:
                     region_names = []
@@ -974,7 +979,6 @@ class M5QueueUI:
 
                     btn_del_region = widgets.Button(description='', icon='trash', button_style='danger',
                                                     layout=L(width='32px', height='26px', padding='0'))
-                    btn_del_region.on_click(lambda b, m=model_name, rg=r: inline_confirm(b, lambda: (self._delete_model_region(m, rg), self._refresh_ui())))
 
                     line = widgets.HBox([
                         widgets.HTML(f"<b style='width:120px;color:#334155;'>{r}</b>", layout=L(margin='0 8px 0 0')),
@@ -982,10 +986,10 @@ class M5QueueUI:
                         btn_del_region
                     ], layout=L(align_items='center', padding='5px 8px', margin='2px 0',
                                 border_bottom='1px solid #f1f5f9'))
+                    btn_del_region.on_click(lambda b, m=model_name, rg=r, c=line: inline_confirm(b, lambda: (self._delete_model_region(m, rg), self._refresh_ui()), container=c))
                     region_lines.append(line)
 
                 btn_del_model = widgets.Button(description=Lang.DELETE_MODEL, button_style='danger', layout=L(width='150px', height='28px'))
-                btn_del_model.on_click(lambda b, m=model_name: inline_confirm(b, lambda: (self._delete_model_all(m), self._refresh_ui())))
 
                 header = widgets.VBox([
                     widgets.HBox([
@@ -1000,6 +1004,7 @@ class M5QueueUI:
                     widgets.VBox(region_lines, layout=L(margin='0 0 6px 0')),
                     btn_del_model,
                 ], layout=L(flex='1', margin='0 0 0 12px'))
+                btn_del_model.on_click(lambda b, m=model_name, c=right_col: inline_confirm(b, lambda: (self._delete_model_all(m), self._refresh_ui()), container=c))
 
                 card = make_card_body(left_col, right_col, border_color='#bbf7d0', background='#f0fdf4')
                 cards.append(card)

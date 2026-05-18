@@ -19,18 +19,23 @@ class CacheManager:
 
     @staticmethod
     def clear():
-        """Deleta o arquivo de cache no GCS e reseta o estado local."""
+        """Deleta cache local + GCS e reseta o estado em memória."""
         with CacheManager._lock:
+            CacheManager._state = {}
+            # Local
+            if os.path.exists(CacheManager.CACHE_FILE):
+                try:
+                    os.remove(CacheManager.CACHE_FILE)
+                except Exception as e:
+                    print(f"Error removing local cache: {e}")
+            # GCS
             try:
                 gcs_path = CacheManager._get_gcs_path()
                 fs = _get_fs()
                 if fs.exists(gcs_path):
                     fs.rm(gcs_path)
-                CacheManager._state = None
-                return True
             except Exception as e:
-                print(f"Error clearing cache: {e}")
-                return False
+                print(f"Error clearing GCS cache: {e}")
 
     @staticmethod
     def _get_gcs_path():
@@ -53,7 +58,9 @@ class CacheManager:
                 "assets_annually": [],
                 "gcs_chunks": {},
                 "cogs_monthly": [],
-                "cogs_annually": []
+                "cogs_annually": [],
+                "trained_models": [],
+                "sample_collections": []
             }
             
             # 1. Tenta carregar do arquivo local PRIMEIRO (Offline instantâneo)
@@ -323,24 +330,58 @@ class CacheManager:
         return CacheManager._state
 
     @staticmethod
+    def _scan_gcs_subdir(subdir, logger=None):
+        """Escaneia {subdir}/ no GCS e retorna lista de nomes de subdiretórios."""
+        from M0_auth_config import CONFIG, _gcs_models_base
+        base = f"{CONFIG['bucket']}/{_gcs_models_base()}{'/' + subdir if subdir else ''}"
+        names = []
+        try:
+            fs = _get_fs()
+            if logger: logger(f"Escaneando GCS: gs://{base}/ ...", "info")
+            items = fs.ls(base)
+            for item in items:
+                name = item.rstrip('/').split('/')[-1]
+                if name and not name.startswith('.'):
+                    names.append(name)
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            if logger: logger(f"Erro ao escanear {subdir}: {e}", "warning")
+        return sorted(names)
+
+    @staticmethod
+    def build_cache_from_models(logger=None):
+        """Popula cache com IDs de modelos treinados (training_* em LIBRARY_MODELS/)."""
+        state = CacheManager.get_state()
+        all_dirs = CacheManager._scan_gcs_subdir('', logger=logger)
+        state['trained_models'] = sorted([d for d in all_dirs if d.startswith('training_')])
+        CacheManager._state = state
+        CacheManager.save()
+        if logger:
+            logger(f"Modelos sincronizados: {len(state['trained_models'])} encontrados.", "success")
+        return CacheManager._state
+
+    @staticmethod
+    def build_cache_from_samples(logger=None):
+        """Popula cache com coleções de amostras (em LIBRARY_MODELS/samples-ESbeta/)."""
+        state = CacheManager.get_state()
+        state['sample_collections'] = CacheManager._scan_gcs_subdir('samples-ESbeta', logger=logger)
+        CacheManager._state = state
+        CacheManager.save()
+        if logger:
+            logger(f"Coleções de amostras: {len(state['sample_collections'])} encontradas.", "success")
+        return CacheManager._state
+
+    @staticmethod
     def build_full_cache(logger=None, years=None):
         """Reconstrói o cache completo."""
         CacheManager.build_cache_from_gee(logger=logger)
         CacheManager.build_cache_from_gcs(logger=logger, years=years)
+        CacheManager.build_cache_from_models(logger=logger)
+        CacheManager.build_cache_from_samples(logger=logger)
         return CacheManager._state
 
-    @staticmethod
-    def clear():
-        """Remove o arquivo de cache local e limpa o estado em memória."""
-        CacheManager._state = {}
-        if os.path.exists(CacheManager.CACHE_FILE):
-            try:
-                os.remove(CacheManager.CACHE_FILE)
-                print(f" Local cache removed: {CacheManager.CACHE_FILE}")
-            except Exception as e:
-                print(f" Error removing local cache: {e}")
-        else:
-            print("Local cache not found.")
+
 
     @staticmethod
     def save(state=None):

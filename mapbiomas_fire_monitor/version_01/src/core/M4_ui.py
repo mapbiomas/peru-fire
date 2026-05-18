@@ -4,14 +4,14 @@ import numpy as np
 import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
-from M_cache import _get_fs
+from M_cache import CacheManager, _get_fs
 from M_ui_components import PipelineStepUI, make_spinner, Layout, make_empty_state, make_sync_button, make_select_all_none, make_search_box
 from M_lang import L as Lang
 
 from M4_data_extractor import extract_pixels_from_gcs, list_sample_collections_gcs, list_campaigns_gcs
 from M4_algorithms_dnn import ModelTrainer, _get_tf
 from M4_analytics import view_analytics, render_diagnostic_dashboard, render_model_card_html
-from M4_hub_manager import list_trained_models, _load_m4_cache, _save_m4_cache
+from M4_hub_manager import list_trained_models, _load_m4_metadata, _save_m4_metadata
 class ModelTrainerUI(PipelineStepUI):
     def __init__(self):
         super().__init__(
@@ -349,10 +349,12 @@ class ModelTrainerUI(PipelineStepUI):
             new_c = change['new']
             GLOBAL_OPTS['SAMPLING_CAMPAIGN'] = new_c
             self.sampling_campaign = new_c
-            # Limpa cache para forçar refresh real das amostras da nova campanha
-            cache = _load_m4_cache()
-            if 'known_samples' in cache: del cache['known_samples']
-            _save_m4_cache(cache)
+            # Limpa cache de sample_collections para forçar refresh real
+            state = CacheManager.get_state()
+            if state.get('sample_collections'):
+                state['sample_collections'] = []
+                CacheManager._state = state
+                CacheManager.save()
             # Refresh UI
             self._refresh_samples_panes()
             
@@ -432,7 +434,6 @@ class ModelTrainerUI(PipelineStepUI):
     def _build_extraction_matrix(self):
         """Constrói a matriz dinâmica priorizando o cache local 'state.json'."""
         L = widgets.Layout
-        from M_cache import CacheManager
         
         # --- CABEÇALHO COM BOTÃO DE SYNC ---
         def _sync_body():
@@ -638,7 +639,7 @@ class ModelTrainerUI(PipelineStepUI):
 
         fs = _get_fs()
         
-        cache = _load_m4_cache()
+        cache = _load_m4_metadata()
         metadata_cache = cache.get('metadata', {})
         
         updated_cache = False
@@ -664,7 +665,7 @@ class ModelTrainerUI(PipelineStepUI):
         
         if updated_cache:
             cache['metadata'] = metadata_cache
-            _save_m4_cache(cache)
+            _save_m4_metadata(cache)
             
         if show_loader: self.hide_loader()
         self._refresh_canvas_hub()
@@ -745,7 +746,7 @@ class ModelTrainerUI(PipelineStepUI):
         """Redesenha o Ranking no Painel Lateral do Canvas."""
         # 1. Carregar lista e metadados
         m_ids = list_trained_models()
-        cache = _load_m4_cache()
+        cache = _load_m4_metadata()
         
         full_data = []
         for mid in m_ids:

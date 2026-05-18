@@ -71,16 +71,25 @@ GLOBAL_OPTS = {
 
 # ─── AUTHENTICATION ─────────────────────────────────────────
 
+_AUTHENTICATED = False
+
 def authenticate(project='mapbiomas-peru', clean_cache=False):
     """Autenticar com Google Earth Engine e GCS (Suporta Local e Colab)."""
+    global _AUTHENTICATED
+
+    if clean_cache:
+        _AUTHENTICATED = False
+        from M_cache import CacheManager
+        CacheManager.clear()
+    
+    if _AUTHENTICATED:
+        return
+    
     import ee
 
     if getattr(ee.data, '_credentials', None):
+        _AUTHENTICATED = True
         return
-    
-    if clean_cache:
-        from M_cache import CacheManager
-        CacheManager.clear()
     
     # Detecção de ambiente Colab para autenticação GCS
     try:
@@ -101,6 +110,7 @@ def authenticate(project='mapbiomas-peru', clean_cache=False):
         print("[GEE] Authenticated successfully.")
     
     print("[GCS] GCS/ADC authentication configured.")
+    _AUTHENTICATED = True
 
 
 def _get_fs():
@@ -179,6 +189,15 @@ def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='
                 print("GCS cache not found (nothing to clear).")
         except Exception as e:
             print(f"Warning while clearing cache: {e}")
+    
+    # Sincronizar cache automaticamente após M0
+    try:
+        from M_cache import CacheManager
+        state = CacheManager.get_state()
+        if not state.get('updated_at') or not state.get('cogs_monthly'):
+            CacheManager.build_full_cache()
+    except Exception as e:
+        print(f"Warning: cache sync skipped ({e}). Run manual sync if needed.")
     
     return GLOBAL_OPTS
 
