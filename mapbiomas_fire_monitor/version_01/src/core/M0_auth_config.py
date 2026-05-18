@@ -72,14 +72,16 @@ GLOBAL_OPTS = {
 # ─── AUTHENTICATION ─────────────────────────────────────────
 
 _AUTHENTICATED = False
+_GCS_CREDENTIALS = None
+
 
 def authenticate(project='mapbiomas-peru', clean_cache=False):
     """Autenticar com Google Earth Engine e GCS (Suporta Local e Colab)."""
-    global _AUTHENTICATED
+    global _AUTHENTICATED, _GCS_CREDENTIALS
 
     if clean_cache:
-_AUTHENTICATED = False
-_GCS_CREDENTIALS = None
+        _AUTHENTICATED = False
+        _GCS_CREDENTIALS = None
         from M_cache import CacheManager
         CacheManager.clear()
     
