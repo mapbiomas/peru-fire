@@ -238,3 +238,130 @@ def inline_confirm(btn, on_confirm, on_cancel=None):
     btn_voltar.on_click(_restore)
     btn_ok.on_click(_do_confirm)
     parent.children = tuple(children[:idx] + [confirm_box] + children[idx + 1:])
+
+
+# ---------------------------------------------------------------------------
+# Atalho Layout (definir no modulo, nao localmente nos metodos)
+# ---------------------------------------------------------------------------
+Layout = widgets.Layout
+
+
+# ---------------------------------------------------------------------------
+# make_empty_state — placeholder padrao "sem dados"
+# ---------------------------------------------------------------------------
+def make_empty_state(message, padding="20px"):
+    """Retorna widget HTML com mensagem de estado vazio."""
+    return widgets.HTML(
+        f"<div style='padding:{padding}; text-align:center; color:#999; border:1px dashed #ccc;'>"
+        f"<i>{message}</i></div>"
+    )
+
+
+# ---------------------------------------------------------------------------
+# flash_output — limpa e exibe conteudo em um Output
+# ---------------------------------------------------------------------------
+def flash_output(output_widget, content, as_html=True):
+    """Limpa e exibe conteudo em um widget Output."""
+    from IPython.display import HTML as _HTML
+    with output_widget:
+        clear_output()
+        if as_html:
+            display(_HTML(content))
+        else:
+            display(content)
+
+
+# ---------------------------------------------------------------------------
+# make_sync_button — botao com estado "Sincronizando..." + disable
+# ---------------------------------------------------------------------------
+def make_sync_button(description, icon, on_click_callback, width='220px', height='30px', button_style='success'):
+    """Retorna (btn, output) onde btn desabilita durante callback."""
+    btn = widgets.Button(description=description, icon=icon, button_style=button_style,
+                         layout=Layout(width=width, height=height))
+    out = widgets.Output()
+
+    def _handler(b):
+        btn.description = L.SYNCING
+        btn.disabled = True
+        with out:
+            clear_output()
+            on_click_callback()
+        btn.description = description
+        btn.disabled = False
+
+    btn.on_click(_handler)
+    return btn, out
+
+
+# ---------------------------------------------------------------------------
+# make_select_all_none — par Todos / Limpiar
+# ---------------------------------------------------------------------------
+def make_select_all_none(on_all=None, on_none=None, width='70px'):
+    """Retorna (btn_all, btn_none, hbox)."""
+    btn_all = widgets.Button(description=L.ALL, icon='check-square',
+                             layout=Layout(width=width), button_style='info')
+    btn_none = widgets.Button(description=L.CLEAR, icon='square-o',
+                              layout=Layout(width='75px'), button_style='warning')
+    if on_all:
+        btn_all.on_click(on_all)
+    if on_none:
+        btn_none.on_click(on_none)
+    hbox = widgets.HBox([btn_all, btn_none])
+    return btn_all, btn_none, hbox
+
+
+# ---------------------------------------------------------------------------
+# make_search_box — campo de texto com placeholder
+# ---------------------------------------------------------------------------
+def make_search_box(placeholder, on_change=None):
+    """Retorna widgets.Text com placeholder. on_change recebe o valor."""
+    text = widgets.Text(description=L.SEARCH + ':', placeholder=placeholder,
+                        layout=Layout(width='100%'))
+    if on_change:
+        text.observe(lambda change: on_change(change['new']), names='value')
+    return text
+
+
+# ---------------------------------------------------------------------------
+# build_thumbnail_column — coluna esquerda com thumb 128px + spacer
+# ---------------------------------------------------------------------------
+def build_thumbnail_column(thumb_b64, width='128px'):
+    """Cria VBox com thumbnail (ou placeholder) e spacer vertical."""
+    if thumb_b64:
+        thumb_el = widgets.HTML(
+            f'<img src="data:image/png;base64,{thumb_b64}" '
+            f'style="width:128px;height:128px;object-fit:cover;border-radius:8px;border:1px solid #d1d5db;">',
+            layout=Layout(width=width, margin='0'))
+    else:
+        thumb_el = widgets.HTML(
+            '<div style="width:128px;height:128px;background:#f1f5f9;border-radius:8px;border:1px solid #d1d5db;"></div>',
+            layout=Layout(width=width, margin='0'))
+    return widgets.VBox([
+        thumb_el,
+        widgets.Box([], layout=Layout(flex='1')),
+    ], layout=Layout(width=width, height='100%', align_self='stretch'))
+
+
+# ---------------------------------------------------------------------------
+# make_task_badges — badges roxos para nomes de tarefa
+# ---------------------------------------------------------------------------
+def make_task_badges(task_names):
+    """Gera HTML com badges para nomes de tarefa."""
+    names = sorted(set(n for n in task_names if n))
+    if not names:
+        return ''
+    style = ('display:inline-block;background:#f3e8ff;color:#7c3aed;font-size:10px;'
+             'padding:2px 8px;border-radius:10px;margin:2px 3px;border:1px solid #d8b4fe;')
+    return ''.join(f'<span style="{style}">{t}</span>' for t in names)
+
+
+# ---------------------------------------------------------------------------
+# make_card_body — HBox padronizado para cards (thumb + conteudo)
+# ---------------------------------------------------------------------------
+def make_card_body(left_col, right_col, border_color='#e2e8f0', background='#ffffff'):
+    """Envolve colunas esquerda/direita em um card HBox padronizado."""
+    return widgets.HBox([left_col, right_col],
+        layout=Layout(padding='0', border=f'1px solid {border_color}', border_radius='8px',
+                      margin='6px 0', background=background,
+                      box_shadow='0 1px 3px rgba(0,0,0,0.08)',
+                      align_items='stretch'))

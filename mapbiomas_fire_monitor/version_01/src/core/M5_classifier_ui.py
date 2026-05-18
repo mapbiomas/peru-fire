@@ -5,7 +5,8 @@ import ipywidgets as widgets
 from M0_auth_config import CONFIG, _get_fs
 from M5_queue import load_queue, save_queue, make_job_id, new_job, gcs_full, classified_tiles_dir, \
     tarea_path, save_tarea, delete_tarea, list_tareas
-from M_ui_components import inline_confirm, make_spinner
+from M_ui_components import inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output
+from M_lang import L as Lang
 
 L = widgets.Layout
 
@@ -517,7 +518,7 @@ class M5QueueUI:
 
         if not filtered:
             pend_vbox = widgets.VBox([tarea_section, filter_box, btn_clear,
-                widgets.HTML("<div style='padding:20px; text-align:center; color:#999; border:1px dashed #ccc;'><i>No hay tareas pendientes.</i></div>")])
+                make_empty_state(L.NO_TASKS)])
         else:
             grouped = {}
             for j in filtered:
@@ -553,19 +554,7 @@ class M5QueueUI:
 
                 # -- thumb (128px, lado esquerdo) --
                 thumb_b64 = self._generate_thumb(model_name, size=128, regions=card_regions)
-                if thumb_b64:
-                    thumb_el = widgets.HTML(
-                        f'<img src="data:image/png;base64,{thumb_b64}" '
-                        f'style="width:128px;height:128px;object-fit:cover;border-radius:8px;border:1px solid #d1d5db;">',
-                        layout=L(width='128px', margin='0'))
-                else:
-                    thumb_el = widgets.HTML(
-                        '<div style="width:128px;height:128px;background:#f1f5f9;border-radius:8px;border:1px solid #d1d5db;"></div>',
-                        layout=L(width='128px', margin='0'))
-                left_col = widgets.VBox([
-                    thumb_el,
-                    widgets.Box([], layout=L(flex='1')),
-                ], layout=L(width='128px', height='100%', align_self='stretch'))
+                left_col = build_thumbnail_column(thumb_b64)
 
                 # -- checkbox de habilitacion --
                 chk = widgets.Checkbox(
@@ -591,11 +580,7 @@ class M5QueueUI:
 
                 # -- tarefas (nomes) em badges --
                 tarefas_assinadas = sorted(set(j.get('task_name', '') for j in jobs_list if j.get('task_name', '')))
-                task_badges = ''.join(
-                    f'<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;font-size:10px;'
-                    f'padding:2px 8px;border-radius:10px;margin:2px 3px;border:1px solid #d8b4fe;">{t}</span>'
-                    for t in tarefas_assinadas
-                )
+                task_badges = make_task_badges(tarefas_assinadas)
 
                 # -- cabecalho direito --
                 header = widgets.VBox([
@@ -648,11 +633,7 @@ class M5QueueUI:
 
                 right_col = widgets.VBox([header] + region_lines, layout=L(flex='1', margin='0 0 0 12px'))
 
-                body = widgets.HBox([left_col, right_col],
-                    layout=L(padding='0', border='1px solid #e2e8f0', border_radius='8px',
-                             margin='6px 0', background='#ffffff',
-                             box_shadow='0 1px 3px rgba(0,0,0,0.08)',
-                             align_items='stretch'))
+                body = make_card_body(left_col, right_col)
                 cards.append(body)
 
             pend_vbox = widgets.VBox([tarea_section, filter_box, btn_clear] + cards)
@@ -758,7 +739,7 @@ class M5QueueUI:
         filtered = self._apply_filters(jobs, self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task)
 
         if not filtered:
-            self.w_pub_rows.children = [widgets.HTML("<div style='padding:20px; text-align:center; color:#999; border:1px dashed #ccc;'><i>Ninguna tarea lista para publicar.</i></div>")]
+            self.w_pub_rows.children = [make_empty_state(Lang.NO_TASKS_PUBLISH)]
         else:
             grouped = {}
             for j in filtered:
@@ -769,24 +750,11 @@ class M5QueueUI:
 
                 # -- thumb 128px esquerda --
                 thumb_b64 = self._generate_thumb(model_name, size=128, regions=card_regions)
-                thumb_el = widgets.HTML(
-                    f'<img src="data:image/png;base64,{thumb_b64}" '
-                    f'style="width:128px;height:128px;object-fit:cover;border-radius:8px;border:1px solid #d1d5db;">'
-                    if thumb_b64 else
-                    '<div style="width:128px;height:128px;background:#f1f5f9;border-radius:8px;border:1px solid #d1d5db;"></div>',
-                    layout=L(width='128px', margin='0'))
-                left_col = widgets.VBox([
-                    thumb_el,
-                    widgets.Box([], layout=L(flex='1')),
-                ], layout=L(width='128px', height='100%', align_self='stretch'))
+                left_col = build_thumbnail_column(thumb_b64)
 
                 # -- tarefas badges --
                 tarefas_assinadas = sorted(set(j.get('task_name', '') for j in jobs_list if j.get('task_name', '')))
-                task_badges = ''.join(
-                    f'<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;font-size:10px;'
-                    f'padding:2px 8px;border-radius:10px;margin:2px 3px;border:1px solid #d8b4fe;">{t}</span>'
-                    for t in tarefas_assinadas
-                )
+                task_badges = make_task_badges(tarefas_assinadas)
 
                 # -- cabecalho direito --
                 header = widgets.VBox([
@@ -811,11 +779,7 @@ class M5QueueUI:
                     rows.append(widgets.VBox([top, tile_out]))
 
                 right_col = widgets.VBox([header] + rows, layout=L(flex='1', margin='0 0 0 12px'))
-                cards.append(widgets.HBox([left_col, right_col],
-                    layout=L(padding='0', border='1px solid #e2e8f0', border_radius='8px',
-                             margin='6px 0', background='#ffffff',
-                             box_shadow='0 1px 3px rgba(0,0,0,0.08)',
-                             align_items='stretch')))
+                cards.append(make_card_body(left_col, right_col))
             self.w_pub_rows.children = cards
         self.tab_publish.children = [filter_box, self.w_pub_rows]
 
@@ -958,7 +922,7 @@ class M5QueueUI:
             img_html = f'<img src="data:image/png;base64,{b64}" style="max-width:100%; border:1px solid #ccc; border-radius:4px;">'
             self.w_mapa_rows.children = [widgets.HTML(img_html + scale_html + legenda + grid_table), self._live_status_out]
         except Exception:
-            self.w_mapa_rows.children = [widgets.HTML("<div style='padding:20px; text-align:center; color:#999; border:1px dashed #ccc;'><i>No se pudo generar el mapa. Verifique conexion GEE.</i></div>"), self._live_status_out]
+            self.w_mapa_rows.children = [make_empty_state(Lang.NO_MAP), self._live_status_out]
 
         self.tab_mapa.children = [filter_box, self.w_mapa_rows]
 
@@ -971,7 +935,7 @@ class M5QueueUI:
         filtered = self._apply_filters(jobs, self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task)
 
         if not filtered:
-            self.w_done_rows.children = [widgets.HTML("<div style='padding:20px; text-align:center; color:#999; border:1px dashed #ccc;'><i>Ninguna tarea finalizada aun.</i></div>")]
+            self.w_done_rows.children = [make_empty_state(Lang.NO_TASKS_DONE)]
         else:
             grouped = {}
             for j in filtered:
@@ -990,24 +954,11 @@ class M5QueueUI:
 
                 # -- thumb 128px esquerda --
                 thumb_b64 = self._generate_thumb(model_name, size=128, regions=card_regions)
-                thumb_el = widgets.HTML(
-                    f'<img src="data:image/png;base64,{thumb_b64}" '
-                    f'style="width:128px;height:128px;object-fit:cover;border-radius:8px;border:1px solid #d1d5db;">'
-                    if thumb_b64 else
-                    '<div style="width:128px;height:128px;background:#f1f5f9;border-radius:8px;border:1px solid #d1d5db;"></div>',
-                    layout=L(width='128px', margin='0'))
-                left_col = widgets.VBox([
-                    thumb_el,
-                    widgets.Box([], layout=L(flex='1')),
-                ], layout=L(width='128px', height='100%', align_self='stretch'))
+                left_col = build_thumbnail_column(thumb_b64)
 
                 # -- tarefas badges --
                 tarefas_assinadas = sorted(set(j.get('task_name', '') for j in jobs_list if j.get('task_name', '')))
-                task_badges = ''.join(
-                    f'<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;font-size:10px;'
-                    f'padding:2px 8px;border-radius:10px;margin:2px 3px;border:1px solid #d8b4fe;">{t}</span>'
-                    for t in tarefas_assinadas
-                )
+                task_badges = make_task_badges(tarefas_assinadas)
 
                 # -- cabecalho direito --
                 region_lines = []
@@ -1021,7 +972,7 @@ class M5QueueUI:
 
                     btn_del_region = widgets.Button(description='', icon='trash', button_style='danger',
                                                     layout=L(width='32px', height='26px', padding='0'))
-                    btn_del_region.on_click(lambda _, m=model_name, rg=r: self._confirm_delete_model_region(m, rg))
+                    btn_del_region.on_click(lambda b, m=model_name, rg=r: inline_confirm(b, lambda: (self._delete_model_region(m, rg), self._refresh_ui())))
 
                     line = widgets.HBox([
                         widgets.HTML(f"<b style='width:120px;color:#334155;'>{r}</b>", layout=L(margin='0 8px 0 0')),
@@ -1048,11 +999,7 @@ class M5QueueUI:
                     btn_del_model,
                 ], layout=L(flex='1', margin='0 0 0 12px'))
 
-                card = widgets.HBox([left_col, right_col],
-                    layout=L(padding='0', border='1px solid #bbf7d0', border_radius='8px',
-                             margin='6px 0', background='#f0fdf4',
-                             box_shadow='0 1px 3px rgba(0,0,0,0.08)',
-                             align_items='stretch'))
+                card = make_card_body(left_col, right_col, border_color='#bbf7d0', background='#f0fdf4')
                 cards.append(card)
 
             self.w_done_rows.children = cards

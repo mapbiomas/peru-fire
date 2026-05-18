@@ -5,7 +5,7 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
-from M_ui_components import PipelineStepUI, make_spinner
+from M_ui_components import PipelineStepUI, make_spinner, Layout, make_empty_state, make_sync_button, make_select_all_none, make_search_box
 
 from M4_data_extractor import extract_pixels_from_gcs, list_sample_collections_gcs, list_campaigns_gcs
 from M4_algorithms_dnn import ModelTrainer, _get_tf
@@ -140,8 +140,7 @@ class ModelTrainerUI(PipelineStepUI):
             self._refresh_canvas_hub()
         self.w_canvas_sort.observe(_on_sort_change, names='value')
 
-        btn_sync = widgets.Button(description="Sincronizar GCS", icon="refresh", layout=widgets.Layout(width='100%'), button_style='primary')
-        btn_sync.on_click(lambda _: self._sync_repository(show_loader=True, force_refresh=True))
+        btn_sync, _ = make_sync_button("Sincronizar GCS", "refresh", lambda: self._sync_repository(show_loader=True, force_refresh=True), width='100%', button_style='primary')
 
         btn_all_canvas = widgets.Button(description="Todos", icon="check-square", layout=widgets.Layout(width='48%'), button_style='info')
         btn_none_canvas = widgets.Button(description="Limpiar", icon="square-o", layout=widgets.Layout(width='48%'), button_style='warning')
@@ -321,7 +320,7 @@ class ModelTrainerUI(PipelineStepUI):
             matrix_rows.append(row)
             
         if not matrix_rows:
-            return widgets.HTML('<div style="padding:10px; color:#999;"><i>No se han encontrado resultados con este filtro.</i></div>')
+            return make_empty_state('No se han encontrado resultados con este filtro.', padding='10px')
             
         return widgets.VBox(matrix_rows)
 
@@ -358,10 +357,7 @@ class ModelTrainerUI(PipelineStepUI):
             
         self.w_campaign.observe(_on_campaign_change, names='value')
 
-        btn_all = widgets.Button(description="Todos", icon="check-square", layout=L(width='70px'), button_style='info')
-        btn_none = widgets.Button(description="Limpiar", icon="square-o", layout=L(width='75px'), button_style='warning')
-        btn_all.on_click(self._on_select_all_samples)
-        btn_none.on_click(self._on_select_none_samples)
+        btn_all, btn_none, _ = make_select_all_none(self._on_select_all_samples, self._on_select_none_samples)
         
         self.txt_search_samples.layout.flex = '1'
         sample_toolbar = widgets.HBox([
@@ -438,27 +434,13 @@ class ModelTrainerUI(PipelineStepUI):
         from M_cache import CacheManager
         
         # --- CABEÇALHO COM BOTÃO DE SYNC ---
-        btn_sync = widgets.Button(
-            description="Sincronizar Catálogo (GCS)",
-            icon="sync",
-            button_style='success',
-            layout=L(width='220px', height='30px')
-        )
-        sync_out = widgets.Output()
-        
-        def _on_sync_click(b):
-            btn_sync.description = "Sincronizando..."
-            btn_sync.disabled = True
-            with sync_out:
-                clear_output()
-                print("Escaneando GCS... Aguarde.")
-                CacheManager.build_cache_from_gcs() # Força scan real no GCS
-                self._refresh_matrix_only()         # Atualiza a UI
-                print("¡Catálogo Sincronizado!")
-            btn_sync.description = "Sincronizar Catálogo (GCS)"
-            btn_sync.disabled = False
+        def _sync_body():
+            print("Escaneando GCS... Aguarde.")
+            CacheManager.build_cache_from_gcs()
+            self._refresh_matrix_only()
+            print("¡Catálogo Sincronizado!")
 
-        btn_sync.on_click(_on_sync_click)
+        btn_sync, sync_out = make_sync_button("Sincronizar Catálogo (GCS)", "sync", _sync_body, width='220px', height='30px')
         
         header = widgets.HBox([
             widgets.HTML("<b style='font-size:14px; color:#2c3e50;'>2. Matriz de Extracción (Multisensor GCS)</b>"),
@@ -523,7 +505,7 @@ class ModelTrainerUI(PipelineStepUI):
             }
 
         if not available_combos:
-            return widgets.HTML('<div style="padding:20px; color:#999;"><i>No se han encontrado COGs en el repositorio GCS.</i></div>')
+            return make_empty_state('No se han encontrado COGs en el repositorio GCS.')
 
         self.band_chk_map = {} 
         matrix_rows = []
