@@ -65,6 +65,9 @@ def get_config(country='peru'):
 def authenticate(project='mapbiomas-peru', clean_cache=False):
     """Autenticar com Google Earth Engine e GCS (Suporta Local e Colab)."""
     import ee
+
+    if getattr(ee.data, '_credentials', None):
+        return
     
     if clean_cache:
         from M_cache import CacheManager
@@ -106,13 +109,14 @@ GLOBAL_OPTS = {
 def _get_fs():
     """Retorna uma instância GCSFileSystem corretamente autenticada para qualquer ambiente."""
     import gcsfs
+    project = CONFIG['gcs_project']
     is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
     if is_colab:
-        # No Colab, não passamos project para evitar erros de billing desabilitado
-        return gcsfs.GCSFileSystem(token='google_default', requests_timeout=5)
+        try:
+            return gcsfs.GCSFileSystem(token='google_default', project=project, requests_timeout=5)
+        except ValueError:
+            return gcsfs.GCSFileSystem(token='google_default', requests_timeout=5)
     else:
-        # No Windows/Local, usamos o token padrão (ADC). 
-        # Deixamos o gcsfs detectar o projeto automaticamente para evitar conflitos de quota.
         return gcsfs.GCSFileSystem(token='google_default', requests_timeout=10)
 
 def set_global_opts(sensor='landsat', periodicity='yearly', personal_task_flag='MONITOR', sampling_campaign='monitor_01', clean_cache=False):

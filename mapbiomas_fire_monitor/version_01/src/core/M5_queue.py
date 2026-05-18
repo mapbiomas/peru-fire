@@ -20,12 +20,13 @@ def save_queue(q):
 def make_job_id(model, region, period):
     return f"{model} | {region} | {period}"
 
-def new_job(model, region, period):
+def new_job(model, region, period, task_name=''):
     return {
         'id': make_job_id(model, region, period),
         'model': model,
         'region': region,
         'period': period,
+        'task_name': task_name,
         'status': 'PENDING',
         'enabled': True,
         'upload_gee': False,

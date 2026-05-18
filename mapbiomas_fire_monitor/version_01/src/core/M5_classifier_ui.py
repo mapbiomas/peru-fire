@@ -5,6 +5,7 @@ import ipywidgets as widgets
 from M0_auth_config import CONFIG, _get_fs
 from M5_queue import load_queue, save_queue, make_job_id, new_job, gcs_full, classified_tiles_dir, \
     tarea_path, save_tarea, delete_tarea, list_tareas
+from M_ui_components import inline_confirm, make_spinner
 
 L = widgets.Layout
 
@@ -16,6 +17,9 @@ class M5QueueUI:
 
         self._thumb_cache = {}
         self._grid_count_cache = {}
+        self._processing_state = {}
+        self._card_checkboxes = {}
+        self._live_status_out = widgets.Output()
 
         self.w_model_box = widgets.VBox()
         self.w_region_box = widgets.VBox()
@@ -30,6 +34,23 @@ class M5QueueUI:
 
         self.btn_refresh = widgets.Button(description='Actualizar Vista', icon='refresh', layout=L(width='150px'))
         self.btn_refresh.on_click(lambda _: self._refresh_ui())
+
+        self.w_task_name = widgets.Text(
+            value='',
+            placeholder='Ej: Clasificar Amazonia Baja 2025 (Lucas)',
+            description='Nombre Tarea:',
+            disabled=False,
+            layout=L(width='600px')
+        )
+
+        self.f_pend_task = widgets.Dropdown(description='Tarea:', options=['Todas'], layout=L(width='300px'))
+        self.f_pend_task.observe(lambda _: self._render_pending(), names='value')
+
+        self.f_pub_task = widgets.Dropdown(description='Tarea:', options=['Todas'], layout=L(width='300px'))
+        self.f_pub_task.observe(lambda _: self._render_publish(), names='value')
+
+        self.f_done_task = widgets.Dropdown(description='Tarea:', options=['Todas'], layout=L(width='300px'))
+        self.f_done_task.observe(lambda _: self._render_done(), names='value')
 
         self.w_guide = widgets.HTML()
 
@@ -94,9 +115,10 @@ class M5QueueUI:
 
     # --- THUMBNAIL (GEE) ---
 
-    def _generate_thumb(self, model, size=128):
+    def _generate_thumb(self, model, size=128, regions=None):
         """Gera thumbnail GEE das cells de um modelo. Cache em memoria."""
-        cache_key = f"{model}_{size}"
+        reg_suffix = '_'.join(sorted(regions or []))
+        cache_key = f"{model}_{size}_{reg_suffix}"
         if cache_key in self._thumb_cache:
             return self._thumb_cache[cache_key]
         try:
@@ -108,14 +130,21 @@ class M5QueueUI:
             peru = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(ee.Filter.eq('ADM0_NAME', 'Peru'))
             grid = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
 
-            regions_names = sorted(set(j['region'] for j in self.queue if j['model'] == model))
-            all_regions = ee.FeatureCollection(CONFIG['asset_regions'])
+            if regions is not None:
+                all_regions = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.inList('region_nam', regions))
+            else:
+                all_regions = ee.FeatureCollection(CONFIG['asset_regions'])
 
             bg = peru.style(**{'fillColor': 'f0f0f0', 'color': 'cccccc', 'width': 1})
             region_lines = all_regions.style(**{'color': '2980b9', 'width': 1, 'fillColor': '00000000'})
             grid_lines = grid.style(**{'color': 'e0e0e0', 'width': 0.3, 'fillColor': '00000000'})
 
-            layers = [bg, region_lines, grid_lines]
+            if regions:
+                sel_fill = all_regions.style(**{'color': '2980b9', 'width': 1, 'fillColor': '2980b920'})
+                layers = [bg, region_lines, grid_lines, sel_fill]
+            else:
+                layers = [bg, region_lines, grid_lines]
+
             overlay = ee.ImageCollection(layers).mosaic()
             bounds = peru.geometry().bounds(1, 'EPSG:4326')
             url = overlay.getThumbURL({'region': bounds, 'dimensions': size, 'format': 'png'})
@@ -244,6 +273,12 @@ class M5QueueUI:
         model = next((c.description for c in self.chk_models if c.value), None)
         regions = [c.description for c in self.chk_regions if c.value]
         periods = [c.description for c in self.chk_periods if c.value]
+        task_name = self.w_task_name.value.strip()
+        if not task_name:
+            with self.out_msg:
+                clear_output()
+                display(HTML("<b style='color:red;'>Atencion: Debe asignar un Nombre de Tarea obligatoriamente.</b>"))
+            return
         if not model or not regions or not periods:
             with self.out_msg:
                 clear_output()
@@ -257,7 +292,7 @@ class M5QueueUI:
                 if any(job['id'] == job_id for job in self.queue):
                     skipped += 1
                     continue
-                self.queue.append(new_job(model, r, period))
+                self.queue.append(new_job(model, r, period, task_name=task_name))
                 added += 1
         save_queue(self.queue)
         for c in self.chk_regions + self.chk_periods:
@@ -472,10 +507,10 @@ class M5QueueUI:
         self.queue = load_queue()
         jobs = [j for j in self.queue if j['status'] in ('PENDING', 'RUNNING')]
 
-        filter_box = widgets.HBox([self.f_pend_model, self.f_pend_region, self.f_pend_year], layout=L(margin='0 0 10px 0'))
-        filtered = self._apply_filters(jobs, self.f_pend_model, self.f_pend_region, self.f_pend_year)
+        filter_box = widgets.HBox([self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task], layout=L(margin='0 0 10px 0'))
+        filtered = self._apply_filters(jobs, self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task)
 
-        btn_clear = widgets.Button(description='Limpiar Cola', button_style='danger', icon='trash', layout=L(width='150px'))
+        btn_clear = widgets.Button(description='Limpiar Tareas Temporales', button_style='warning', icon='trash', layout=L(width='200px'))
         btn_clear.on_click(lambda _: self._on_clear_click())
 
         tarea_section = self._tarea_section()
@@ -492,8 +527,11 @@ class M5QueueUI:
                 total_cells = {}
                 done_cells = {}
                 region_jobs = {}
+                card_regions = []
                 for j in jobs_list:
                     r = j['region']
+                    if r not in card_regions:
+                        card_regions.append(r)
                     region_jobs.setdefault(r, []).append(j)
                     if r not in total_cells:
                         total_cells[r] = 0
@@ -513,52 +551,108 @@ class M5QueueUI:
                         except Exception:
                             pass
 
-                # thumb
-                thumb_b64 = self._generate_thumb(model_name, size=64)
+                # -- thumb (128px, lado esquerdo) --
+                thumb_b64 = self._generate_thumb(model_name, size=128, regions=card_regions)
+                if thumb_b64:
+                    thumb_el = widgets.HTML(
+                        f'<img src="data:image/png;base64,{thumb_b64}" '
+                        f'style="width:128px;height:128px;object-fit:cover;border-radius:8px;border:1px solid #d1d5db;">',
+                        layout=L(width='128px', margin='0'))
+                else:
+                    thumb_el = widgets.HTML(
+                        '<div style="width:128px;height:128px;background:#f1f5f9;border-radius:8px;border:1px solid #d1d5db;"></div>',
+                        layout=L(width='128px', margin='0'))
+                left_col = widgets.VBox([
+                    thumb_el,
+                    widgets.Box([], layout=L(flex='1')),
+                ], layout=L(width='128px', height='100%', align_self='stretch'))
 
-                # card header
-                thumb_html = f'<img src="data:image/png;base64,{thumb_b64}" style="width:64px;height:64px;object-fit:cover;border-radius:4px;border:1px solid #ccc;">' if thumb_b64 else '<div style="width:64px;height:64px;background:#f0f0f0;border-radius:4px;border:1px solid #ccc;"></div>'
+                # -- checkbox de habilitacion --
+                chk = widgets.Checkbox(
+                    value=self._card_checkboxes.get(model_name, False),
+                    description='',
+                    indent=False,
+                    layout=L(width='24px', margin='2px 6px 0 0')
+                )
+                chk.observe(lambda change, m=model_name: self._sync_card_enabled(m, change['new']), names='value')
+                self._card_checkboxes[model_name] = chk
 
-                # botoes tarea
+                # -- botoes tarea + eliminar modelo --
                 tareas = list_tareas(fs=_get_fs())
                 tarea_exists = any(t.get('model') == model_name for t in tareas)
                 if tarea_exists:
-                    btn_tarea = widgets.Button(description='Excluir Tarea del GCS', button_style='warning', layout=L(width='200px', height='28px'))
+                    btn_tarea = widgets.Button(description='Excluir Tarea GCS', button_style='warning', layout=L(width='150px', height='28px', font_size='12px'))
                     btn_tarea.on_click(lambda _, m=model_name: self._tarea_delete_click(m))
                 else:
-                    btn_tarea = widgets.Button(description='Guardar Tarea en GCS', button_style='info', layout=L(width='200px', height='28px'))
+                    btn_tarea = widgets.Button(description='Guardar Tarea GCS', button_style='info', layout=L(width='150px', height='28px', font_size='12px'))
                     btn_tarea.on_click(lambda _, m=model_name: self._tarea_save_click(m))
+                btn_del_model = widgets.Button(description='Eliminar Modelo', button_style='danger', layout=L(width='140px', height='28px', font_size='12px'))
+                btn_del_model.on_click(lambda b, m=model_name: inline_confirm(b, lambda: (self._delete_model_all(m), self._refresh_ui())))
 
+                # -- tarefas (nomes) em badges --
+                tarefas_assinadas = sorted(set(j.get('task_name', '') for j in jobs_list if j.get('task_name', '')))
+                task_badges = ''.join(
+                    f'<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;font-size:10px;'
+                    f'padding:2px 8px;border-radius:10px;margin:2px 3px;border:1px solid #d8b4fe;">{t}</span>'
+                    for t in tarefas_assinadas
+                )
+
+                # -- cabecalho direito --
+                header = widgets.VBox([
+                    widgets.HBox([
+                        chk,
+                        widgets.HTML(f"<b style='font-size:15px;color:#0f172a;'>{model_name}</b>",
+                                     layout=L(margin='0 10px 0 0')),
+                    ], layout=L(align_items='center', margin='0 0 4px 0')),
+                    widgets.HTML(f"<div style='margin:2px 0 6px 28px;'>{task_badges}</div>" if task_badges else ''),
+                    widgets.HBox([btn_tarea, btn_del_model], layout=L(align_items='center', gap='6px', margin='0 0 6px 28px')),
+                ], layout=L(width='auto'))
+
+                # -- linhas de regiao --
                 region_lines = []
                 for r, jbs in sorted(region_jobs.items()):
                     running = any(j['status'] == 'RUNNING' for j in jbs)
-                    status_color = '#e67e22' if running else '#3498db'
-                    status_label = 'RUNNING' if running else 'PENDING'
+                    dot_color = '#f59e0b' if running else '#3b82f6'
                     tc = total_cells.get(r, 0)
                     dc = done_cells.get(r, 0)
-                    prog_str = f"{dc}/{tc}" if tc else jbs[0].get('progress', '0%')
+                    if tc:
+                        pct = min(dc / tc * 100, 100)
+                        prog_str = f"{dc}/{tc}"
+                    else:
+                        pct = 0
+                        prog_str = jbs[0].get('progress', '0%')
                     grid_n = self._get_grid_count(r)
                     grid_str = f"({grid_n} celdas)" if grid_n else ""
 
-                    btn_del = widgets.Button(description='Eliminar', button_style='danger', layout=L(width='80px', height='26px'))
-                    btn_del.on_click(lambda _, m=model_name, rg=r: self._delete_model_region(m, rg))
+                    bar_color = '#22c55e' if running else '#3b82f6'
+                    bar = (f'<div style="width:100px;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">'
+                           f'<div style="width:{pct:.0f}%;height:100%;background:{bar_color};border-radius:4px;"></div>'
+                           f'</div>')
 
-                    line = widgets.HBox([
-                        widgets.HTML(f"<span style='color:{status_color};font-weight:bold;width:90px;'>{status_label}</span>", layout=L(margin='0')),
-                        widgets.HTML(f"<b style='width:130px;'>{r}</b>", layout=L(margin='0')),
-                        widgets.HTML(f"<span style='color:#555;font-size:12px;'>{prog_str}</span>", layout=L(width='80px')),
-                        widgets.HTML(f"<span style='color:#999;font-size:11px;'>{grid_str}</span>", layout=L(width='120px')),
+                    btn_del = widgets.Button(description='', icon='trash', button_style='danger',
+                                             layout=L(width='32px', height='26px', padding='0'))
+                    btn_del.on_click(lambda b, m=model_name, rg=r: inline_confirm(b, lambda: (self._delete_model_region(m, rg), self._refresh_ui())))
+
+                    row = widgets.HBox([
+                        widgets.HTML(f'<span style="display:inline-block;width:10px;height:10px;'
+                                     f'background:{dot_color};border-radius:50%;margin:0 6px 0 0;"></span>'),
+                        widgets.HTML(f"<span style='font-weight:600;color:#334155;width:140px;display:inline-block;'>{r}</span>"),
+                        widgets.HTML(f"<span style='color:#64748b;font-size:12px;width:55px;'>{prog_str}</span>"),
+                        widgets.HTML(bar, layout=L(margin='0 6px')),
+                        widgets.HTML(f"<span style='color:#94a3b8;font-size:11px;'>{grid_str}</span>",
+                                     layout=L(width='110px')),
                         btn_del
-                    ], layout=L(align_items='center', margin='2px 0', padding='3px'))
-                    region_lines.append(line)
+                    ], layout=L(align_items='center', padding='5px 8px', margin='2px 0',
+                                border_bottom='1px solid #f1f5f9'))
+                    region_lines.append(row)
 
-                body = widgets.VBox([
-                    widgets.HBox([
-                        widgets.HTML(thumb_html, layout=L(margin='0 10px 0 0')),
-                        widgets.VBox([widgets.HTML(f"<b style='font-size:14px;'>{model_name}</b>"), btn_tarea], layout=L(margin='0'))
-                    ], layout=L(align_items='flex-start', margin='0 0 8px 0')),
-                    widgets.VBox(region_lines)
-                ], layout=L(padding='10px', border='1px solid #ddd', border_radius='5px', margin='5px 0'))
+                right_col = widgets.VBox([header] + region_lines, layout=L(flex='1', margin='0 0 0 12px'))
+
+                body = widgets.HBox([left_col, right_col],
+                    layout=L(padding='0', border='1px solid #e2e8f0', border_radius='8px',
+                             margin='6px 0', background='#ffffff',
+                             box_shadow='0 1px 3px rgba(0,0,0,0.08)',
+                             align_items='stretch'))
                 cards.append(body)
 
             pend_vbox = widgets.VBox([tarea_section, filter_box, btn_clear] + cards)
@@ -590,13 +684,78 @@ class M5QueueUI:
             display(HTML("<b style='color:red;'>Cola vaciada.</b>"))
         self._refresh_ui()
 
+    # --- HABILITACION DE CARDS ---
+
+    def _sync_card_enabled(self, model_name, checked):
+        """Seta enabled=True/False em todos jobs de um modelo."""
+        self.queue = load_queue()
+        for j in self.queue:
+            if j['model'] == model_name:
+                j['enabled'] = checked
+        save_queue(self.queue)
+        self._card_checkboxes[model_name].value = checked
+
+    # --- LIVE MAPA (PROCESSING CALLBACK) ---
+
+    def _on_tile_progress(self, model, region, cell_id, i, total, status):
+        """Callback chamado de M5_classifier a cada tile."""
+        self._processing_state = {
+            'running': True,
+            'model': model,
+            'region': region,
+            'current': cell_id,
+            'total': total,
+            'completed': sorted(set(self._processing_state.get('completed', []) + ([cell_id] if status in ('done', 'skipped') else []))),
+            'current_i': i,
+            'last_status': status,
+        }
+        self._render_mapa_live()
+        self.tabs.selected_index = 4
+
+    def _render_mapa_live(self):
+        """Renderiza Mapa con estado de procesamiento en vivo."""
+        state = self._processing_state
+        if not state or not state.get('running'):
+            return
+
+        model, region = state.get('model', '?'), state.get('region', '?')
+        total = state.get('total', 0)
+        done_set = set(state.get('completed', []))
+        current = state.get('current', '')
+        done_n = len(done_set)
+        pct = f"{done_n}/{total} ({done_n/total:.0%})" if total else '0/0'
+
+        lines = [f"<tr><td style='padding:2px 8px;'>Modelo</td><td style='padding:2px 8px;'><b>{model}</b></td></tr>",
+                 f"<tr><td style='padding:2px 8px;'>Region</td><td style='padding:2px 8px;'><b>{region}</b></td></tr>",
+                 f"<tr><td style='padding:2px 8px;'>Progreso</td><td style='padding:2px 8px;'><b>{pct}</b></td></tr>"]
+        if current:
+            lines.append(f"<tr><td style='padding:2px 8px;'>Tile actual</td><td style='padding:2px 8px;'><span style='color:#e67e22;font-weight:bold;'>{current}</span></td></tr>")
+
+        # tiles completados
+        if done_set:
+            done_cells = sorted(done_set)
+            done_html = ', '.join(done_cells[:10])
+            if len(done_cells) > 10:
+                done_html += f' ... (+{len(done_cells)-10} mas)'
+            lines.append(f"<tr><td style='padding:2px 8px;'>Completados</td><td style='padding:2px 8px;color:#27ae60;'>{done_html}</td></tr>")
+
+        html = (f'<div style="margin:8px 0;padding:10px;border:2px solid #e67e22;border-radius:6px;'
+                f'background:#fef9e7;">'
+                f'<b style="color:#e67e22;">Procesando en vivo</b>'
+                f'<table style="font-size:12px;color:#555;border-collapse:collapse;margin-top:6px;">'
+                f'{"".join(lines)}</table></div>')
+
+        with self._live_status_out:
+            clear_output()
+            display(HTML(html))
+
     # --- RENDER PUBLISH ---
 
     def _render_publish(self):
         self.queue = load_queue()
         jobs = [j for j in self.queue if j['status'] == 'COMPLETED']
-        filter_box = widgets.HBox([self.f_pub_model, self.f_pub_region, self.f_pub_year], layout=L(margin='0 0 15px 0'))
-        filtered = self._apply_filters(jobs, self.f_pub_model, self.f_pub_region, self.f_pub_year)
+        filter_box = widgets.HBox([self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task], layout=L(margin='0 0 15px 0'))
+        filtered = self._apply_filters(jobs, self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task)
 
         if not filtered:
             self.w_pub_rows.children = [widgets.HTML("<div style='padding:20px; text-align:center; color:#999; border:1px dashed #ccc;'><i>Ninguna tarea lista para publicar.</i></div>")]
@@ -606,20 +765,57 @@ class M5QueueUI:
                 grouped.setdefault(j['model'], []).append(j)
             cards = []
             for model_name, jobs_list in grouped.items():
-                title = widgets.HTML(f"<h4 style='margin:0; color:#2c3e50; padding:10px; background-color:#ecf0f1; border-radius:5px 5px 0 0;'>Modelo: {model_name}</h4>")
+                card_regions = sorted(set(j['region'] for j in jobs_list))
+
+                # -- thumb 128px esquerda --
+                thumb_b64 = self._generate_thumb(model_name, size=128, regions=card_regions)
+                thumb_el = widgets.HTML(
+                    f'<img src="data:image/png;base64,{thumb_b64}" '
+                    f'style="width:128px;height:128px;object-fit:cover;border-radius:8px;border:1px solid #d1d5db;">'
+                    if thumb_b64 else
+                    '<div style="width:128px;height:128px;background:#f1f5f9;border-radius:8px;border:1px solid #d1d5db;"></div>',
+                    layout=L(width='128px', margin='0'))
+                left_col = widgets.VBox([
+                    thumb_el,
+                    widgets.Box([], layout=L(flex='1')),
+                ], layout=L(width='128px', height='100%', align_self='stretch'))
+
+                # -- tarefas badges --
+                tarefas_assinadas = sorted(set(j.get('task_name', '') for j in jobs_list if j.get('task_name', '')))
+                task_badges = ''.join(
+                    f'<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;font-size:10px;'
+                    f'padding:2px 8px;border-radius:10px;margin:2px 3px;border:1px solid #d8b4fe;">{t}</span>'
+                    for t in tarefas_assinadas
+                )
+
+                # -- cabecalho direito --
+                header = widgets.VBox([
+                    widgets.HTML(f"<b style='font-size:15px;color:#0f172a;'>{model_name}</b>",
+                                 layout=L(margin='0 0 4px 0')),
+                    widgets.HTML(f"<div style='margin:0 0 6px 0;'>{task_badges}</div>" if task_badges else ''),
+                ], layout=L(width='auto', margin='0 0 8px 0'))
+
+                # -- linhas de trabalho --
                 rows = []
                 for job in jobs_list:
                     tile_out = widgets.VBox([])
                     btn_tiles = self._build_tile_expander(job, tile_out)
                     chk_gee = widgets.Checkbox(value=job.get('upload_gee', False), description=f"{job['region']} | {job['period']}", style={'description_width': 'initial'}, layout=L(width='auto', max_width='100%'))
                     chk_gee.observe(lambda change, jid=job['id']: self._toggle_gee(change, jid), names='value')
-                    lbl_status = widgets.HTML(f"<span style='color:#27ae60; font-weight:bold; width:80px; display:inline-block;'>{job['status']}</span>")
-                    btn_del_all = widgets.Button(description='Eliminar Todo', button_style='danger', layout=L(width='120px', height='28px'))
-                    btn_del_all.on_click(lambda _, jb=job: self._confirm_delete_job(jb))
-                    top = widgets.HBox([chk_gee, lbl_status, btn_tiles, btn_del_all], layout=L(align_items='center', border_bottom='1px solid #eee', padding='5px'))
+                    lbl_status = widgets.HTML(f"<span style='color:#16a34a;font-weight:700;font-size:12px;'>{job['status']}</span>")
+                    btn_del_all = widgets.Button(description='', icon='trash', button_style='danger', layout=L(width='32px', height='26px', padding='0'))
+                    btn_del_all.on_click(lambda b, jb=job: inline_confirm(b, lambda: (self._delete_job_tiles_region(jb), self._remove_from_queue(jb['id']), self._refresh_ui())))
+                    top = widgets.HBox([chk_gee, lbl_status, btn_tiles, btn_del_all],
+                                       layout=L(align_items='center', padding='5px 8px', margin='2px 0',
+                                                border_bottom='1px solid #f1f5f9'))
                     rows.append(widgets.VBox([top, tile_out]))
-                body = widgets.VBox(rows, layout=L(padding='10px', border='1px solid #ecf0f1', border_top='none', border_radius='0 0 5px 5px'))
-                cards.append(widgets.VBox([title, body], layout=L(margin='0 0 20px 0')))
+
+                right_col = widgets.VBox([header] + rows, layout=L(flex='1', margin='0 0 0 12px'))
+                cards.append(widgets.HBox([left_col, right_col],
+                    layout=L(padding='0', border='1px solid #e2e8f0', border_radius='8px',
+                             margin='6px 0', background='#ffffff',
+                             box_shadow='0 1px 3px rgba(0,0,0,0.08)',
+                             align_items='stretch')))
             self.w_pub_rows.children = cards
         self.tab_publish.children = [filter_box, self.w_pub_rows]
 
@@ -689,30 +885,6 @@ class M5QueueUI:
         btn_del_all.on_click(_del_all)
         actions = widgets.HBox([btn_del_sel, btn_del_all], layout=L(margin='3px 0 0 20px'))
         container.children = [chk_box, actions]
-
-    def _confirm_delete_job(self, job):
-        out_c = widgets.Output()
-        btn_conf = widgets.Button(description='Confirmar Eliminacion', button_style='danger', layout=L(width='180px'))
-        btn_canc = widgets.Button(description='Cancelar', button_style='info', layout=L(width='100px'))
-        def _do_confirm(_):
-            with out_c:
-                clear_output()
-                print("Eliminando tiles y mosaico de GCS...")
-            n = self._delete_job_tiles_region(job)
-            self._remove_from_queue(job['id'])
-            with out_c:
-                clear_output()
-                display(HTML(f"<span style='color:green;'>{n} tiles + mosaico eliminados. Trabajo removido de la cola.</span>"))
-        def _cancel(_):
-            with out_c:
-                clear_output()
-                display(HTML("<span style='color:#999;'>Cancelado.</span>"))
-        btn_conf.on_click(_do_confirm)
-        btn_canc.on_click(_cancel)
-        with out_c:
-            clear_output()
-            display(widgets.HBox([btn_conf, btn_canc]))
-        display(out_c)
 
     # --- RENDER MAPA ---
 
@@ -784,9 +956,9 @@ class M5QueueUI:
             </div>
             """
             img_html = f'<img src="data:image/png;base64,{b64}" style="max-width:100%; border:1px solid #ccc; border-radius:4px;">'
-            self.w_mapa_rows.children = [widgets.HTML(img_html + scale_html + legenda + grid_table)]
+            self.w_mapa_rows.children = [widgets.HTML(img_html + scale_html + legenda + grid_table), self._live_status_out]
         except Exception:
-            self.w_mapa_rows.children = [widgets.HTML("<div style='padding:20px; text-align:center; color:#999; border:1px dashed #ccc;'><i>No se pudo generar el mapa. Verifique conexion GEE.</i></div>")]
+            self.w_mapa_rows.children = [widgets.HTML("<div style='padding:20px; text-align:center; color:#999; border:1px dashed #ccc;'><i>No se pudo generar el mapa. Verifique conexion GEE.</i></div>"), self._live_status_out]
 
         self.tab_mapa.children = [filter_box, self.w_mapa_rows]
 
@@ -795,8 +967,8 @@ class M5QueueUI:
     def _render_done(self):
         self.queue = load_queue()
         jobs = [j for j in self.queue if j['status'] == 'FINISHED']
-        filter_box = widgets.HBox([self.f_done_model, self.f_done_region, self.f_done_year], layout=L(margin='0 0 15px 0'))
-        filtered = self._apply_filters(jobs, self.f_done_model, self.f_done_region, self.f_done_year)
+        filter_box = widgets.HBox([self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task], layout=L(margin='0 0 15px 0'))
+        filtered = self._apply_filters(jobs, self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task)
 
         if not filtered:
             self.w_done_rows.children = [widgets.HTML("<div style='padding:20px; text-align:center; color:#999; border:1px dashed #ccc;'><i>Ninguna tarea finalizada aun.</i></div>")]
@@ -809,12 +981,35 @@ class M5QueueUI:
 
             for model_name, jobs_list in grouped.items():
                 region_jobs = {}
+                card_regions = []
                 for j in jobs_list:
-                    region_jobs.setdefault(j['region'], []).append(j)
+                    r = j['region']
+                    if r not in card_regions:
+                        card_regions.append(r)
+                    region_jobs.setdefault(r, []).append(j)
 
-                thumb_b64 = self._generate_thumb(model_name, size=128)
-                thumb_html = f'<img src="data:image/png;base64,{thumb_b64}" style="width:128px;height:128px;object-fit:cover;border-radius:4px;border:1px solid #ccc;">' if thumb_b64 else '<div style="width:128px;height:128px;background:#f0f0f0;border-radius:4px;border:1px solid #ccc;"></div>'
+                # -- thumb 128px esquerda --
+                thumb_b64 = self._generate_thumb(model_name, size=128, regions=card_regions)
+                thumb_el = widgets.HTML(
+                    f'<img src="data:image/png;base64,{thumb_b64}" '
+                    f'style="width:128px;height:128px;object-fit:cover;border-radius:8px;border:1px solid #d1d5db;">'
+                    if thumb_b64 else
+                    '<div style="width:128px;height:128px;background:#f1f5f9;border-radius:8px;border:1px solid #d1d5db;"></div>',
+                    layout=L(width='128px', margin='0'))
+                left_col = widgets.VBox([
+                    thumb_el,
+                    widgets.Box([], layout=L(flex='1')),
+                ], layout=L(width='128px', height='100%', align_self='stretch'))
 
+                # -- tarefas badges --
+                tarefas_assinadas = sorted(set(j.get('task_name', '') for j in jobs_list if j.get('task_name', '')))
+                task_badges = ''.join(
+                    f'<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;font-size:10px;'
+                    f'padding:2px 8px;border-radius:10px;margin:2px 3px;border:1px solid #d8b4fe;">{t}</span>'
+                    for t in tarefas_assinadas
+                )
+
+                # -- cabecalho direito --
                 region_lines = []
                 for r, jbs in sorted(region_jobs.items()):
                     timelines = []
@@ -824,81 +1019,44 @@ class M5QueueUI:
                             timelines.append(tl)
                     tl_html = "<div style='overflow-x:auto;'>" + "".join(timelines) + "</div>"
 
-                    btn_del_region = widgets.Button(description='Eliminar Region', button_style='danger', layout=L(width='140px', height='28px'))
+                    btn_del_region = widgets.Button(description='', icon='trash', button_style='danger',
+                                                    layout=L(width='32px', height='26px', padding='0'))
                     btn_del_region.on_click(lambda _, m=model_name, rg=r: self._confirm_delete_model_region(m, rg))
 
                     line = widgets.HBox([
-                        widgets.HTML(f"<b style='width:110px;'>{r}</b>", layout=L(margin='0 5px 0 0')),
-                        widgets.HTML(tl_html, layout=L(margin='0 5px 0 0')),
+                        widgets.HTML(f"<b style='width:120px;color:#334155;'>{r}</b>", layout=L(margin='0 8px 0 0')),
+                        widgets.HTML(tl_html, layout=L(margin='0 8px 0 0', flex='1')),
                         btn_del_region
-                    ], layout=L(align_items='center', margin='4px 0', padding='5px', border_bottom='1px solid #f0f0f0'))
+                    ], layout=L(align_items='center', padding='5px 8px', margin='2px 0',
+                                border_bottom='1px solid #f1f5f9'))
                     region_lines.append(line)
 
-                btn_del_model = widgets.Button(description='Eliminar Modelo Completo', button_style='danger', layout=L(width='220px', height='28px'))
-                btn_del_model.on_click(lambda _, m=model_name: self._confirm_delete_model_all(m))
+                btn_del_model = widgets.Button(description='Eliminar Modelo', button_style='danger', layout=L(width='150px', height='28px'))
+                btn_del_model.on_click(lambda b, m=model_name: inline_confirm(b, lambda: (self._delete_model_all(m), self._refresh_ui())))
 
-                card = widgets.VBox([
+                header = widgets.VBox([
                     widgets.HBox([
-                        widgets.HTML(thumb_html, layout=L(margin='0 10px 0 0')),
-                        widgets.VBox([
-                            widgets.HTML(f"<b style='font-size:15px;'>{model_name}</b>"),
-                            widgets.VBox(region_lines),
-                            btn_del_model
-                        ], layout=L(width='100%'))
-                    ], layout=L(align_items='flex-start'))
-                ], layout=L(padding='12px', border='1px solid #27ae60', border_radius='6px', margin='8px 0', background='#f0faf0'))
+                        widgets.HTML(f"<b style='font-size:15px;color:#0f172a;'>{model_name}</b>",
+                                     layout=L(margin='0 0 4px 0')),
+                    ]),
+                    widgets.HTML(f"<div style='margin:0 0 6px 0;'>{task_badges}</div>" if task_badges else ''),
+                ], layout=L(width='auto', margin='0 0 8px 0'))
+
+                right_col = widgets.VBox([
+                    header,
+                    widgets.VBox(region_lines, layout=L(margin='0 0 6px 0')),
+                    btn_del_model,
+                ], layout=L(flex='1', margin='0 0 0 12px'))
+
+                card = widgets.HBox([left_col, right_col],
+                    layout=L(padding='0', border='1px solid #bbf7d0', border_radius='8px',
+                             margin='6px 0', background='#f0fdf4',
+                             box_shadow='0 1px 3px rgba(0,0,0,0.08)',
+                             align_items='stretch'))
                 cards.append(card)
 
             self.w_done_rows.children = cards
         self.tab_done.children = [filter_box, self.w_done_rows]
-
-    def _confirm_delete_model_region(self, model, region):
-        out_c = widgets.Output()
-        btn_conf = widgets.Button(description='Confirmar Eliminacion', button_style='danger', layout=L(width='200px'))
-        btn_canc = widgets.Button(description='Cancelar', button_style='info', layout=L(width='100px'))
-        def _do(_):
-            with out_c:
-                clear_output()
-                print(f"Eliminando {model} / {region} de GCS...")
-            n_tiles, n_jobs = self._delete_model_region(model, region)
-            with out_c:
-                clear_output()
-                display(HTML(f"<span style='color:green;'>{n_tiles} tiles + mosaico + stats eliminados. {n_jobs} trabajos removidos.</span>"))
-            self._refresh_ui()
-        def _cancel(_):
-            with out_c:
-                clear_output()
-                display(HTML("<span style='color:#999;'>Cancelado.</span>"))
-        btn_conf.on_click(_do)
-        btn_canc.on_click(_cancel)
-        with out_c:
-            clear_output()
-            display(widgets.HBox([btn_conf, btn_canc]))
-        display(out_c)
-
-    def _confirm_delete_model_all(self, model):
-        out_c = widgets.Output()
-        btn_conf = widgets.Button(description='Confirmar Eliminacion Total', button_style='danger', layout=L(width='220px'))
-        btn_canc = widgets.Button(description='Cancelar', button_style='info', layout=L(width='100px'))
-        def _do(_):
-            with out_c:
-                clear_output()
-                print(f"Eliminando todo el modelo {model} de GCS...")
-            n_tiles, n_jobs = self._delete_model_all(model)
-            with out_c:
-                clear_output()
-                display(HTML(f"<span style='color:green;'>{n_tiles} tiles + mosaicos + stats eliminados. {n_jobs} trabajos removidos.</span>"))
-            self._refresh_ui()
-        def _cancel(_):
-            with out_c:
-                clear_output()
-                display(HTML("<span style='color:#999;'>Cancelado.</span>"))
-        btn_conf.on_click(_do)
-        btn_canc.on_click(_cancel)
-        with out_c:
-            clear_output()
-            display(widgets.HBox([btn_conf, btn_canc]))
-        display(out_c)
 
     # --- MANIPULADORES ---
 
@@ -910,13 +1068,15 @@ class M5QueueUI:
                     j['upload_gee'] = change['new']
             save_queue(self.queue)
 
-    def _apply_filters(self, jobs, f_model, f_region, f_year):
+    def _apply_filters(self, jobs, f_model, f_region, f_year, f_task=None):
         if f_model.value != 'Todos':
             jobs = [j for j in jobs if j['model'] == f_model.value]
         if f_region.value != 'Todas':
             jobs = [j for j in jobs if j['region'] == f_region.value]
         if f_year.value != 'Todos':
             jobs = [j for j in jobs if j['period'].split('_')[0] == f_year.value]
+        if f_task is not None and f_task.value != 'Todas':
+            jobs = [j for j in jobs if j.get('task_name', '') == f_task.value]
         return jobs
 
     # --- REFRESH ---
@@ -932,15 +1092,16 @@ class M5QueueUI:
             else:
                 f.value = new_ops[0]
 
-        for status, f_m, f_r, f_y in [
-            (['PENDING', 'RUNNING'], self.f_pend_model, self.f_pend_region, self.f_pend_year),
-            (['COMPLETED'], self.f_pub_model, self.f_pub_region, self.f_pub_year),
-            (['FINISHED'], self.f_done_model, self.f_done_region, self.f_done_year),
+        for status, f_m, f_r, f_y, f_t in [
+            (['PENDING', 'RUNNING'], self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task),
+            (['COMPLETED'], self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task),
+            (['FINISHED'], self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task),
         ]:
             subset = [j for j in self.queue if j['status'] in status]
             _safe_update(f_m, ['Todos'] + sorted(set(j['model'] for j in subset)))
             _safe_update(f_r, ['Todas'] + sorted(set(j['region'] for j in subset)))
             _safe_update(f_y, ['Todos'] + sorted(set(j['period'].split('_')[0] for j in subset), reverse=True))
+            _safe_update(f_t, ['Todas'] + sorted(set(j.get('task_name', '') for j in subset if j.get('task_name', ''))))
 
         # Mapa filters
         all_models = sorted(set(j['model'] for j in self.queue))
@@ -962,7 +1123,8 @@ class M5QueueUI:
 
         form = widgets.VBox([
             self.w_model_box, self.w_region_box, self.w_period_box,
-            widgets.HBox([self.btn_add], layout=L(margin='15px 0 10px 0', align_items='center')),
+            widgets.VBox([self.w_task_name], layout=L(margin='15px 0 5px 0')),
+            widgets.HBox([self.btn_add], layout=L(margin='5px 0 10px 0', align_items='center')),
             self.out_msg
         ], layout=L(padding='20px'))
 

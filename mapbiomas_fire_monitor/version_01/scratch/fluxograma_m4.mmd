@@ -1,0 +1,114 @@
+graph TD
+    %% Configuração de Alto Contraste (Fundo Pastel + Texto Ultra Escuro)
+    classDef ui fill:#eef2ff,stroke:#818cf8,stroke-width:1.5px,color:#01579B;
+    classDef extract fill:#f5f3ff,stroke:#a78bfa,stroke-width:1.5px,color:#4A148C;
+    classDef train fill:#fff7ed,stroke:#fb923c,stroke-width:1.5px,color:#5D2500;
+    classDef analytics fill:#f0fdf4,stroke:#4ade80,stroke-width:1.5px,color:#0B3C11;
+    classDef storage fill:#f0fdfa,stroke:#2dd4bf,stroke-width:1.5px,color:#004D40;
+    classDef decision fill:#fdf4ff,stroke:#e879f9,stroke-width:1.5px,color:#5A0426;
+    classDef note fill:#fefce8,stroke:#facc15,stroke-width:1.2px,stroke-dasharray:4 4,color:#6D4C41;
+
+    %% ==========================================
+    %% LINHA 1 DO MOSAICO (Configuração + Extração)
+    %% ==========================================
+    subgraph LINHA_1 [" "]
+        direction LR
+        
+        subgraph Q1 ["QUADRO 1: Configuração do Experimento"]
+            direction TB
+            A1[Selecionar Campanha] --> A2[Escolher Samples + Bandas]
+            A2 --> A3[Definir HP: Layers, LR, Batch, Iters]
+            A3 --> A4[Training ID + Shortname + Comentário]
+        end
+
+        subgraph Q2 ["QUADRO 2: Extração Multisensor"]
+            direction TB
+            B1{Cache de<br>COGs?} -- Sim --> B2[Usa Cache]
+            B1 -- Não --> B3[Sincronizar GCS]
+            B2 --> B4
+            B3 --> B4[Montar Grid de Bandas]
+            B4 --> B5{Para cada<br>Período}
+            B5 --> B6[Ler CSV do GCS]
+            B6 --> B7[Validar COGs]
+            B7 --> B8{Todas<br>OK?}
+            B8 -- Não --> B9[Pular: aviso]
+            B8 -- Sim --> B10[Download COGs + Mask]
+            B10 --> B11[Empilhar X, y]
+            B11 --> B5
+            B9 --> B5
+        end
+    end
+    class Q1,A1,A2,A3,A4 ui;
+    class Q2,B2,B3,B4,B6,B7,B10,B11 extract; class B1,B5,B8 decision; class B9 note;
+
+    %% ==========================================
+    %% LINHA 2 DO MOSAICO (Treinamento + Bancos)
+    %% ==========================================
+    subgraph LINHA_2 [" "]
+        direction LR
+        
+        subgraph Q3 ["QUADRO 3: Treinamento DNN"]
+            direction TB
+            C1[Split 80/20] --> C2[Normalizar: só treino]
+            C2 --> C3[Construir Grafo TF1: FC-Dropout-FC-Sigmoid]
+            C3 --> C4{Loop de<br>N iters}
+            C4 --> C5[Mini-batch Adam]
+            C5 --> C6[Avaliar a cada N/20]
+            C6 --> C7[Extrair Embeddings]
+            C7 --> C8[Dashboard ao Vivo]
+            C8 --> C4
+            C4 --> C9[Concluído]
+        end
+
+        subgraph INFRA ["Infraestrutura de Dados"]
+            direction TB
+            F1[(GCS COGs)]
+            F2[(GCS Models)]
+        end
+    end
+    class Q3,C1,C2,C3,C5,C6,C7,C8,C9 train; class C4 decision;
+    class INFRA,F1,F2 storage;
+
+    %% ==========================================
+    %% LINHA 3 DO MOSAICO (Persistência + Auditoria)
+    %% ==========================================
+    subgraph LINHA_3 [" "]
+        direction LR
+        
+        subgraph Q4 ["QUADRO 4: Persistência GCS"]
+            direction TB
+            D1[weights.npz] --> D2[metadata.json]
+            D2 --> D3[métricas + snapshot PCA]
+            D3 --> D4[projector/ TSV]
+            D4 --> D5[history/ snapshots]
+            D5 --> D6[samples/ CSV + X_data.npy]
+        end
+
+        subgraph Q5 ["QUADRO 5: Auditoria & Canvas"]
+            direction TB
+            E1[Card + KPIs] --> E2[Dashboard 2x3]
+            E2 --> E3[PCA 3D + t-SNE 3D]
+            E3 --> E4[Canvas Comparativo]
+            E4 --> E5[Time Machine]
+            E5 --> E6[Ações: Retreinar, Deletar]
+        end
+    end
+    class Q4,D1,D2,D3,D4,D5,D6 storage;
+    class Q5,E1,E2,E3,E4,E5,E6 analytics;
+
+    %% ==========================================
+    %% CONEXÕES DO FLUXO PRINCIPAL ENTRE QUADROS
+    %% ==========================================
+    A4 ===>|Iniciar| B1
+    B11 ===>|Pixels Extraídos| C1
+    C9 ===>|Salvar| D1
+    D6 ===>|Exibir| E1
+
+    %% Conexões secundárias (Pontilhadas)
+    B4 -.->|Catálogo| F1
+    D1 -.->|Pesos| F2
+
+    %% Estilo para esconder as bordas dos subgráficos de linha fictícios
+    style LINHA_1 fill:none,stroke:none;
+    style LINHA_2 fill:none,stroke:none;
+    style LINHA_3 fill:none,stroke:none;

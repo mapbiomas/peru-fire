@@ -5,7 +5,7 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
-from M_ui_components import PipelineStepUI
+from M_ui_components import PipelineStepUI, make_spinner
 
 from M4_data_extractor import extract_pixels_from_gcs, list_sample_collections_gcs, list_campaigns_gcs
 from M4_algorithms_dnn import ModelTrainer, _get_tf
@@ -622,23 +622,7 @@ class ModelTrainerUI(PipelineStepUI):
         
 
     def make_spinner(self, msg="Cargando..."):
-        return widgets.HTML(f"""
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="mfm-loader-mini"></div>
-                <span style="color: #666; font-size: 11px; font-weight: bold;">{msg}</span>
-            </div>
-            <style>
-            .mfm-loader-mini {{
-                border: 2px solid #f3f3f3;
-                border-top: 2px solid #3498db;
-                border-radius: 50%;
-                width: 14px;
-                height: 14px;
-                animation: mfm-spin 0.8s linear infinite;
-            }}
-            @keyframes mfm-spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
-            </style>
-        """)
+        return make_spinner(msg=msg)
 
     def _on_canvas_batch_action(self, mode):
         """Ação em lote no repositório do Canvas."""

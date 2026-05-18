@@ -149,3 +149,87 @@ class PipelineStepUI:
         )
         cell.add_class(css_class)
         return cell
+
+
+# ---------------------------------------------------------------------------
+# Helpers de confirmacao inline e spinner
+# ---------------------------------------------------------------------------
+
+_SPINNER_STYLE = """
+<style>
+.mfm-loader-mini {
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #3498db;
+    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    animation: mfm-spin 0.8s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+}
+@keyframes mfm-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>"""
+
+
+def make_spinner(msg="Cargando..."):
+    """Retorna um widget HTML com spinner animado e mensagem."""
+    return widgets.HTML(f"""
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="mfm-loader-mini"></div>
+            <span style="color: #666; font-size: 11px; font-weight: bold;">{msg}</span>
+        </div>
+        {_SPINNER_STYLE}
+    """)
+
+
+def inline_confirm(btn, on_confirm, on_cancel=None):
+    """Substitui o botao *btn* por [ Voltar ] [ OK ] no mesmo lugar.
+    
+    Parametros
+    ----------
+    btn : widgets.Button
+        Botao a ser substituido. Deve estar inserido em um container
+        (VBox / HBox) que jah tenha sido exibido.
+    on_confirm : callable
+        Executada quando o usuario clica OK (sem argumentos).
+    on_cancel : callable, opcional
+        Executada quando o usuario clica Voltar.
+    """
+    parent = btn.parent
+    if parent is None:
+        return
+    children = list(parent.children)
+    try:
+        idx = children.index(btn)
+    except ValueError:
+        return
+
+    btn_voltar = widgets.Button(
+        description='Voltar',
+        button_style='',
+        layout=widgets.Layout(width='70px', height='26px', padding='0', font_size='11px'))
+    btn_ok = widgets.Button(
+        description='OK',
+        button_style='danger',
+        layout=widgets.Layout(width='50px', height='26px', padding='0', font_size='11px'))
+
+    confirm_box = widgets.HBox([btn_voltar, btn_ok],
+                                layout=widgets.Layout(align_items='center', gap='3px'))
+
+    spinner = make_spinner(msg='Eliminando...')
+
+    def _restore(_):
+        if on_cancel:
+            on_cancel()
+        parent.children = tuple(children[:idx] + [btn] + children[idx + 1:])
+
+    def _do_confirm(_):
+        parent.children = tuple(children[:idx] + [spinner] + children[idx + 1:])
+        on_confirm()
+
+    btn_voltar.on_click(_restore)
+    btn_ok.on_click(_do_confirm)
+    parent.children = tuple(children[:idx] + [confirm_box] + children[idx + 1:])

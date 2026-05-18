@@ -5,13 +5,15 @@ from M5_publisher import merge_region_tiles, generate_tile_stats, generate_regio
 
 VALID_PHASES = ['classification', 'publish']
 
-def run_m5_queue(phases=None):
+def run_m5_queue(phases=None, progress_callback=None):
     """Motor de procesamiento M5.
 
     Args:
         phases: lista con fases a ejecutar.
             'classification' — clasifica tiles pendientes
             'publish'        — mosaicado + stats + upload GEE
+        progress_callback: opcional, llamado tras cada tile.
+            firma: progress_callback(model, region, cell_id, i, total, status)
     """
     if phases is None:
         phases = ['classification', 'publish']
@@ -29,13 +31,13 @@ def run_m5_queue(phases=None):
     queue = load_queue()
 
     if 'classification' in phases:
-        _run_classification(queue, out)
+        _run_classification(queue, out, progress_callback)
 
     if 'publish' in phases:
         _run_publish(queue, out)
 
 
-def _run_classification(queue, out):
+def _run_classification(queue, out, progress_callback=None):
     """Fase 1: clasifica tiles pendientes."""
     pending = [j for j in queue if j['status'] == 'PENDING' and j.get('enabled', True)]
 
@@ -56,7 +58,7 @@ def _run_classification(queue, out):
             with out:
                 print(f"Iniciando: [{job['id']}]")
 
-            _process_job(job, out)
+            _process_job(job, out, progress_callback)
 
             job['status'] = 'COMPLETED'
             job['progress'] = '100%'
@@ -118,7 +120,7 @@ def _run_publish(queue, out):
                 print(f"ERROR al publicar {job['id']}: {e}")
 
 
-def _process_job(job, out):
+def _process_job(job, out, progress_callback=None):
     """Procesa un trabajo: carga modelo, itera tiles, clasifica."""
     import ee
     from M0_auth_config import authenticate, _gcs_models_base
@@ -153,7 +155,7 @@ def _process_job(job, out):
     predict_fn = lambda x: model.predict(x, verbose=0)
 
     for i, cell in enumerate(cells):
-        cell_id = cell['system:index']
+        cell_id = cell['name']
 
         if i % 5 == 0:
             queue = load_queue()
@@ -167,10 +169,15 @@ def _process_job(job, out):
         out_full = gcs_full(out_rel)
 
         if fs.exists(out_full):
+            if progress_callback:
+                progress_callback(model_id, region_name, cell_id, i, total, 'skipped')
             continue
 
         with out:
             print(f"  [{i+1:03d}/{total}] {cell_id} ...")
+
+        if progress_callback:
+            progress_callback(model_id, region_name, cell_id, i, total, 'processing')
 
         stats = classify_cell(
             cell_id, predict_fn, bands_config, norm_stats,
@@ -182,6 +189,11 @@ def _process_job(job, out):
             stats['region'] = region_name
             stats['period'] = period
             tile_results.append(stats)
+            if progress_callback:
+                progress_callback(model_id, region_name, cell_id, i, total, 'done')
+        else:
+            if progress_callback:
+                progress_callback(model_id, region_name, cell_id, i, total, 'error')
 
     # 4. Generar estadisticas de los tiles
     if tile_results:
@@ -191,7 +203,7 @@ def _process_job(job, out):
         generate_region_stats(model_id, region_name, period, tile_results, fs=fs)
     else:
         with out:
-            print(f"  Ningun tile nuevo clasificado (todos ya existian).")
+            print(f"  Ningun tile clasificado (todos fallaron).")
 
 
 def _get_region_cells(region_name):
@@ -206,8 +218,8 @@ def _get_region_cells(region_name):
 
     intersected = cim.filterBounds(region_fc.geometry())
     try:
-        ids = intersected.aggregate_array('system:index').getInfo()
-        return [{'system:index': str(i)} for i in ids]
+        names = intersected.aggregate_array('name').getInfo()
+        return [{'name': str(n)} for n in names]
     except Exception as e:
         print(f"Error al buscar grilla en GEE: {e}")
         return []

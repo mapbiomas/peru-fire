@@ -75,7 +75,7 @@ def classify_cell(cell_id, predict_fn, bands_config, norm_stats, year, month, ou
     periodicity = 'monthly' if month else 'yearly'
 
     cim = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
-    cell_feature = cim.filter(ee.Filter.eq('system:index', cell_id)).first()
+    cell_feature = cim.filter(ee.Filter.eq('name', cell_id)).first()
     cell_geom = cell_feature.geometry()
 
     band_paths = build_band_paths(bands_config, year, month)
