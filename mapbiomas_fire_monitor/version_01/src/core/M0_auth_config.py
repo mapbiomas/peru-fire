@@ -58,11 +58,15 @@ def _make_config(country='peru', bucket='mapbiomas-fire', gcs_project='mapbiomas
 
 # ─── CURRENT CONFIG ─────────────────────────────────────────
 
+def _single(val):
+    """If val is a list, return first element; otherwise return val as-is."""
+    return val[0] if isinstance(val, list) else val
+
 CONFIG = _make_config()  # Default: Peru
 
 GLOBAL_OPTS = {
-    'SENSOR': 'landsat',
-    'PERIODICITY': 'yearly',
+    'SENSOR': ['landsat'],
+    'PERIODICITY': ['yearly'],
     'MOSAIC_METHOD': 'minnbr',
     'PERSONAL_TASK_FLAG': 'CATALOG',
     'SAMPLING_CAMPAIGN': 'monitor_01'
@@ -132,8 +136,8 @@ def _get_fs():
         return gcsfs.GCSFileSystem(project=project, requests_timeout=10)
 
 def set_global_opts(
-    sensor='sentinel2',             # 'sentinel2', 'landsat', 'hls', 'modis'
-    periodicity='monthly',          # 'monthly', 'yearly'
+    sensor=['sentinel2'],           # ['sentinel2', 'landsat', 'hls', 'modis']
+    periodicity=['monthly'],        # ['monthly', 'yearly']
     personal_task_flag='MONITOR',   # prefix for GEE task names (e.g. MONITOR, TEST)
     sampling_campaign='monitor_01', # campaign folder in LIBRARY_SAMPLES (GCS)
     clean_cache=False,              # True = reset local + GCS cache at startup
@@ -147,25 +151,7 @@ def set_global_opts(
     gcs_project=None,               # GCS project name (e.g. 'mapbiomas-fire-485203')
     gcs_catalog_prefix=None,        # GCS prefix for CATALOG_01 (e.g. 'sudamerica/peru/CATALOG_01')
 ):
-    """
-    Configure global processing options and project paths.
-
-    Args:
-        sensor: 'landsat', 'sentinel2', 'hls' or 'modis'
-        periodicity: 'yearly' or 'monthly'
-        personal_task_flag: Prefix for GEE tasks (e.g. 'MONITOR')
-        sampling_campaign: Sampling campaign ID (e.g. 'monitor_01')
-        clean_cache: Reset local + GCS cache at startup
-        language: Language code: 'en' (default), 'es', 'pt', 'fr', 'id'
-        country: Country code (e.g. 'peru', 'brazil'). If None, keeps current.
-        gee_project: GEE project name (e.g. 'mapbiomas-peru')
-        gee_asset_repo: Full GEE asset path for CATALOG_01
-                        (e.g. 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01')
-        gcs_bucket: GCS bucket name (e.g. 'mapbiomas-fire')
-        gcs_project: GCS project name (e.g. 'mapbiomas-fire-485203')
-        gcs_catalog_prefix: GCS prefix for CATALOG_01
-                            (e.g. 'sudamerica/peru/CATALOG_01')
-    """
+    """Configure global processing options and project paths."""
     global GLOBAL_OPTS, CONFIG
 
     # Rebuild CONFIG if any project-level param is provided
@@ -181,8 +167,8 @@ def set_global_opts(
             gee_asset_repo=gee_asset_repo,
         )
 
-    GLOBAL_OPTS['SENSOR'] = sensor
-    GLOBAL_OPTS['PERIODICITY'] = periodicity
+    GLOBAL_OPTS['SENSOR'] = sensor if isinstance(sensor, list) else [sensor]
+    GLOBAL_OPTS['PERIODICITY'] = periodicity if isinstance(periodicity, list) else [periodicity]
     GLOBAL_OPTS['PERSONAL_TASK_FLAG'] = personal_task_flag
     GLOBAL_OPTS['SAMPLING_CAMPAIGN'] = sampling_campaign
     GLOBAL_OPTS['LANGUAGE'] = language
@@ -197,7 +183,9 @@ def set_global_opts(
     L.load_locale(language)
 
     mosaics_str = ', '.join(CONFIG['mosaic_methods'])
-    print(f"Global options: {sensor.upper()} | {periodicity.upper()} | Mosaics: {mosaics_str} | Campaign: {sampling_campaign} | Task Flag: {personal_task_flag}")
+    sensor_str = ', '.join(s.upper() if isinstance(s, str) else str(s).upper() for s in sensor)
+    period_str = ', '.join(p.upper() if isinstance(p, str) else str(p).upper() for p in periodicity)
+    print(f"Global options: Sensor(s): {sensor_str} | Period(s): {period_str} | Mosaics: {mosaics_str} | Campaign: {sampling_campaign} | Task Flag: {personal_task_flag}")
 
     if clean_cache:
         try:
@@ -230,8 +218,8 @@ def set_global_opts(
 # ─── GENERADORES DE CAMINHOS GCS ──────────────────────────────────────────────
 
 def _gcs_library_base():
-    """Base folder for images in GCS (agrupado por sensor)."""
-    sensor = GLOBAL_OPTS['SENSOR'].upper()
+    """Retorna o base path da library de imagens (sem sensor/period)."""
+    sensor = _single(GLOBAL_OPTS['SENSOR']).upper()
     return f"{CONFIG['gcs_library_images']}/{sensor}"
 
 def _gcs_models_base():
@@ -257,22 +245,22 @@ def yearly_mosaic_path(year, mosaic=None):
 
 def monthly_chunk_path(year, month, mosaic='minnbr', sensor=None):
     """Caminho GCS para chunks mensais: {SENSOR}/{PERIOD}/{MOSAIC}/{date}/CHUNKS/"""
-    s = (sensor or GLOBAL_OPTS['SENSOR']).upper()
+    s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()
     return f"{CONFIG['gcs_library_images']}/{s}/MONTHLY/{mosaic.upper()}/{year}_{month:02d}/CHUNKS"
 
 def yearly_chunk_path(year, mosaic='minnbr', sensor=None):
     """Caminho GCS para chunks anuais: {SENSOR}/{PERIOD}/{MOSAIC}/{date}/CHUNKS/"""
-    s = (sensor or GLOBAL_OPTS['SENSOR']).upper()
+    s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()
     return f"{CONFIG['gcs_library_images']}/{s}/ANNUALLY/{mosaic.upper()}/{year}/CHUNKS"
 
 def monthly_cog_path(year, month, mosaic='minnbr', sensor=None):
     """Caminho GCS para COGs mensais: {SENSOR}/{PERIOD}/{MOSAIC}/{date}/COG/"""
-    s = (sensor or GLOBAL_OPTS['SENSOR']).upper()
+    s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()
     return f"{CONFIG['gcs_library_images']}/{s}/MONTHLY/{mosaic.upper()}/{year}_{month:02d}/COG"
 
 def yearly_cog_path(year, mosaic='minnbr', sensor=None):
     """Caminho GCS para COGs anuais: {SENSOR}/{PERIOD}/{MOSAIC}/{date}/COG/"""
-    s = (sensor or GLOBAL_OPTS['SENSOR']).upper()
+    s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()
     return f"{CONFIG['gcs_library_images']}/{s}/ANNUALLY/{mosaic.upper()}/{year}/COG"
 
 def model_path(training_id, shortname, region=None):
@@ -280,7 +268,7 @@ def model_path(training_id, shortname, region=None):
     GCS: GCS/{country}/.../monitor/version_01/library_images/models/{asset_name}
     Asset: training_{training_id}_{shortname}_{sensor}
     """
-    sensor = GLOBAL_OPTS['SENSOR'].lower()
+    sensor = _single(GLOBAL_OPTS['SENSOR']).lower()
     t_id = str(training_id)
     if t_id.startswith('training_'):
         asset_name = t_id
@@ -300,11 +288,11 @@ def gcs_path(relative):
 # ─── GENERADORES DE CAMINHOS GEE ──────────────────────────────────────────────
 
 def get_asset_mosaic_collection(sensor=None, periodicity=None, band=None, period=None, mosaic=None):
-    period = period or periodicity or GLOBAL_OPTS['PERIODICITY']
+    period = period or periodicity or _single(GLOBAL_OPTS['PERIODICITY'])
     folder_period = period.upper()
     m_name = (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).upper()
     
-    sensor_name = (sensor or GLOBAL_OPTS['SENSOR']).upper()
+    sensor_name = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()
     
     # PADRÃO: ImageCollection por BANDA
     path = f"{CONFIG['asset_monitor_base']}/LIBRARY_IMAGES/{sensor_name}/{folder_period}/{m_name}"
@@ -321,7 +309,7 @@ def mosaic_name(year, month=None, period=None, band=None, mosaic=None, sensor=No
     Gera nome padrão para o mosaico/asset: image_{country}_fire_{sensor}_{mosaic}_{band}_{temporal_id}
     """
     country = CONFIG['country']
-    s = (sensor or GLOBAL_OPTS['SENSOR']).lower()
+    s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).lower()
     m = (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).lower()
     
     date_str = f"{year}_{month:02d}" if month else f"{year}"
@@ -423,59 +411,59 @@ def get_gcs_samples(temporal_id, version_id):
 
 def get_asset_regional(region_id, training_id, temporal_id):
     """Retorna o path do GEE para classificações regionais."""
-    sensor = GLOBAL_OPTS['SENSOR'].lower()
+    sensor = _single(GLOBAL_OPTS['SENSOR']).lower()
     suffix = "_BUFFER" if GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] else ""
     sensor_upper = sensor.upper() + suffix
-    period = GLOBAL_OPTS['PERIODICITY'].upper()
+    period = _single(GLOBAL_OPTS['PERIODICITY']).upper()
     asset_name = f"region_{region_id}_training_{training_id}_{sensor}_{temporal_id}"
     return f"{CONFIG['asset_monitor_base']}/LIBRARY_IMAGES/{sensor_upper}/{period}/burned_day_of_year_regional/{asset_name}"
 
 def get_gcs_regional(region_id, training_id, temporal_id):
     """Retorna o path do GCS para classificações regionais."""
     base = _gcs_library_base()
-    period = GLOBAL_OPTS['PERIODICITY'].lower()
-    sensor = GLOBAL_OPTS['SENSOR'].lower()
+    period = _single(GLOBAL_OPTS['PERIODICITY']).lower()
+    sensor = _single(GLOBAL_OPTS['SENSOR']).lower()
     asset_name = f"region_{region_id}_training_{training_id}_{sensor}_{temporal_id}"
     return f"{base}/{sensor}/{period}/burned_day_of_year_regional/{asset_name}"
 
 def get_asset_candidate(candidate_id, temporal_id):
     """Retorna o path do GEE para candidatos validados."""
-    sensor = GLOBAL_OPTS['SENSOR'].lower()
+    sensor = _single(GLOBAL_OPTS['SENSOR']).lower()
     suffix = "_BUFFER" if GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] else ""
     sensor_upper = sensor.upper() + suffix
-    period = GLOBAL_OPTS['PERIODICITY'].upper()
+    period = _single(GLOBAL_OPTS['PERIODICITY']).upper()
     asset_name = f"candidate_{candidate_id}_{sensor}_{temporal_id}"
     return f"{CONFIG['asset_monitor_base']}/LIBRARY_IMAGES/{sensor_upper}/{period}/burned_day_of_year_candidates/{asset_name}"
 
 def get_gcs_candidate(candidate_id, temporal_id):
     """Retorna o path do GCS para candidatos validados."""
     base = _gcs_library_base()
-    period = GLOBAL_OPTS['PERIODICITY'].lower()
-    sensor = GLOBAL_OPTS['SENSOR'].lower()
+    period = _single(GLOBAL_OPTS['PERIODICITY']).lower()
+    sensor = _single(GLOBAL_OPTS['SENSOR']).lower()
     asset_name = f"candidate_{candidate_id}_{sensor}_{temporal_id}"
     return f"{base}/{sensor}/{period}/burned_day_of_year_candidates/{asset_name}"
 
 def get_asset_official(temporal_id):
     """Retorna o path do GEE para o dado oficial consolidado."""
-    sensor = GLOBAL_OPTS['SENSOR'].lower()
+    sensor = _single(GLOBAL_OPTS['SENSOR']).lower()
     suffix = "_BUFFER" if GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] else ""
     sensor_upper = sensor.upper() + suffix
-    period = GLOBAL_OPTS['PERIODICITY'].upper()
+    period = _single(GLOBAL_OPTS['PERIODICITY']).upper()
     asset_name = f"burned_day_of_year_{sensor}_{temporal_id}"
     return f"{CONFIG['asset_monitor_base']}/LIBRARY_IMAGES/{sensor_upper}/{period}/burned_day_of_year_official/{asset_name}"
 
 def get_gcs_official(temporal_id):
     """Retorna o path do GCS para o dado oficial consolidado."""
     base = _gcs_library_base()
-    period = GLOBAL_OPTS['PERIODICITY'].lower()
-    sensor = GLOBAL_OPTS['SENSOR'].lower()
+    period = _single(GLOBAL_OPTS['PERIODICITY']).lower()
+    sensor = _single(GLOBAL_OPTS['SENSOR']).lower()
     asset_name = f"burned_day_of_year_{sensor}_{temporal_id}"
     return f"{base}/{sensor}/{period}/burned_day_of_year_official/{asset_name}.tif"
 
 def classification_name(periodicity, year, month=None, version=None):
     """(DEPRECATED) Usa-se agora get_asset_regional e funções associadas."""
     country = CONFIG['country']
-    sensor = GLOBAL_OPTS['SENSOR'].lower()
+    sensor = _single(GLOBAL_OPTS['SENSOR']).lower()
     suffix = "_buffer" if GLOBAL_OPTS['FIRE_POTENTIAL_FILTER'] else ""
     ver = version or CONFIG['version']
     region = "r01" # Exemplo
@@ -502,7 +490,7 @@ def get_hotspots_collection(year, month=None):
 
 def get_sensor_scale(sensor=None):
     """Retorna a escala em metros recomendada para cada sensor."""
-    sensor = (sensor or GLOBAL_OPTS['SENSOR']).lower()
+    sensor = (sensor or _single(GLOBAL_OPTS['SENSOR'])).lower()
     scales = {
         'sentinel2': 10,
         'landsat': 30,
@@ -535,6 +523,8 @@ def is_edit_mode():
 
 def print_config():
     """Imprime um resumo da configuração atual."""
+    sensor_str = ', '.join(GLOBAL_OPTS['SENSOR']) if isinstance(GLOBAL_OPTS['SENSOR'], list) else str(GLOBAL_OPTS['SENSOR'])
+    period_str = ', '.join(GLOBAL_OPTS['PERIODICITY']) if isinstance(GLOBAL_OPTS['PERIODICITY'], list) else str(GLOBAL_OPTS['PERIODICITY'])
     print(f"Country: {CONFIG['country'].upper()}")
     print(f"GEE Project: {CONFIG.get('gee_project', 'N/A')}")
     print(f"GEE Asset Repo: {CONFIG['asset_monitor_base']}")
@@ -542,4 +532,4 @@ def print_config():
     print(f"GCS Project: {CONFIG['gcs_project']}")
     print(f"GCS Catalog: {CONFIG['gcs_catalog_prefix']}")
     print(f"Version: {CONFIG['version']}")
-    print(f"Sensor: {GLOBAL_OPTS['SENSOR']} | Period: {GLOBAL_OPTS['PERIODICITY']} | Task Flag: {GLOBAL_OPTS['PERSONAL_TASK_FLAG']} | Campaign: {GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'N/A')}")
+    print(f"Sensor(s): {sensor_str} | Period(s): {period_str} | Task Flag: {GLOBAL_OPTS['PERSONAL_TASK_FLAG']} | Campaign: {GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'N/A')}")
