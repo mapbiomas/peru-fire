@@ -179,14 +179,12 @@ def render_model_card_html(hp, metrics, only_header=False):
 
     param_rows = ""
     for k, v in sorted(hp.items()):
-        if k in ('history', 'metrics', 'norm_stats', 'bands_config', 'sample_count', '_last_saved_metadata'):
+        if k in ('history', 'metrics', 'norm_stats', 'bands_config', 'sample_count', 'global_opts', '_last_saved_metadata'):
             continue
         if isinstance(v, (dict, list)):
             v_str = json.dumps(v, default=str)
         else:
             v_str = str(v)
-        if len(v_str) > 120:
-            v_str = v_str[:120] + '…'
         param_rows += f"<tr><td style='padding:2px 8px; font-weight:bold; color:#555; vertical-align:top; white-space:nowrap;'>{k}</td><td style='padding:2px 8px; color:#333; word-break:break-all; font-family:monospace; font-size:11px;'>{v_str}</td></tr>"
 
     main_card = f"""
