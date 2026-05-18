@@ -150,7 +150,20 @@ def _process_job(job, out, progress_callback=None):
     with out:
         print(f"  {total} tiles to process.")
 
-    # 3. Clasificar cada tile
+    # 3. Validar COGs antes de iterar tiles
+    from M5_inference import build_band_paths
+    band_paths = build_band_paths(bands_config, year, month)
+    first_band = list(band_paths.keys())[0]
+    with out:
+        print(f"  Verifying COG paths for band '{first_band}'...")
+        for b, p in band_paths.items():
+            exists = "OK" if fs.exists(f"gs://{p}") else "MISSING"
+            print(f"    {b}: gs://{p}  [{exists}]")
+    first_full = f"gs://{band_paths[first_band]}"
+    if not fs.exists(first_full):
+        raise FileNotFoundError(f"COG not found at: {first_full}")
+
+    # 4. Clasificar cada tile
     tile_results = []
     predict_fn = lambda x: model.predict(x, verbose=0)
 
@@ -192,6 +205,8 @@ def _process_job(job, out, progress_callback=None):
             if progress_callback:
                 progress_callback(model_id, region_name, cell_id, i, total, 'done')
         else:
+            with out:
+                print(f"    [WARN] {cell_id} returned no stats (check logs above)")
             if progress_callback:
                 progress_callback(model_id, region_name, cell_id, i, total, 'error')
 
