@@ -1,6 +1,11 @@
 import os
 import json
-from M0_auth_config import CONFIG
+from M0_auth_config import CONFIG, GLOBAL_OPTS
+
+def _campaign(campaign=None):
+    """Return campaign subfolder path segment."""
+    c = campaign or GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+    return f"{c}/" if c else ''
 
 def get_queue_file():
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -17,48 +22,53 @@ def save_queue(q):
     with open(get_queue_file(), 'w') as f:
         json.dump(q, f, indent=2)
 
-def make_job_id(model, region, period):
-    return f"{model} | {region} | {period}"
+def make_job_id(model, region, period, campaign=None):
+    parts = [model, region, period]
+    if campaign:
+        parts.insert(0, campaign)
+    return " | ".join(parts)
 
 def new_job(model, region, period, task_name=''):
+    campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
     return {
-        'id': make_job_id(model, region, period),
+        'id': make_job_id(model, region, period, campaign),
         'model': model,
         'region': region,
         'period': period,
         'task_name': task_name,
+        'campaign': campaign,
         'status': 'PENDING',
         'enabled': True,
         'upload_gee': False,
         'progress': '0%'
     }
 
-def classifications_base(model_id):
-    return f"{CONFIG['gcs_library_classifications']}/{model_id}"
+def classifications_base(model_id, campaign=None):
+    return f"{CONFIG['gcs_library_classifications']}/{_campaign(campaign)}{model_id}"
 
-def classified_tiles_dir(model_id):
-    return f"{classifications_base(model_id)}/CLASSIFIED_TILES"
+def classified_tiles_dir(model_id, campaign=None):
+    return f"{classifications_base(model_id, campaign)}/CLASSIFIED_TILES"
 
-def tile_path(model_id, region, cell_id, period):
-    return f"{classified_tiles_dir(model_id)}/tile_{region}_{cell_id}_{period}.tif"
+def tile_path(model_id, region, cell_id, period, campaign=None):
+    return f"{classified_tiles_dir(model_id, campaign)}/tile_{region}_{cell_id}_{period}.tif"
 
-def classified_region_dir(model_id):
-    return f"{classifications_base(model_id)}/CLASSIFIED_REGION"
+def classified_region_dir(model_id, campaign=None):
+    return f"{classifications_base(model_id, campaign)}/CLASSIFIED_REGION"
 
-def region_path(model_id, region, period):
-    return f"{classified_region_dir(model_id)}/region_{region}_{model_id}_{period}.tif"
+def region_path(model_id, region, period, campaign=None):
+    return f"{classified_region_dir(model_id, campaign)}/region_{region}_{model_id}_{period}.tif"
 
-def stats_dir(model_id):
-    return f"{classifications_base(model_id)}/STATS"
+def stats_dir(model_id, campaign=None):
+    return f"{classifications_base(model_id, campaign)}/STATS"
 
 def geral_stats_dir():
     return f"{CONFIG['gcs_library_classifications']}/GERAL_STATS"
 
-def tile_stats_path(model_id):
-    return f"{stats_dir(model_id)}/stats_tile.csv"
+def tile_stats_path(model_id, campaign=None):
+    return f"{stats_dir(model_id, campaign)}/stats_tile.csv"
 
-def region_stats_path(model_id):
-    return f"{stats_dir(model_id)}/stats_region.csv"
+def region_stats_path(model_id, campaign=None):
+    return f"{stats_dir(model_id, campaign)}/stats_region.csv"
 
 def consolidated_stats_path():
     return f"{geral_stats_dir()}/consolidated_stats.csv"
