@@ -201,7 +201,7 @@ class MosaicAssemblerUI(PipelineStepUI):
         # --- SISTEMA DE ABAS (TABS) ---
         sensors = ['SENTINEL2'] #, 'LANDSAT', 'HLS', 'MODIS']
         periods = ['monthly'] #, 'yearly']
-        methods = ['minnbr', 'minnbr_buffer'] #, 'median', 'minndvi']
+        methods = CONFIG['mosaic_methods']
         
         self.sensor_tabs = widgets.Tab()
         self.sensor_children = []

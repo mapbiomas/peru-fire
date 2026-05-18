@@ -213,7 +213,7 @@ class ExportDispatcherUI(PipelineStepUI):
 
         sensors = ['SENTINEL2']
         periods = ['monthly']
-        methods = ['minnbr', 'minnbr_buffer']
+        methods = CONFIG['mosaic_methods']
         
         self.update_status("Sincronizando tarefas GEE...")
         active_tasks = self._get_active_tasks()
