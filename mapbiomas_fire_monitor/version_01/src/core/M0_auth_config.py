@@ -101,7 +101,6 @@ def authenticate(project='mapbiomas-peru', clean_cache=False):
         from google.colab import auth
         auth.authenticate_user()
         import google.auth
-        global _GCS_CREDENTIALS
         _GCS_CREDENTIALS, _ = google.auth.default()
     except ImportError:
         pass # Ambiente local, assume Application Default Credentials (ADC)
