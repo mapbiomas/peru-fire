@@ -184,16 +184,16 @@ class ModelTrainer:
         return cm, rep
 
     def load(self, training_id, shortname):
-        import subprocess, tempfile
+        import tempfile
         from M0_auth_config import GLOBAL_OPTS, model_path
         base_path = model_path(training_id, shortname)
         fs = _get_fs()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             for fname in ['weights.npz', 'metadata.json']:
-                src = gcs_path(f"{base_path}/{fname}")
+                src = f"{CONFIG['bucket']}/{base_path}/{fname}"
                 dest = os.path.join(tmpdir, fname)
-                subprocess.run(['gsutil', 'cp', src, dest], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                fs.get(src, dest)
             
             with open(os.path.join(tmpdir, 'metadata.json')) as f:
                 hp = json.load(f)
@@ -432,9 +432,15 @@ class ModelTrainer:
         collections = getattr(self, '_sample_collections', [])
         for coll in collections:
             campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
-            src = gcs_path(f"{CONFIG['gcs_library_samples']}/{campaign}/{coll}.csv")
-            dest = gcs_path(f"{base_path}/samples/{coll}.csv")
-            subprocess.run(['gsutil', 'cp', src, dest], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            src = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{campaign}/{coll}.csv"
+            dest = f"{CONFIG['bucket']}/{base_path}/samples/{coll}.csv"
+            try:
+                dest_dir = '/'.join(dest.split('/')[:-1])
+                if not fs.exists(dest_dir):
+                    fs.makedirs(dest_dir)
+                fs.copy(src, dest)
+            except Exception:
+                pass
 
         self._last_saved_metadata = hp
         self._last_saved_metadata['metrics'] = metrics

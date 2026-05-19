@@ -20,11 +20,10 @@ def _load_m4_metadata():
 
 
 def _save_m4_metadata(data):
-    """Salva apenas metadados de treinamento (meta + metadata), não lista de arquivos GCS."""
-    safe = {k: v for k, v in data.items() if k in ('meta', 'metadata')}
+    """Salva todos os metadados de treinamento em cache local."""
     try:
         with open("m4_ranking_cache.json", 'w') as f:
-            json.dump(safe, f, indent=2)
+            json.dump(data, f, indent=2)
     except:
         pass
 

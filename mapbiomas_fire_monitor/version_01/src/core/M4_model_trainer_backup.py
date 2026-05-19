@@ -1185,6 +1185,12 @@ class ModelTrainerUI(PipelineStepUI):
         
         # --- INTENÇÃO DE RETREINAMENTO ---
         self.retrain_intent = {'mode': None, 'hp': None} # Guarda a intenção atual de re-treinamento
+        self.cb_retrain = widgets.Checkbox(value=False, layout={'display': 'none'})
+        self.cb_reextract = widgets.Checkbox(value=False, layout={'display': 'none'})
+        self.cb_borrar_retrain = widgets.Checkbox(value=False, layout={'display': 'none'})
+        self.cb_retrain.observe(self._on_intent_cb_change, names='value')
+        self.cb_reextract.observe(self._on_intent_cb_change, names='value')
+        self.cb_borrar_retrain.observe(self._on_intent_cb_change, names='value')
         
         # --- ESTADO DEL CANVAS ---
         self.selected_models = {} # ID -> info (Active in Canvas)
@@ -1233,8 +1239,8 @@ class ModelTrainerUI(PipelineStepUI):
         self.w_shortname.value = hp.get('shortname', '')
         self.w_layers.value = ",".join(map(str, hp.get('layers', [64, 32])))
         self.w_lr.value = str(hp.get('lr', 0.001))
-        self.w_iters.value = str(hp.get('iters', 5000))
-        self.w_batch.value = str(hp.get('batch', 1000))
+        self.w_iters.value = str(hp.get('n_iters', 5000))
+        self.w_batch.value = str(hp.get('batch_size', 1000))
         self.w_comment.value = hp.get('comment', '')
         
         # Muestras
@@ -1244,7 +1250,7 @@ class ModelTrainerUI(PipelineStepUI):
             
         # Bandas
         b_cfg = hp.get('bands_config', {})
-        for (s, m, b), chk in self.band_chk_map.items():
+        for (s, m, p, b), chk in self.band_chk_map.items():
             chk.value = (b in b_cfg and b_cfg[b]['sensor'] == s and b_cfg[b]['mosaic'] == m)
 
         # Sync Intent Checkboxes

@@ -15,7 +15,7 @@ from M0_auth_config import CONFIG, _get_fs
 class CacheManager:
     CACHE_FILE = "state.json"
     _state = None
-    _lock = threading.Lock() # Lock local para evitar race conditions no mesmo kernel
+    _lock = threading.RLock() # Lock reentrante para evitar race conditions no mesmo kernel
 
     @staticmethod
     def clear():
@@ -412,14 +412,15 @@ class CacheManager:
                 state['updated_at'] = datetime.datetime.utcnow().isoformat() + 'Z'
                 state['country'] = CONFIG['country']
                 
-                with fs.open(gcs_path, 'w') as f:
-                    json.dump(state, f, indent=2)
-                
-                # Salva também localmente para garantir consistência imediata
+                # Salva local primeiro para garantir consistência imediata
                 try:
                     with open(CacheManager.CACHE_FILE, 'w') as lf:
                         json.dump(state, lf, indent=2)
-                except: pass
+                except Exception as e:
+                    print(f"Warning: Local cache write failed: {e}")
+                
+                with fs.open(gcs_path, 'w') as f:
+                    json.dump(state, f, indent=2)
                 
                 CacheManager._state = state
             except Exception as e:
@@ -431,42 +432,47 @@ class CacheManager:
     @staticmethod
     def get_state():
         """Retorna estado atual."""
-        if CacheManager._state is None:
-            return CacheManager.load()
-        return CacheManager._state
+        with CacheManager._lock:
+            if CacheManager._state is None:
+                return CacheManager.load()
+            return CacheManager._state
 
     @staticmethod
     def add_asset(name, period):
-        state = CacheManager.get_state()
-        key = 'assets_monthly' if period == 'monthly' else 'assets_annually'
-        if name not in state[key]:
-            state[key].append(name)
-            CacheManager.save(state)
+        with CacheManager._lock:
+            state = CacheManager.get_state()
+            key = 'assets_monthly' if period == 'monthly' else 'assets_annually'
+            if name not in state[key]:
+                state[key].append(name)
+                CacheManager.save(state)
 
     @staticmethod
     def remove_asset(name, period):
-        state = CacheManager.get_state()
-        key = 'assets_monthly' if period == 'monthly' else 'assets_annually'
-        if name in state[key]:
-            state[key].remove(name)
-            CacheManager.save(state)
+        with CacheManager._lock:
+            state = CacheManager.get_state()
+            key = 'assets_monthly' if period == 'monthly' else 'assets_annually'
+            if name in state[key]:
+                state[key].remove(name)
+                CacheManager.save(state)
 
     @staticmethod
     def add_gcs_chunk(name, bands):
-        state = CacheManager.get_state()
-        if name not in state['gcs_chunks']:
-            state['gcs_chunks'][name] = []
-        for band in bands:
-            if band not in state['gcs_chunks'][name]:
-                state['gcs_chunks'][name].append(band)
-        CacheManager.save(state)
+        with CacheManager._lock:
+            state = CacheManager.get_state()
+            if name not in state['gcs_chunks']:
+                state['gcs_chunks'][name] = []
+            for band in bands:
+                if band not in state['gcs_chunks'][name]:
+                    state['gcs_chunks'][name].append(band)
+            CacheManager.save(state)
 
     @staticmethod
     def remove_gcs_chunk(name):
-        state = CacheManager.get_state()
-        if name in state['gcs_chunks']:
-            del state['gcs_chunks'][name]
-            CacheManager.save(state)
+        with CacheManager._lock:
+            state = CacheManager.get_state()
+            if name in state['gcs_chunks']:
+                del state['gcs_chunks'][name]
+                CacheManager.save(state)
 
     @staticmethod
     def reset():

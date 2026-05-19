@@ -663,11 +663,13 @@ class ModelTrainerUI(PipelineStepUI):
                         with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f:
                             metrics = json.load(f)
                         meta['metrics'] = metrics
-                    except: pass
+                    except Exception as e:
+                        pass  # metrics.json é opcional
                     
                     metadata_cache[m_id] = meta
                     updated_cache = True
-                except: pass
+                except Exception as e:
+                    print(f"[WARN] Erro ao carregar metadados de {m_id}: {e}")
         
         if updated_cache:
             cache['metadata'] = metadata_cache
