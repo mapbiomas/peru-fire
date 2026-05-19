@@ -123,18 +123,25 @@ def authenticate(project='mapbiomas-peru', clean_cache=False):
     _AUTHENTICATED = True
 
 
+_fs_instance = None
+
 def _get_fs():
-    """Retorna uma instância GCSFileSystem corretamente autenticada para qualquer ambiente."""
+    """Retorna uma instância GCSFileSystem corretamente autenticada para qualquer ambiente (cache)."""
+    global _fs_instance
+    if _fs_instance is not None:
+        return _fs_instance
     import gcsfs
     project = CONFIG['gcs_project']
     is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
 
     if is_colab:
         if _GCS_CREDENTIALS is not None:
-            return gcsfs.GCSFileSystem(project=project, token=_GCS_CREDENTIALS, requests_timeout=5)
-        return gcsfs.GCSFileSystem(project=project, requests_timeout=5)
+            _fs_instance = gcsfs.GCSFileSystem(project=project, token=_GCS_CREDENTIALS, requests_timeout=5)
+        else:
+            _fs_instance = gcsfs.GCSFileSystem(project=project, requests_timeout=5)
     else:
-        return gcsfs.GCSFileSystem(project=project, requests_timeout=10)
+        _fs_instance = gcsfs.GCSFileSystem(project=project, requests_timeout=10)
+    return _fs_instance
 
 def set_global_opts(
     sensor=['sentinel2'],           # ['sentinel2', 'landsat', 'hls', 'modis']

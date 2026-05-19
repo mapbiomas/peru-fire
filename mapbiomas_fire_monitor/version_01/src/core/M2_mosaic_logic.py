@@ -6,10 +6,9 @@ import os
 import subprocess
 import glob
 import time
-from datetime import timedelta
 
 from M0_auth_config import (
-    CONFIG, mosaic_name, 
+    CONFIG, mosaic_name, _get_fs,
     monthly_chunk_path, monthly_mosaic_path, monthly_cog_path,
     yearly_chunk_path, yearly_mosaic_path, yearly_cog_path,
     gcs_chunks_prefix, get_temp_dir, check_command_exists
@@ -25,26 +24,16 @@ BAND_DATATYPES = {
 }
 
 def list_gcs_files(prefix, logger=None):
-    """Lista shards diretamente no diretório GCS alvo."""
-    import platform
-    cmd = 'gsutil.cmd' if platform.system() == 'Windows' else 'gsutil'
+    """Lista shards no GCS usando gcsfs."""
+    fs = _get_fs()
+    clean_prefix = prefix.replace(f"gs://{CONFIG['bucket']}/", "").strip("/") + "/"
     
-    bucket_url = f"gs://{CONFIG['bucket']}"
-    # Garante que o prefixo comece certo e termine com barra
-    clean_prefix = prefix.replace(f"gs://{CONFIG['bucket']}/", "").strip("/")
-    target_url = f"{bucket_url}/{clean_prefix}/"
-    
-    if logger: logger(f"Buscando shards em: {target_url}", "info")
+    if logger: logger(f"Buscando shards em: gs://{CONFIG['bucket']}/{clean_prefix}", "info")
     
     try:
-        # Listagem recursiva apenas da pasta alvo
-        result = subprocess.run([cmd, 'ls', '-r', target_url], capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            return []
-            
-        files = [l.strip() for l in result.stdout.splitlines() if l.strip().endswith('.tif')]
-        return files
+        files = fs.find(clean_prefix)
+        tif_files = [f for f in files if f.endswith('.tif')]
+        return [f"gs://{CONFIG['bucket']}/{f}" for f in tif_files]
     except Exception as e:
         if logger: logger(f"Erro ao acessar GCS: {e}", "error")
         return []
@@ -88,13 +77,14 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
         label = f"{year} Anual"
 
     missing = check_m2_dependencies()
+    # Remove gsutil from required deps — now using gcsfs
+    missing = [d for d in missing if d != 'gsutil']
     if missing:
         msg = f" Faltam dependências vitais: {missing}"
         if logger: logger(msg, "error")
         return []
 
-    import platform
-    gsutil_cmd = 'gsutil.cmd' if platform.system() == 'Windows' else 'gsutil'
+    fs = _get_fs()
 
     work_root = get_temp_dir()
     session_id = f"m2_{base_name}_{int(time.time())}"
@@ -147,7 +137,10 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
             os.makedirs(band_tmp, exist_ok=True)
 
             try:
-                run_cmd([gsutil_cmd, '-m', 'cp'] + remote_shards + [band_tmp], label=f"Download ({b_name})")
+                for shard_url in remote_shards:
+                    shard_rel = shard_url.replace(f"gs://{CONFIG['bucket']}/", "")
+                    local_shard = os.path.join(band_tmp, os.path.basename(shard_url))
+                    fs.get(shard_rel, local_shard)
 
                 local_shards = glob.glob(os.path.join(band_tmp, '*.tif'))
                 if not local_shards: continue
@@ -166,11 +159,11 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
                     '-co', 'NUM_THREADS=2', '-co', 'BIGTIFF=YES', vrt_path, cog_local_path
                 ], label=f"Conversão COG ({clean_b_name})")
 
-                dest = f"gs://{CONFIG['bucket']}/{mosaic_prefix}/{cog_remote_name}"
-                run_cmd([gsutil_cmd, 'cp', cog_local_path, dest], label=f"Upload ({b_name})")
+                dest = f"{CONFIG['bucket']}/{mosaic_prefix}/{cog_remote_name}"
+                fs.put(cog_local_path, dest)
                 
                 if logger: logger(f" Éxito: {cog_remote_name}", "success")
-                results.append(dest)
+                results.append(f"gs://{dest}")
             finally:
                 if os.path.exists(band_tmp): shutil.rmtree(band_tmp)
 

@@ -199,8 +199,8 @@ class MosaicAssemblerUI(PipelineStepUI):
         ])
 
         # --- SISTEMA DE ABAS (TABS) ---
-        sensors = ['SENTINEL2'] #, 'LANDSAT', 'HLS', 'MODIS']
-        periods = ['monthly'] #, 'yearly']
+        sensors = [s.upper() for s in (GLOBAL_OPTS['SENSOR'] if isinstance(GLOBAL_OPTS['SENSOR'], list) else [GLOBAL_OPTS['SENSOR']])]
+        periods = GLOBAL_OPTS['PERIODICITY'] if isinstance(GLOBAL_OPTS['PERIODICITY'], list) else [GLOBAL_OPTS['PERIODICITY']]
         methods = CONFIG['mosaic_methods']
         
         self.sensor_tabs = widgets.Tab()
@@ -333,10 +333,11 @@ def start_mosaic_assembly(ui_obj):
     print(f"[INFO] Starting assembly of {len(selected)} COG bands...")
     
     from M2_mosaic_logic import assemble_country_mosaic
-    
-    try:
-        for item in selected:
-            d_label = f"{item['year']}_{item['month']:02d}" if item['month'] else f"{item['year']}"
+
+    succeeded = 0
+    for item in selected:
+        d_label = f"{item['year']}_{item['month']:02d}" if item['month'] else f"{item['year']}"
+        try:
             print(f"\n--- Processing: {item['sensor']} {d_label} {item['band']} ---")
             
             assemble_country_mosaic(
@@ -348,7 +349,8 @@ def start_mosaic_assembly(ui_obj):
                 bands=[item['band']],
                 logger=print
             )
-        print("\n[SUCCESS] Assembly completed successfully!")
-    except Exception as e:
-        print(f"\n[ERROR] Error in assembly: {e}")
-        traceback.print_exc()
+            succeeded += 1
+        except Exception as e:
+            print(f"[ERR] Failed {item['sensor']} {d_label} {item['band']}: {e}")
+            traceback.print_exc()
+    print(f"\n[SUMMARY] Assembly completed: {succeeded}/{len(selected)} succeeded.")

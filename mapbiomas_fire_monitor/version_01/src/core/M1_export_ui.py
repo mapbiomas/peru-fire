@@ -211,8 +211,8 @@ class ExportDispatcherUI(PipelineStepUI):
             widgets.HBox([btn_all, btn_none, self.btn_refresh, self.loader_html], layout=L(margin='15px 0', gap='10px', align_items='center'))
         ])
 
-        sensors = ['SENTINEL2']
-        periods = ['monthly']
+        sensors = [s.upper() for s in (GLOBAL_OPTS['SENSOR'] if isinstance(GLOBAL_OPTS['SENSOR'], list) else [GLOBAL_OPTS['SENSOR']])]
+        periods = GLOBAL_OPTS['PERIODICITY'] if isinstance(GLOBAL_OPTS['PERIODICITY'], list) else [GLOBAL_OPTS['PERIODICITY']]
         methods = CONFIG['mosaic_methods']
         
         self.update_status("Sincronizando tarefas GEE...")
@@ -350,22 +350,28 @@ def start_export(ui_obj, mode=None):
     
     country_geom = ee.FeatureCollection(CONFIG['asset_regions']).geometry().bounds()
 
+    succeeded = 0
     for i, meta in enumerate(selected, 1):
         y, m, p, band, mosaic_m, sensor = meta['year'], meta['month'], meta['period'], meta['band'], meta['mosaic'], meta['sensor']
         
         name_base = mosaic_name(y, m, p, mosaic=mosaic_m, sensor=sensor, band=None).replace(f"_{y}_{m:02d}", "").replace(f"_{y}", "")
         name_full = mosaic_name(y, m, p, mosaic=mosaic_m, sensor=sensor, band=band)
         
-        print(f"  [{i}/{len(selected)}] Sending {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d} for {meta['type']}...")
+        try:
+            print(f"  [{i}/{len(selected)}] Sending {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d} for {meta['type']}...")
 
-        start_date = f"{y}-{m:02d}-01" if p == 'monthly' and m else f"{y}-01-01"
-        end_date = (f"{y}-{m+1:02d}-01" if p == 'monthly' and m and m < 12 else f"{y+1}-01-01")
+            start_date = f"{y}-{m:02d}-01" if p == 'monthly' and m else f"{y}-01-01"
+            end_date = (f"{y}-{m+1:02d}-01" if p == 'monthly' and m and m < 12 else f"{y+1}-01-01")
 
-        mosaic_obj = logic.get_quality_mosaic(sensor, y, start_date, end_date, country_geom, month=m, method=mosaic_m)
-        
-        if meta['type'] == 'ASSET':
-            logic.export_to_asset(mosaic_obj, name_full, y, m, p, band=band, mosaic=mosaic_m)
-        else:
-            logic.export_to_gcs(mosaic_obj, name_base, y, m, p, bands=[band], mosaic=mosaic_m)
+            mosaic_obj = logic.get_quality_mosaic(sensor, y, start_date, end_date, country_geom, month=m, method=mosaic_m)
             
-    print(f"\n Completed! {len(selected)} tasks sent.")
+            if meta['type'] == 'ASSET':
+                logic.export_to_asset(mosaic_obj, name_full, y, m, p, band=band, mosaic=mosaic_m, sensor=sensor)
+            else:
+                logic.export_to_gcs(mosaic_obj, name_base, y, m, p, bands=[band], mosaic=mosaic_m, sensor=sensor)
+            succeeded += 1
+        except Exception as e:
+            print(f"  [ERR] Failed {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d}: {e}")
+            traceback.print_exc()
+            
+    print(f"\n Completed! {succeeded}/{len(selected)} tasks sent.")

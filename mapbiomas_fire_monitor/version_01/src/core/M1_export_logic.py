@@ -24,8 +24,8 @@ def ensure_asset_path(asset_id, type_at_end='IMAGE_COLLECTION'):
             try:
                 print(f"[GEE] Creating {asset_type}: {partial_path}")
                 ee.data.createAsset({'type': asset_type}, partial_path)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[WARN] Failed to create {asset_type} {partial_path}: {e}")
 
 # ─── FUNÇÕES DE SUPORTE ────────────────────────────────────────────────────────
 
@@ -212,7 +212,7 @@ def get_quality_mosaic(sensor, year, start_date, end_date, bounds, month=None, m
         mosaic = collection.qualityMosaic('nbr')
     
     spectral = mosaic.select(['blue', 'green', 'red', 'nir', 'swir1', 'swir2']).multiply(multiplier).toByte()
-    doy = mosaic.select('dayOfYear').toInt16() if 'dayOfYear' in mosaic.bandNames().getInfo() else ee.Image(0).rename('dayOfYear')
+    doy = mosaic.select('dayOfYear').toInt16()
     
     full = spectral.addBands(doy).clip(bounds)
     
@@ -224,7 +224,7 @@ def get_quality_mosaic(sensor, year, start_date, end_date, bounds, month=None, m
 
 # ─── FUNÇÕES DE EXPORTAÇÃO ─────────────────────────────────────────────────────
 
-def export_to_asset(mosaic_obj, name, year, month=None, period='monthly', config=None, band=None, mosaic=None):
+def export_to_asset(mosaic_obj, name, year, month=None, period='monthly', config=None, band=None, mosaic=None, sensor=None):
     country_geom = config.get_country_geometry() if config else mosaic_obj.geometry()
     if period == 'monthly':
         t_start = ee.Date(f'{year}-{month:02d}-01').millis()
@@ -235,12 +235,14 @@ def export_to_asset(mosaic_obj, name, year, month=None, period='monthly', config
 
     from M0_auth_config import GLOBAL_OPTS, CONFIG
     
+    s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).lower()
+    
     properties = {
         'system:time_start': t_start, 'system:time_end': t_end,
         'year': year, 'month': month or 0,
         'period': period, 'name': name,
         'country': CONFIG['country'],
-        'sensor': GLOBAL_OPTS['SENSOR'][0].lower() if isinstance(GLOBAL_OPTS['SENSOR'], list) else GLOBAL_OPTS['SENSOR'].lower(),
+        'sensor': s,
         'mosaic': GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower() + ("_buffer" if GLOBAL_OPTS.get('FIRE_POTENTIAL_FILTER', False) else ""),
         'band': band or 'all',
         'produced_for': 'mapbiomas-fire'
@@ -254,7 +256,7 @@ def export_to_asset(mosaic_obj, name, year, month=None, period='monthly', config
 
     from M0_auth_config import get_asset_mosaic_collection, GLOBAL_OPTS
     m_method = mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')
-    collection_id = get_asset_mosaic_collection(period=period, band=band, mosaic=m_method)
+    collection_id = get_asset_mosaic_collection(period=period, band=band, mosaic=m_method, sensor=s)
     
     # Garante que a estrutura de pastas e a ImageCollection existam
     ensure_asset_path(collection_id, 'IMAGE_COLLECTION')
@@ -275,8 +277,8 @@ def clear_gcs_chunks(year, month=None, period='monthly'):
     """
     Remove chunks antigos do GCS para evitar que se misturem com novos.
     """
-    from M0_auth_config import monthly_chunk_path, yearly_chunk_path, CONFIG
-    import os
+    from M0_auth_config import monthly_chunk_path, yearly_chunk_path, CONFIG, GLOBAL_OPTS
+    from M0_auth_config import _get_fs
     
     m_method = GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()
     if period == 'monthly':
@@ -284,23 +286,32 @@ def clear_gcs_chunks(year, month=None, period='monthly'):
     else:
         folder = yearly_chunk_path(year, mosaic=m_method)
         
-    path = f"gs://{CONFIG['bucket']}/{folder}/"
-    print(f"[GCS] Cleaning old chunks to avoid mixing: {path}")
-    # Deleta tudo dentro da pasta de chunks do período
-    os.system(f"gsutil -m rm -rf {path}** > /dev/null 2>&1")
+    path = f"{CONFIG['bucket']}/{folder}/"
+    print(f"[GCS] Cleaning old chunks to avoid mixing: gs://{path}")
+    try:
+        fs = _get_fs()
+        if fs.exists(path):
+            fs.rm(path, recursive=True)
+    except Exception as e:
+        print(f"[WARN] Failed to clean chunks: {e}")
 
 
 def delete_gcs_band(year, month, period, band):
     """Deleta os chunks de uma banda específica no GCS."""
-    from M0_auth_config import monthly_chunk_path, yearly_chunk_path, CONFIG, mosaic_name
-    import os
+    from M0_auth_config import monthly_chunk_path, yearly_chunk_path, CONFIG, mosaic_name, GLOBAL_OPTS
+    from M0_auth_config import _get_fs
     m_method = GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()
     folder = monthly_chunk_path(year, month, mosaic=m_method) if period == 'monthly' else yearly_chunk_path(year, mosaic=m_method)
     name = mosaic_name(year, month, period, mosaic=m_method)
-    prefix = f"{folder}/{name}_{band}"
-    path = f"gs://{CONFIG['bucket']}/{prefix}"
-    print(f"[GCS] Removing band {band}: {path}*")
-    os.system(f"gsutil -m rm -rf {path}* > /dev/null 2>&1")
+    prefix = f"{CONFIG['bucket']}/{folder}/{name}_{band}"
+    print(f"[GCS] Removing band {band}: gs://{prefix}*")
+    try:
+        fs = _get_fs()
+        files = fs.glob(prefix + "*")
+        for f in files:
+            fs.rm(f)
+    except Exception as e:
+        print(f"[WARN] Failed to delete band {band}: {e}")
 
 
 def delete_asset_band(year, month, period, band):
@@ -316,15 +327,17 @@ def delete_asset_band(year, month, period, band):
         print(f"[ERR] Failed to delete asset: {e}")
 
 
-def export_to_gcs(mosaic_obj, name, year, month=None, period='monthly', bands=None, config_module=None, mosaic=None):
+def export_to_gcs(mosaic_obj, name, year, month=None, period='monthly', bands=None, config_module=None, mosaic=None, sensor=None):
     from M0_auth_config import CONFIG, GLOBAL_OPTS, monthly_chunk_path, yearly_chunk_path, mosaic_name
     geometry = config_module.get_country_geometry() if config_module else mosaic_obj.geometry()
     
     m_method = mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()
+    s = sensor or GLOBAL_OPTS.get('SENSOR', 'sentinel2')
+    if isinstance(s, list): s = s[0]
     if period == 'monthly' and month is not None:
-        folder = monthly_chunk_path(year, month, mosaic=m_method)
+        folder = monthly_chunk_path(year, month, mosaic=m_method, sensor=s)
     else:
-        folder = yearly_chunk_path(year, mosaic=m_method)
+        folder = yearly_chunk_path(year, mosaic=m_method, sensor=s)
 
     if not bands:
         bands = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear']
@@ -333,7 +346,7 @@ def export_to_gcs(mosaic_obj, name, year, month=None, period='monthly', bands=No
         # Normalização para evitar problemas com dayOfYear (case-insensitive)
         clean_band = "dayOfYear" if band.lower() == "dayofyear" else band
         
-        band_name = mosaic_name(year, month, period, band=clean_band, mosaic=m_method)
+        band_name = mosaic_name(year, month, period, band=clean_band, mosaic=m_method, sensor=s)
         task = ee.batch.Export.image.toCloudStorage(
             image=mosaic_obj.select(band).clip(geometry),
             description=f"{GLOBAL_OPTS['PERSONAL_TASK_FLAG']}_GCS_{band_name}", bucket=CONFIG['bucket'],
