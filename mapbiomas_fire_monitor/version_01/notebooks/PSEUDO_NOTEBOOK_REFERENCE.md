@@ -184,10 +184,10 @@ Trains a Deep Neural Network classifier using a flexible band extraction matrix 
 ### [M5] — Regional Classification
 ```python
 from M5_classifier_ui import run_m5_ui
-ui_m5 = run_m5_ui(years=[2025, 2026], peridiocity_active=["monthly"])
+ui_m5 = run_m5_ui(years=[2025, 2026], periodicity_active=["monthly"])
 
 from M5_classifier import run_m5_queue
-run_m5_queue()
+run_m5_queue(progress_callback=ui_m5._on_tile_progress)
 ```
 
 Tile-based burned area classification using a trained DNN model. Produces classified rasters with tile and regional statistics.
