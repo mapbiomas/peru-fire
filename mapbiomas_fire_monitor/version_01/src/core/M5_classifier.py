@@ -183,20 +183,16 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
         raise FileNotFoundError(f"COG not found at: {first_full}")
 
     # 3. Download de COGs (uma vez para o periodo inteiro)
-    is_colab = 'COLAB_RELEASE_TAG' in os.environ
     cogs = {}
     try:
         for b in bands_sorted:
             cog_full = f"gs://{band_paths[b]}"
-            if is_colab:
-                cogs[b] = f"/vsigs/{band_paths[b]}"
-            else:
-                local_path = os.path.join(get_temp_dir(), os.path.basename(band_paths[b]))
-                if not os.path.exists(local_path):
-                    with out:
-                        print(f"  Downloading COG: {os.path.basename(band_paths[b])}...")
-                    fs.get(cog_full, local_path)
-                cogs[b] = local_path
+            local_path = os.path.join(get_temp_dir(), os.path.basename(band_paths[b]))
+            if not os.path.exists(local_path):
+                with out:
+                    print(f"  Downloading COG: {os.path.basename(band_paths[b])}...")
+                fs.get(cog_full, local_path)
+            cogs[b] = local_path
 
         with out:
             print(f"  COGs ready ({len(cogs)} bands).")
@@ -308,15 +304,14 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
                 print(f"  OK: {region_name} completed.")
 
     finally:
-        # 5. Limpar COGs locais (so se nao for Colab, onde /vsigs/ eh virtual)
-        if not is_colab:
-            removed = 0
-            for b, local_path in cogs.items():
-                if os.path.exists(local_path):
-                    os.remove(local_path)
-                    removed += 1
-            with out:
-                print(f"  Cleaned up {removed} local COG(s).")
+        # 5. Limpar COGs locais
+        removed = 0
+        for b, local_path in cogs.items():
+            if os.path.exists(local_path):
+                os.remove(local_path)
+                removed += 1
+        with out:
+            print(f"  Cleaned up {removed} local COG(s).")
 
 
 def _get_region_cells(region_name):
