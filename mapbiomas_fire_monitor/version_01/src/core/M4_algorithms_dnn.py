@@ -450,7 +450,7 @@ class ModelTrainer:
         
         try:
             # 1. Download atual
-            path = f"{base_path}/metadata.json"
+            path = f"{CONFIG['bucket']}/{base_path}/metadata.json"
             with fs.open(path, 'r') as f:
                 hp = json.load(f)
             

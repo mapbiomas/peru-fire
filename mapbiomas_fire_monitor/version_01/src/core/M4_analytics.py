@@ -237,7 +237,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
         import urllib.parse
         m_path = model_info['path']
         m_path = urllib.parse.unquote(m_path)
-        clean_path = m_path.replace('gs://', '').replace('mapbiomas-fire/', '').lstrip('/')
+        clean_path = m_path.replace('gs://', '').replace(f"{CONFIG['bucket']}/", '').lstrip('/')
         if 'b/' in clean_path and '/o/' in clean_path: clean_path = clean_path.split('/o/')[-1]
         
         if hp_override:
@@ -316,7 +316,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                         def _do_ok(_):
                             user_stars_container.children = [widgets.HTML("<i class='fa fa-spinner fa-spin'></i>")]
                             if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
-                                if ui: ui._refresh_models_list()
+                                if ui: ui._refresh_canvas_hub()
                                 hp['rating'] = val; _show_stars()
                             else: _show_stars()
                         btn_ok.on_click(_do_ok); btn_no.on_click(lambda _: _show_stars())

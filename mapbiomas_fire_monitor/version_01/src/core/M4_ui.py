@@ -28,6 +28,12 @@ class ModelTrainerUI(PipelineStepUI):
         
         # --- INTENÇÃO DE RETREINAMENTO ---
         self.retrain_intent = {'mode': None, 'hp': None} # Guarda a intenção atual de re-treinamento
+        self.cb_retrain = widgets.Checkbox(value=False, layout={'display': 'none'})
+        self.cb_reextract = widgets.Checkbox(value=False, layout={'display': 'none'})
+        self.cb_borrar_retrain = widgets.Checkbox(value=False, layout={'display': 'none'})
+        self.cb_retrain.observe(self._on_intent_cb_change, names='value')
+        self.cb_reextract.observe(self._on_intent_cb_change, names='value')
+        self.cb_borrar_retrain.observe(self._on_intent_cb_change, names='value')
         
         # --- ESTADO DEL CANVAS ---
         self.selected_models = {} # ID -> info (Active in Canvas)
@@ -87,7 +93,7 @@ class ModelTrainerUI(PipelineStepUI):
             
         # Bandas
         b_cfg = hp.get('bands_config', {})
-        for (s, m, b), chk in self.band_chk_map.items():
+        for (s, m, p, b), chk in self.band_chk_map.items():
             chk.value = (b in b_cfg and b_cfg[b]['sensor'] == s and b_cfg[b]['mosaic'] == m)
 
         # Sync Intent Checkboxes
@@ -264,17 +270,17 @@ class ModelTrainerUI(PipelineStepUI):
         self._refresh_samples_panes()
 
     def _on_search_models_change(self, change):
-        self.search_query_models = change['new']
-        self._refresh_models_list()
+        self.canvas_search_query = change['new']
+        self._refresh_canvas_hub()
 
     def _on_sort_change(self, change):
         if change['name'] == 'value':
-            self.sort_column = change['new']
-            self._refresh_models_list()
+            self.canvas_sort_col = change['new']
+            self._refresh_canvas_hub()
             
     def _on_sort_order_change(self, change):
-        self.sort_ascending = not self.sort_ascending
-        self._refresh_models_list()
+        self.canvas_sort_asc = not self.canvas_sort_asc
+        self._refresh_canvas_hub()
 
     def _on_intent_cb_change(self, change):
         """Ensures exclusivity between retraining intent checkboxes."""
@@ -501,9 +507,9 @@ class ModelTrainerUI(PipelineStepUI):
         except:
             # Fallback offline fixo se nem o cache existir
             available_combos = {
-                ('sentinel2', 'minnbr'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']),
-                ('sentinel2', 'minnbr_buffer'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']),
-                ('landsat', 'minnbr'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'])
+                ('sentinel2', 'minnbr', 'mensal'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']),
+                ('sentinel2', 'minnbr_buffer', 'mensal'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']),
+                ('landsat', 'minnbr', 'mensal'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'])
             }
 
         if not available_combos:
@@ -602,7 +608,7 @@ class ModelTrainerUI(PipelineStepUI):
         ], layout=L(padding='15px', border='1px solid #eee', border_radius='8px', margin='0 0 15px 0'))
 
     def _refresh_ui(self):
-        self._refresh_models_list(show_loader=True)
+        self._refresh_canvas_hub()
         
 
     def make_spinner(self, msg=Lang.LOADING):
