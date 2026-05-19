@@ -365,8 +365,8 @@ class ModelTrainer:
     def __init__(self, num_input, layers=None, lr=None, seed=42):
         _get_tf()
         self.num_input  = num_input
-        self.layers     = layers or CONFIG['model_layers']
-        self.lr         = lr     or CONFIG['model_lr']
+        self.layers = layers or CONFIG.get('model_layers', [64, 32])
+        self.lr     = lr     or CONFIG.get('model_lr', 0.001)
         self.seed       = seed
         self.graph      = None
         self.session    = None

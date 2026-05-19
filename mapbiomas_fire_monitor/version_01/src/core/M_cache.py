@@ -97,7 +97,7 @@ class CacheManager:
                         CacheManager._state.update(data)
                         # Salva uma cópia local para a próxima vez
                         try:
-                            with open(local_path, 'w') as lf:
+                            with open(CacheManager.CACHE_FILE, 'w') as lf:
                                 json.dump(data, lf, indent=2)
                         except Exception:
                             pass

@@ -263,7 +263,8 @@ class ExportDispatcherUI(PipelineStepUI):
                 m_tab = s_tab.children[self._last_period_idx]
                 m_tab.selected_index = self._last_method_idx
                 self._load_tab(self._last_sensor_idx, self._last_period_idx, self._last_method_idx, active_tasks)
-            except: pass
+        except Exception:
+            pass
 
         self.clear_main()
         self.main_area.children = [PipelineStepUI.get_status_css(), widgets.HTML(header_html), self.sensor_tabs, footer]
