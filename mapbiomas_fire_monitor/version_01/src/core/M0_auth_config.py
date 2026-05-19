@@ -331,8 +331,8 @@ def gcs_chunks_prefix(periodicity):
     return f"{CONFIG['gcs_chunks']}/{periodicity}"
 
 def get_temp_dir():
-    """Cria e retorna o caminho para a pasta temporária local."""
-    tmp = "temp_mosaics"
+    """Cria e retorna o caminho absoluto para a pasta temporária local."""
+    tmp = os.path.abspath("temp_mosaics")
     if not os.path.exists(tmp):
         os.makedirs(tmp)
     return tmp

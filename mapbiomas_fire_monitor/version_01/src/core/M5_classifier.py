@@ -66,8 +66,10 @@ def _run_classification(queue, out, progress_callback=None):
         try:
             _process_period(model_id, period, group, out, progress_callback)
         except Exception as e:
+            import traceback
             with out:
-                print(f"[FATAL] Group {model_id} | {period} failed: {e}")
+                print(f"[FATAL] Group {model_id} | {period} failed:")
+                traceback.print_exc()
             q = load_queue()
             for job in group:
                 for qj in q:
