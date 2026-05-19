@@ -6,7 +6,7 @@ import shutil
 import numpy as np
 import rasterio
 from rasterio.merge import merge
-from M0_auth_config import CONFIG, _get_fs
+from M0_auth_config import CONFIG, _get_fs, _gcs_download, _gcs_upload
 from M5_queue import (
     classified_tiles_dir, classified_region_dir, region_path,
     tile_stats_path, region_stats_path, consolidated_stats_path,
@@ -40,7 +40,7 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=
         local_tiles = []
         for i, tp in enumerate(tile_paths):
             local = os.path.join(tmpdir, f"tile_{i:04d}.tif")
-            fs.get(tp, local)
+            _gcs_download(tp, local)
             local_tiles.append(local)
 
         src_files = [rasterio.open(t) for t in local_tiles]
@@ -60,7 +60,7 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=
         with rasterio.open(mosaic_local, 'w', **out_meta) as dest:
             dest.write(mosaic)
 
-        fs.put(mosaic_local, out_gcs)
+        _gcs_upload(mosaic_local, out_gcs)
 
         if logger:
             logger(f"    Mosaico guardado: {out_gcs}")
@@ -104,7 +104,7 @@ def generate_tile_stats(model_id, region, period, tile_results, fs=None, logger=
         writer.writeheader()
         writer.writerows(rows)
 
-    fs.put(local_tmp, gcs_path)
+    _gcs_upload(local_tmp, gcs_path)
     os.remove(local_tmp)
 
     if logger:
@@ -153,7 +153,7 @@ def generate_region_stats(model_id, region, period, tile_results, fs=None, logge
     existing_rows = []
     try:
         local_existing = os.path.join(tempfile.mkdtemp(), "existing.csv")
-        fs.get(gcs_path, local_existing)
+        _gcs_download(gcs_path, local_existing)
         with open(local_existing, 'r') as f:
             reader = csv.DictReader(f)
             for r in reader:
@@ -171,7 +171,7 @@ def generate_region_stats(model_id, region, period, tile_results, fs=None, logge
             writer.writerow(r)
         writer.writerow(row)
 
-    fs.put(local_tmp, gcs_path)
+    _gcs_upload(local_tmp, gcs_path)
     os.remove(local_tmp)
 
     # --- CONSOLIDATED (GERAL_STATS/) ---
@@ -179,7 +179,7 @@ def generate_region_stats(model_id, region, period, tile_results, fs=None, logge
     cons_rows = []
     try:
         local_cons = os.path.join(tempfile.mkdtemp(), "consolidated.csv")
-        fs.get(consolidated_path, local_cons)
+        _gcs_download(consolidated_path, local_cons)
         with open(local_cons, 'r') as f:
             reader = csv.DictReader(f)
             for r in reader:
@@ -202,7 +202,7 @@ def generate_region_stats(model_id, region, period, tile_results, fs=None, logge
     dir_path = consolidated_path.rsplit('/', 1)[0]
     if not fs.exists(dir_path):
         fs.mkdir(dir_path)
-    fs.put(local_cons, consolidated_path)
+    _gcs_upload(local_cons, consolidated_path)
     os.remove(local_cons)
 
     if logger:

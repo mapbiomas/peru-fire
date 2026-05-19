@@ -5,7 +5,7 @@ from rasterio.mask import mask
 from shapely.geometry import shape, mapping
 from shapely.ops import transform
 from pyproj import Transformer
-from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _get_fs
+from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _gcs_download, _gcs_upload
 from M4_data_extractor import normalize
 
 def load_model_from_gcs(model_dir, fs, logger=None):
@@ -29,7 +29,7 @@ def load_model_from_gcs(model_dir, fs, logger=None):
     layers_cfg = meta['layers']
 
     local_npz = os.path.join(get_temp_dir(), f"{meta.get('training_id', 'model')}_weights.npz")
-    fs.get(f"{model_dir}/weights.npz", local_npz)
+    _gcs_download(f"{model_dir}/weights.npz", local_npz)
 
     if logger:
         logger(f"    Modelo cargado: {meta.get('training_id')} | {num_input} bandas | layers {layers_cfg}")
@@ -86,7 +86,6 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
         cogs: dict {banda: ruta_local_o_vsig} con los COGs listos para abrir.
     """
     import ee
-    fs = _get_fs()
     bands_sorted = sorted(bands_config.keys())
 
     cim = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")

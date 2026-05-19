@@ -4,6 +4,7 @@ MapBiomas Fire Monitor
 """
 import ee
 import os
+import subprocess
 import warnings
 import logging
 
@@ -142,6 +143,23 @@ def _get_fs():
     else:
         _fs_instance = gcsfs.GCSFileSystem(project=project, requests_timeout=60)
     return _fs_instance
+
+
+# ─── GCS (gsutil) ──────────────────────────────────────────────────────────────
+
+def _gcs_download(gcs_rel_path, local_path):
+    """Download de arquivo do GCS via gsutil cp (rápido em rede interna GCP)."""
+    gsutil = 'gsutil.cmd' if os.name == 'nt' else 'gsutil'
+    src = gcs_rel_path[5:] if gcs_rel_path.startswith('gs://') else gcs_rel_path
+    subprocess.run([gsutil, 'cp', f'gs://{src}', local_path], check=True)
+
+
+def _gcs_upload(local_path, gcs_rel_path):
+    """Upload de arquivo para GCS via gsutil cp."""
+    gsutil = 'gsutil.cmd' if os.name == 'nt' else 'gsutil'
+    dst = gcs_rel_path[5:] if gcs_rel_path.startswith('gs://') else gcs_rel_path
+    subprocess.run([gsutil, 'cp', local_path, f'gs://{dst}'], check=True)
+
 
 def set_global_opts(
     sensor=['sentinel2'],           # ['sentinel2', 'landsat', 'hls', 'modis']
