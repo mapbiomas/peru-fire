@@ -156,6 +156,8 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
         print(f"  Loading model '{model_id}'...")
 
     model_dir = f"{CONFIG['bucket']}/{_gcs_models_base()}/{model_id}"
+    with out:
+        print(f"    Model dir: gs://{model_dir}/")
     model, meta, bands_config, norm_stats = load_model_from_gcs(
         model_dir, fs, logger=lambda m, l=None: out.append_display_data(m)
     )
@@ -190,10 +192,20 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
         for b in bands_sorted:
             cog_full = f"gs://{band_paths[b]}"
             local_path = os.path.join(get_temp_dir(), os.path.basename(band_paths[b]))
-            if not os.path.exists(local_path):
+            if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+                with out:
+                    print(f"    {b}: using cached {os.path.basename(band_paths[b])}")
+            else:
+                if os.path.exists(local_path):
+                    os.remove(local_path)
                 with out:
                     print(f"  Downloading COG: {os.path.basename(band_paths[b])}...")
                 fs.get(cog_full, local_path)
+                sz = os.path.getsize(local_path)
+                if sz == 0:
+                    raise IOError(f"Downloaded COG is empty (0 bytes): {cog_full}")
+                with out:
+                    print(f"    {b}: OK ({sz} bytes)")
             cogs[b] = local_path
 
         with out:
