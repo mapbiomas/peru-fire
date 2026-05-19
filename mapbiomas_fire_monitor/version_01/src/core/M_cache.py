@@ -80,7 +80,7 @@ class CacheManager:
                             CacheManager._state.update(data)
                             local_found = True
                             break
-                    except:
+                    except Exception:
                         continue
             
             if local_found:
@@ -99,12 +99,8 @@ class CacheManager:
                         try:
                             with open(local_path, 'w') as lf:
                                 json.dump(data, lf, indent=2)
-                        except: pass
-                else:
-                    print(f"Cache not found at {gcs_path}.")
-            except Exception as e:
-                # Silencioso no local para evitar poluir a UI
-                pass
+                        except Exception:
+                            pass
         
         return CacheManager._state
 
@@ -257,7 +253,7 @@ class CacheManager:
                                 if name_no_ext not in cogs_monthly: cogs_monthly.append(name_no_ext)
                             else:
                                 if name_no_ext not in cogs_annually: cogs_annually.append(name_no_ext)
-                    except:
+                    except Exception:
                         continue
                 
                 # 2. Processa Chunks

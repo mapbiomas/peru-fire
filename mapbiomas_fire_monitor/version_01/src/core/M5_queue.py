@@ -31,7 +31,9 @@ def get_queue_file():
 
 def load_queue():
     q_file = get_queue_file()
-    _acquire_lock()
+    if not _acquire_lock():
+        print("[WARN] load_queue: Could not acquire lock within timeout")
+        return []
     try:
         if os.path.exists(q_file):
             with open(q_file, 'r') as f:
@@ -42,7 +44,9 @@ def load_queue():
 
 def save_queue(q):
     q_file = get_queue_file()
-    _acquire_lock()
+    if not _acquire_lock():
+        print("[WARN] save_queue: Could not acquire lock within timeout, skipping")
+        return
     try:
         with open(q_file, 'w') as f:
             json.dump(q, f, indent=2)
@@ -69,6 +73,10 @@ def new_job(model, region, period, task_name=''):
         'upload_gee': False,
         'progress': '0%'
     }
+
+def _campaign(campaign):
+    return f"{campaign}/" if campaign else ""
+
 
 def classifications_base(model_id, campaign=None):
     return f"{CONFIG['gcs_library_classifications']}/{_campaign(campaign)}{model_id}"
