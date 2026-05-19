@@ -504,7 +504,7 @@ class ModelTrainerUI(PipelineStepUI):
                     combo = (p['sensor'], p['mosaic'], 'anual')
                     if combo not in available_combos: available_combos[combo] = set()
                     available_combos[combo].add(p['band'])
-        except:
+        except Exception:
             # Fallback offline fixo se nem o cache existir
             available_combos = {
                 ('sentinel2', 'minnbr', 'mensal'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']),
@@ -614,19 +614,6 @@ class ModelTrainerUI(PipelineStepUI):
     def make_spinner(self, msg=Lang.LOADING):
         return make_spinner(msg=msg)
 
-    def _on_canvas_batch_action(self, mode):
-        """Ação em lote no repositório do Canvas."""
-        q = self.canvas_search_query.lower()
-        if mode == 'all':
-            for rid, info in self.canvas_history.items():
-                if q in rid.lower() or q in info.get('shortname','').lower():
-                    self.selected_models[rid] = info
-        elif mode == 'none':
-            self.selected_models = {}
-        
-        self._refresh_canvas_hub()
-        self._update_canvas()
-
     def _sync_repository(self, show_loader=False, force_refresh=False):
         if show_loader: self.show_loader("Sincronizando Repositorio...")
         
@@ -696,8 +683,8 @@ class ModelTrainerUI(PipelineStepUI):
         from sklearn.metrics import classification_report
         try:
             rep = classification_report(y_true, (preds > 0.5).astype(int), output_dict=True, zero_division=0)
-        except: rep = {}
-        
+        except Exception:
+        rep = {}
         hp_live = {
             'training_id': self.w_training_id.value, 'shortname': self.w_shortname.value,
             'sample_collections': samples, 'bands_input': sorted(b_cfg.keys()),
@@ -1076,10 +1063,14 @@ def start_training(ui):
     ui.canvas_output.clear_output(wait=True)
     ui._refresh_canvas_hub()      # Atualiza a barra lateral mostrando o "LIVE"
 
-    layers = [int(x.strip()) for x in ui.w_layers.value.split(',')]
-    iters = int(ui.w_iters.value)
-    batch = int(ui.w_batch.value)
-    lr = float(ui.w_lr.value)
+    try:
+        layers = [int(x.strip()) for x in ui.w_layers.value.split(',')]
+        iters = int(ui.w_iters.value)
+        batch = int(ui.w_batch.value)
+        lr = float(ui.w_lr.value)
+    except ValueError as e:
+        print(f"Error: Valor inválido nos hiperparâmetros: {e}")
+        return
     
     print(f"Extracting pixels from {len(selected_samples)} collections using Flexible Matrix ({len(bands_config)} bands). Please wait...")
     

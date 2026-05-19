@@ -69,7 +69,8 @@ GLOBAL_OPTS = {
     'PERIODICITY': ['yearly'],
     'MOSAIC_METHOD': 'minnbr',
     'PERSONAL_TASK_FLAG': 'CATALOG',
-    'SAMPLING_CAMPAIGN': 'monitor_01'
+    'SAMPLING_CAMPAIGN': 'monitor_01',
+    'FIRE_POTENTIAL_FILTER': False,
 }
 
 

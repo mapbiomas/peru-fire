@@ -58,7 +58,7 @@ def list_campaigns_gcs():
         
         if not campaigns: return ['monitor_01']
         return sorted(list(set(campaigns)))
-    except:
+    except Exception:
         return ['monitor_01']
 
 def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
@@ -170,9 +170,6 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
         if logger: logger(f"[GCS] Extrayendo {len(geometries)} muestras de {p}...", "info")
         
         # --- LEITURA REAL DAS BANDAS ---
-        if logger: logger(f"[OK] Mosaicos OK para {p}: {len(band_paths)} bandas listas para la extracción.", "info")
-        if logger: logger(f"[GCS] Extrayendo {len(geometries)} muestras de {p}...", "info")
-        
         sources = {}
         local_files = []
         
@@ -225,7 +222,7 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
                             for i, b in enumerate(bands_sorted):
                                 band_pixels_acc[i].extend(temp_data[b][final_valid_mask])
                             labels_acc.extend([label] * num_valid)
-                except:
+                except Exception:
                     continue
             
             # 3. Empilhar dados do período

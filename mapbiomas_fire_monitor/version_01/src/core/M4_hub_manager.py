@@ -14,7 +14,7 @@ def _load_m4_metadata():
             try:
                 with open(path, 'r') as f:
                     return json.load(f)
-            except:
+            except Exception:
                 continue
     return {}
 
@@ -24,7 +24,7 @@ def _save_m4_metadata(data):
     try:
         with open("m4_ranking_cache.json", 'w') as f:
             json.dump(data, f, indent=2)
-    except:
+    except Exception:
         pass
 
 

@@ -110,7 +110,7 @@ def list_campaigns_gcs():
         
         if not campaigns: return ['monitor_01']
         return sorted(list(set(campaigns)))
-    except:
+    except Exception:
         return ['monitor_01']
 
 def _load_m4_cache():
@@ -122,7 +122,7 @@ def _load_m4_cache():
         if os.path.exists(path):
             try:
                 with open(path, 'r') as f: return json.load(f)
-            except: continue
+            except Exception: continue
     return {}
 
 def _save_m4_cache(data):
@@ -130,8 +130,7 @@ def _save_m4_cache(data):
     try:
         with open("m4_ranking_cache.json", 'w') as f:
             json.dump(data, f, indent=2)
-    except: pass
-
+    except Exception: pass
 def list_trained_models(force_refresh=False):
     """Lista modelos já treinados priorizando o cache local para velocidade."""
     from M0_auth_config import _gcs_models_base, CONFIG
@@ -327,7 +326,7 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
                             for i, b in enumerate(bands_sorted):
                                 band_pixels_acc[i].extend(temp_data[b][final_valid_mask])
                             labels_acc.extend([label] * num_valid)
-                except:
+                except Exception:
                     continue
             
             # 3. Empilhar dados do período
@@ -784,7 +783,7 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
             cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
         else:
             cm = np.zeros((2,2)); cm_norm = np.zeros((2,2))
-    except:
+    except Exception:
         cm = np.zeros((2,2)); cm_norm = np.zeros((2,2))
 
     # Determina quais subplots mostrar
@@ -844,7 +843,7 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
             if coords_override is not None: coords2 = coords_override[:, :2]
             elif embeds is not None:
                 try: pca = PCA(n_components=2); coords2 = pca.fit_transform(embeds)
-                except: pass
+                except Exception: pass
             if coords2 is not None:
                 ax = fig.add_subplot(rows, cols, idx + 1)
                 ax.scatter(coords2[:, 0], coords2[:, 1], c=preds_f, cmap='RdYlBu_r', s=25, alpha=0.7, edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
@@ -868,8 +867,7 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
                 ax.fill_between(recall, precision, alpha=0.2, color='#17a2b8')
                 ax.set_title('Curva Precision-Recall', weight='bold', fontsize=10)
                 ax.set_xlabel('Recall'); ax.legend(loc='lower left', fontsize=8); ax.grid(True, alpha=0.3)
-            except: pass
-
+            except Exception: pass
         elif '3d_static' in ptype:
             from mpl_toolkits.mplot3d import Axes3D
             is_pca = 'pca' in ptype
@@ -882,8 +880,7 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
                 coords3 = coords_override[:, :3]
             elif is_pca and embeds is not None:
                 try: pca = PCA(n_components=3); coords3 = pca.fit_transform(embeds)
-                except: pass
-            
+                except Exception: pass
             if coords3 is not None:
                 ax = fig.add_subplot(rows, cols, idx + 1, projection='3d')
                 ax.scatter(coords3[:, 0], coords3[:, 1], coords3[:, 2], c=preds_f, cmap='RdYlBu_r', s=10, alpha=0.6)
@@ -959,23 +956,23 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
         with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f: hp = json.load(f)
         try:
             with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
-        except: metrics = {}
-
+        except Exception:
+        metrics = {}
         # 2. Carrega Dados de Snapshots para o Time Machine se solicitado
         snap_data = None
         if epoch_index is not None:
             try:
                 with fs.open(f"{CONFIG['bucket']}/{clean_path}/history/snapshots_data.npz", 'rb') as f:
                     snap_data = dict(np.load(f, allow_pickle=True))
-            except:
+            except Exception:
                 pass # Se não existir, usa os dados finais das métricas
 
         def _render_content():
             try:
                 import __main__
                 ui = getattr(__main__, 'ui', None)
-            except: ui = None
-
+            except Exception:
+            ui = None
             # --- SISTEMA DE RATINGS (KPIs COMPACTOS) ---
             h_rating = hp.get('rating', 0)
             a_rating = metrics.get('auto_rating', 0)
@@ -1117,8 +1114,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                     try:
                         limit = epoch_index + 1
                         history_data = {k: v[:limit] for k, v in history_data.items()}
-                    except: pass
-                    
+                    except Exception: pass
                 render_diagnostic_dashboard(history_data, None, preds_final, y_true_final, 
                                           coords_override=tsne_coords_final if viz_config.get('tsne3d_static') else (pca_coords_final if viz_config.get('pca3d_static') or viz_config.get('pca2d') else None), 
                                           viz_config=viz_config)
@@ -1678,7 +1674,7 @@ class ModelTrainerUI(PipelineStepUI):
                     combo = (p['sensor'], p['mosaic'], 'anual')
                     if combo not in available_combos: available_combos[combo] = set()
                     available_combos[combo].add(p['band'])
-        except:
+        except Exception:
             # Fallback offline fixo se nem o cache existir
             available_combos = {
                 ('sentinel2', 'minnbr'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']),
@@ -1853,12 +1849,10 @@ class ModelTrainerUI(PipelineStepUI):
                         with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f:
                             metrics = json.load(f)
                         meta['metrics'] = metrics
-                    except: pass
-                    
+                    except Exception: pass
                     metadata_cache[m_id] = meta
                     updated_cache = True
-                except: pass
-        
+                except Exception: pass
         if updated_cache:
             cache['metadata'] = metadata_cache
             _save_m4_cache(cache)
@@ -1884,8 +1878,8 @@ class ModelTrainerUI(PipelineStepUI):
         from sklearn.metrics import classification_report
         try:
             rep = classification_report(y_true, (preds > 0.5).astype(int), output_dict=True, zero_division=0)
-        except: rep = {}
-        
+        except Exception:
+        rep = {}
         hp_live = {
             'training_id': self.w_training_id.value, 'shortname': self.w_shortname.value,
             'sample_collections': samples, 'bands_input': sorted(b_cfg.keys()),
