@@ -98,9 +98,14 @@ class CacheManager:
                         # Salva uma cópia local para a próxima vez
                         try:
                             with open(CacheManager.CACHE_FILE, 'w') as lf:
-                                json.dump(data, lf, indent=2)
+                            json.dump(data, lf, indent=2)
                         except Exception:
                             pass
+                else:
+                    print(f"Cache not found at {gcs_path}.")
+            except Exception as e:
+                # Silencioso no local para evitar poluir a UI
+                pass
         
         return CacheManager._state
 

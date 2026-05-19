@@ -684,7 +684,7 @@ class ModelTrainerUI(PipelineStepUI):
         try:
             rep = classification_report(y_true, (preds > 0.5).astype(int), output_dict=True, zero_division=0)
         except Exception:
-        rep = {}
+            rep = {}
         hp_live = {
             'training_id': self.w_training_id.value, 'shortname': self.w_shortname.value,
             'sample_collections': samples, 'bands_input': sorted(b_cfg.keys()),
