@@ -13,9 +13,9 @@ from M_regions import REGION_NAME_PROPERTY
 L = widgets.Layout
 
 class M5QueueUI:
-    def __init__(self, years=None, peridiocity_active=None):
+    def __init__(self, years=None, periodicity_active=None):
         self.years = years or [2025, 2026]
-        self.peridiocity_active = peridiocity_active or ['monthly']
+        self.periodicity_active = periodicity_active or ['monthly']
         self.queue = load_queue()
 
         self._thumb_cache = {}
@@ -114,9 +114,9 @@ class M5QueueUI:
         periods_by_year = {}
         for y in self.years:
             months = []
-            if "yearly" in self.peridiocity_active and y < now.year:
+            if "yearly" in self.periodicity_active and y < now.year:
                 months.append('')
-            if "monthly" in self.peridiocity_active:
+            if "monthly" in self.periodicity_active:
                 max_m = (now.month - 1) if y == now.year else (12 if y < now.year else 0)
                 for m in range(1, max_m + 1):
                     months.append(f"{m:02d}")
@@ -266,10 +266,10 @@ class M5QueueUI:
         now = datetime.datetime.now()
         periods = []
         for y in self.years:
-            if "yearly" in self.peridiocity_active:
+            if "yearly" in self.periodicity_active:
                 if y < now.year:
                     periods.append(str(y))
-            if "monthly" in self.peridiocity_active:
+            if "monthly" in self.periodicity_active:
                 max_m = (now.month - 1) if y == now.year else (12 if y < now.year else 0)
                 for m in range(1, max_m + 1):
                     periods.append(f"{y}_{m:02d}")
