@@ -200,7 +200,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
                     os.remove(local_path)
                 with out:
                     print(f"  Downloading COG: {os.path.basename(band_paths[b])}...")
-                fs.get(cog_full, local_path)
+                fs.get(cog_full, local_path, timeout=300)
                 sz = os.path.getsize(local_path)
                 if sz == 0:
                     raise IOError(f"Downloaded COG is empty (0 bytes): {cog_full}")

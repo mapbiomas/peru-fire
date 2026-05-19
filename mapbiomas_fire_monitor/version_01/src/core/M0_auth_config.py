@@ -136,11 +136,11 @@ def _get_fs():
 
     if is_colab:
         if _GCS_CREDENTIALS is not None:
-            _fs_instance = gcsfs.GCSFileSystem(project=project, token=_GCS_CREDENTIALS, requests_timeout=5)
+            _fs_instance = gcsfs.GCSFileSystem(project=project, token=_GCS_CREDENTIALS, requests_timeout=60)
         else:
-            _fs_instance = gcsfs.GCSFileSystem(project=project, requests_timeout=5)
+            _fs_instance = gcsfs.GCSFileSystem(project=project, requests_timeout=60)
     else:
-        _fs_instance = gcsfs.GCSFileSystem(project=project, requests_timeout=10)
+        _fs_instance = gcsfs.GCSFileSystem(project=project, requests_timeout=60)
     return _fs_instance
 
 def set_global_opts(
