@@ -934,7 +934,7 @@ def render_model_card_html(hp, metrics, only_header=False):
     """
     return html_content
 
-def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=None, epoch_index=None):
+def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=None, epoch_index=None, ui=None):
     """
     Visualiza as métricas e o card de um modelo salvo no GCS.
     viz_config: dict opcional com flags de visibilidade.
@@ -949,15 +949,15 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
         import urllib.parse
         m_path = model_info['path']
         m_path = urllib.parse.unquote(m_path)
-        clean_path = m_path.replace('gs://', '').replace('mapbiomas-fire/', '').lstrip('/')
+        clean_path = m_path.replace('gs://', '').replace(f"{CONFIG['bucket']}/", '').lstrip('/')
         if 'b/' in clean_path and '/o/' in clean_path: clean_path = clean_path.split('/o/')[-1]
         
         # 1. Carrega Metadados e Métricas Base
         with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f: hp = json.load(f)
-        try:
-            with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
-        except Exception:
-        metrics = {}
+            try:
+                with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
+            except Exception:
+                metrics = {}
         # 2. Carrega Dados de Snapshots para o Time Machine se solicitado
         snap_data = None
         if epoch_index is not None:
@@ -968,11 +968,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                 pass # Se não existir, usa os dados finais das métricas
 
         def _render_content():
-            try:
-                import __main__
-                ui = getattr(__main__, 'ui', None)
-            except Exception:
-            ui = None
+            # ui é recebido como parâmetro de view_analytics (evita import __main__)
             # --- SISTEMA DE RATINGS (KPIs COMPACTOS) ---
             h_rating = hp.get('rating', 0)
             a_rating = metrics.get('auto_rating', 0)
@@ -1024,7 +1020,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                         def _do_ok(_):
                             user_stars_container.children = [widgets.HTML("<i class='fa fa-spinner fa-spin'></i>")]
                             if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
-                                if ui: ui._refresh_models_list()
+                                if ui: ui._refresh_canvas_hub()
                                 hp['rating'] = val; _show_stars()
                             else: _show_stars()
                         btn_ok.on_click(_do_ok); btn_no.on_click(lambda _: _show_stars())
@@ -1425,16 +1421,16 @@ class ModelTrainerUI(PipelineStepUI):
 
     def _on_search_models_change(self, change):
         self.search_query_models = change['new']
-        self._refresh_models_list()
+        self._refresh_canvas_hub()
 
     def _on_sort_change(self, change):
         if change['name'] == 'value':
             self.sort_column = change['new']
-            self._refresh_models_list()
+            self._refresh_canvas_hub()
             
     def _on_sort_order_change(self, change):
         self.sort_ascending = not self.sort_ascending
-        self._refresh_models_list()
+        self._refresh_canvas_hub()
 
     def _on_intent_cb_change(self, change):
         """Ensures exclusivity between retraining intent checkboxes."""
@@ -1778,7 +1774,7 @@ class ModelTrainerUI(PipelineStepUI):
         ], layout=L(padding='15px', border='1px solid #eee', border_radius='8px', margin='0 0 15px 0'))
 
     def _refresh_ui(self):
-        self._refresh_models_list(show_loader=True)
+        self._refresh_canvas_hub(show_loader=True)
         
 
     def make_spinner(self, msg="Cargando..."):

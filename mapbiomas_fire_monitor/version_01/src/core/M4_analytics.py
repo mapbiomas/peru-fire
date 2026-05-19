@@ -219,7 +219,7 @@ def render_model_card_html(hp, metrics, only_header=False):
     """
     return style + main_card
 
-def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=None, epoch_index=None, hp_override=None):
+def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=None, epoch_index=None, hp_override=None, ui=None):
     """
     Visualiza as métricas e o card de um modelo salvo no GCS.
     viz_config: dict opcional com flags de visibilidade.
@@ -247,7 +247,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
             try:
                 with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
             except Exception:
-            metrics = {}
+                metrics = {}
         # 2. Carrega Dados de Snapshots para o Time Machine se solicitado
         snap_data = None
         if epoch_index is not None:
@@ -258,11 +258,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                 pass # Se não existir, usa os dados finais das métricas
 
         def _render_content():
-            try:
-                import __main__
-                ui = getattr(__main__, 'ui', None)
-            except Exception:
-                ui = None
+            # ui é recebido como parâmetro de view_analytics (evita import __main__)
             # --- SISTEMA DE RATINGS (KPIs COMPACTOS) ---
             h_rating = hp.get('rating', 0)
             a_rating = metrics.get('auto_rating', 0)
