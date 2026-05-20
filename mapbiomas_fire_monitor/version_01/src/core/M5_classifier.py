@@ -2,7 +2,7 @@ import os
 from collections import defaultdict
 from M0_auth_config import CONFIG, _get_fs, _gcs_models_base, _gcs_download
 from M_cache import CacheManager
-from M5_queue import load_queue, save_queue, make_job_id, tile_path, gcs_full
+from M5_queue import load_queue, save_queue, make_job_id, tile_path, gcs_full, archive_job_on_gcs, delete_pending_job_gcs
 from M5_inference import load_model_from_gcs, classify_cell_with_cogs, build_band_paths
 from M5_publisher import merge_region_tiles, generate_tile_stats, generate_region_stats, upload_to_gee
 from M_regions import REGION_NAME_PROPERTY
@@ -302,9 +302,11 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
                     print(f"  Generating stats for {len(tile_results)} tiles...")
                 generate_tile_stats(model_id, region_name, period, tile_results, fs=fs, campaign=campaign)
                 generate_region_stats(model_id, region_name, period, tile_results, fs=fs, campaign=campaign)
+                archive_job_on_gcs(job, tile_results, fs=fs)
             else:
                 with out:
                     print(f"  No tiles classified for {region_name}.")
+                delete_pending_job_gcs(model_id, region_name, period, fs=fs)
 
             q = load_queue()
             for qj in q:

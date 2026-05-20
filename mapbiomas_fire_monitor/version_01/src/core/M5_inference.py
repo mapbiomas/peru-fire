@@ -139,8 +139,8 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                 sources[b], clip_geom, crop=True, filled=True,
                 nodata=sources[b].nodata or -9999
             )
-            # Força contiguidade para evitar "multi-dimensional sub-views" do NumPy
-            band_data[b] = np.ascontiguousarray(out_image.data[0])
+            out_image = np.ascontiguousarray(out_image)
+            band_data[b] = out_image[0]
             if profile is None:
                 profile = sources[b].profile.copy()
 

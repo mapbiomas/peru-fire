@@ -4,7 +4,9 @@ from IPython.display import display, HTML, clear_output
 import ipywidgets as widgets
 from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs
 from M5_queue import load_queue, save_queue, make_job_id, new_job, gcs_full, classified_tiles_dir, \
-    tarea_path, save_tarea, delete_tarea, list_tareas
+    tarea_path, save_tarea, delete_tarea, list_tareas, \
+    save_pending_job_to_gcs, delete_pending_job_gcs, \
+    load_pending_from_gcs, sync_gcs_to_local_queue
 from M4_data_extractor import list_campaigns_gcs
 from M_ui_components import inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output
 from M_lang import L as Lang
@@ -23,6 +25,7 @@ class M5QueueUI:
         self._processing_state = {}
         self._card_checkboxes = {}
         self._live_status_out = widgets.Output()
+        self._model_meta_cache = {}
 
         self.w_model_box = widgets.VBox()
         self.w_region_box = widgets.VBox()
@@ -597,18 +600,52 @@ class M5QueueUI:
                 chk.observe(lambda change, m=model_name: self._sync_card_enabled(m, change['new']), names='value')
                 self._card_checkboxes[model_name] = chk
 
-                # -- botoes tarea + eliminar modelo --
-                tareas = list_tareas(fs=_get_fs())
-                tarea_exists = any(t.get('model') == model_name for t in tareas)
-                if tarea_exists:
-                    btn_tarea = widgets.Button(description=Lang.EXCLUDE_TASK_GCS, button_style='warning', layout=L(width='150px', height='28px', font_size='12px'))
-                    btn_tarea.on_click(lambda _, m=model_name: self._tarea_delete_click(m))
+                # -- estado de salvamento no GCS --
+                saved_count = sum(1 for j in jobs_list if j.get('_saved'))
+                total_count = len(jobs_list)
+                if saved_count == total_count and total_count > 0:
+                    card_badge = "Salvo ✓"
+                    badge_color = "#2563eb"
+                elif saved_count > 0:
+                    card_badge = f"{saved_count}/{total_count} Salvos"
+                    badge_color = "#ca8a04"
                 else:
-                    btn_tarea = widgets.Button(description=Lang.SAVE_TASK_GCS, button_style='info', layout=L(width='150px', height='28px', font_size='12px'))
-                    btn_tarea.on_click(lambda _, m=model_name: self._tarea_save_click(m))
-                btn_del_model = widgets.Button(description=Lang.DELETE_MODEL, button_style='danger', layout=L(width='140px', height='28px', font_size='12px'))
-                hbox_actions = widgets.HBox([btn_tarea, btn_del_model], layout=L(align_items='center', gap='6px', margin='0 0 6px 28px'))
-                btn_del_model.on_click(lambda b, m=model_name, c=hbox_actions: inline_confirm(b, lambda: (self._delete_model_all(m), self._refresh_ui()), container=c))
+                    card_badge = "Temporário"
+                    badge_color = "#64748b"
+
+                # -- botoes do card --
+                if saved_count == 0:
+                    btn_save = widgets.Button(
+                        description='Salvar no GCS', button_style='primary',
+                        layout=L(width='160px', height='28px', font_size='12px'))
+                    btn_save.on_click(lambda _, m=model_name: self._on_save_gcs_click(m))
+                    btn_secondary = widgets.Button(
+                        description='Dispensar', button_style='warning',
+                        layout=L(width='120px', height='28px', font_size='12px'))
+                    btn_secondary.on_click(lambda _, m=model_name: self._on_dismiss_click(m))
+                else:
+                    remaining = total_count - saved_count
+                    if remaining > 0:
+                        btn_save = widgets.Button(
+                            description=f'Salvar ({remaining})', button_style='primary',
+                            layout=L(width='160px', height='28px', font_size='12px'))
+                    else:
+                        btn_save = widgets.Button(
+                            description='Salvo ✓ no GCS', button_style='success',
+                            layout=L(width='160px', height='28px', font_size='12px'), disabled=True)
+                    btn_save.on_click(lambda _, m=model_name: self._on_save_gcs_click(m))
+                    btn_secondary = widgets.Button(
+                        description='Excluir do GCS', button_style='danger',
+                        layout=L(width='130px', height='28px', font_size='12px'))
+                    btn_secondary.on_click(lambda _, m=model_name: self._on_delete_gcs_click(m))
+                btn_del_model = widgets.Button(
+                    description=Lang.DELETE_MODEL, button_style='danger',
+                    layout=L(width='140px', height='28px', font_size='12px'))
+                hbox_actions = widgets.HBox(
+                    [btn_save, btn_secondary, btn_del_model],
+                    layout=L(align_items='center', gap='6px', margin='0 0 6px 28px'))
+                btn_del_model.on_click(lambda b, m=model_name, c=hbox_actions: inline_confirm(
+                    b, lambda: (self._delete_model_all(m), self._refresh_ui()), container=c))
 
                 # -- tarefas (nomes) em badges --
                 tarefas_assinadas = sorted(set(j.get('task_name', '') for j in jobs_list if j.get('task_name', '')))
@@ -620,6 +657,11 @@ class M5QueueUI:
                         chk,
                         widgets.HTML(f"<b style='font-size:15px;color:#0f172a;'>{model_name}</b>",
                                      layout=L(margin='0 10px 0 0')),
+                        widgets.HTML(
+                            f"<span style='display:inline-block;padding:2px 8px;"
+                            f"border-radius:10px;font-size:11px;font-weight:600;"
+                            f"color:white;background:{badge_color};'>{card_badge}</span>",
+                            layout=L(margin='0 0 0 auto')),
                     ], layout=L(align_items='center', margin='0 0 4px 0')),
                     widgets.HTML(f"<div style='margin:2px 0 6px 28px;'>{task_badges}</div>" if task_badges else ''),
                     hbox_actions,
@@ -663,7 +705,28 @@ class M5QueueUI:
                     btn_del.on_click(lambda b, m=model_name, rg=r, c=row: inline_confirm(b, lambda: (self._delete_model_region(m, rg), self._refresh_ui()), container=c))
                     region_lines.append(row)
 
-                right_col = widgets.VBox([header] + region_lines, layout=L(flex='1', margin='0 0 0 12px'))
+                # -- botao detalhes (gaveta) --
+                btn_detalhes = widgets.Button(
+                    description='Detalhes \u25bc',
+                    button_style='', layout=L(
+                        width='120px', height='26px', font_size='12px',
+                        padding='0 4px', margin='2px 0 2px 28px'))
+                details_panel = self._build_details_panel(model_name, jobs_list)
+                details_panel.layout.display = 'none'
+
+                def toggle_details(b, panel=details_panel, btn=btn_detalhes):
+                    if panel.layout.display == 'none':
+                        panel.layout.display = 'block'
+                        btn.description = 'Detalhes \u25b2'
+                    else:
+                        panel.layout.display = 'none'
+                        btn.description = 'Detalhes \u25bc'
+
+                btn_detalhes.on_click(toggle_details)
+
+                right_col = widgets.VBox(
+                    [header, btn_detalhes, details_panel] + region_lines,
+                    layout=L(flex='1', margin='0 0 0 12px'))
 
                 body = make_card_body(left_col, right_col)
                 cards.append(body)
@@ -671,6 +734,109 @@ class M5QueueUI:
             pend_vbox = widgets.VBox([tarea_section, filter_box, btn_clear] + cards)
 
         self.tab_pending.children = [pend_vbox]
+
+    def _get_model_meta(self, model_name):
+        """Retorna metadata.json do modelo no GCS, com cache."""
+        import json
+        if model_name in self._model_meta_cache:
+            return self._model_meta_cache[model_name]
+        try:
+            fs = _get_fs()
+            meta_path = f"{CONFIG['gcs_library_models']}/{model_name}/model/metadata.json"
+            if fs.exists(meta_path):
+                with fs.open(meta_path, 'r') as f:
+                    meta = json.load(f)
+                self._model_meta_cache[model_name] = meta
+                return meta
+        except Exception:
+            pass
+        self._model_meta_cache[model_name] = None
+        return None
+
+    def _build_details_panel(self, model_name, jobs_list):
+        """Retorna VBox ocultavel com metadados do modelo e resumo dos jobs."""
+        meta = self._get_model_meta(model_name)
+        parts = []
+
+        # -- secao: metadados do modelo --
+        if meta:
+            sensors = meta.get('sensor', meta.get('sensors', []))
+            if isinstance(sensors, str):
+                sensors = [sensors]
+            periodicities = meta.get('periodicity', meta.get('periodicities', []))
+            if isinstance(periodicities, str):
+                periodicities = [periodicities]
+            num_input = meta.get('num_input', '?')
+            n_iters = meta.get('n_iters', meta.get('n_epochs', ''))
+            learning_rate = meta.get('learning_rate', meta.get('lr', ''))
+            campaign = meta.get('campaign', meta.get('sampling_campaign', ''))
+
+            rows = []
+            if sensors:
+                rows.append(('<td style="padding:2px 8px;font-weight:600;">Sensores</td>',
+                             f'<td style="padding:2px 8px;">{", ".join(sensors)}</td>'))
+            if periodicities:
+                rows.append(('<td style="padding:2px 8px;font-weight:600;">Periodicidade</td>',
+                             f'<td style="padding:2px 8px;">{", ".join(periodicities)}</td>'))
+            rows.append(('<td style="padding:2px 8px;font-weight:600;">Bands (input)</td>',
+                         f'<td style="padding:2px 8px;">{num_input}</td>'))
+            if n_iters:
+                rows.append(('<td style="padding:2px 8px;font-weight:600;">Iteracoes</td>',
+                             f'<td style="padding:2px 8px;">{n_iters}</td>'))
+            if learning_rate:
+                rows.append(('<td style="padding:2px 8px;font-weight:600;">Learning rate</td>',
+                             f'<td style="padding:2px 8px;">{learning_rate}</td>'))
+            if campaign:
+                rows.append(('<td style="padding:2px 8px;font-weight:600;">Campanha</td>',
+                             f'<td style="padding:2px 8px;">{campaign}</td>'))
+
+            html = '<table style="font-size:12px;color:#334155;border-collapse:collapse;">'
+            for label, value in rows:
+                html += f'<tr>{label}{value}</tr>'
+            html += '</table>'
+            parts.append(widgets.HTML(
+                f'<div style="font-size:12px;font-weight:600;color:#0f172a;margin-bottom:4px;">Modelo</div>'
+                f'{html}',
+                layout=L(margin='4px 0')))
+        else:
+            parts.append(widgets.HTML(
+                "<span style='font-size:12px;color:#94a3b8;'>"
+                "Metadados do modelo indisponiveis (offline ou sem metadata.json).</span>"))
+
+        # -- secao: resumo dos jobs --
+        regions = sorted(set(j['region'] for j in jobs_list))
+        periods = sorted(set(j['period'] for j in jobs_list))
+        total = len(jobs_list)
+
+        html = f'<div style="font-size:12px;color:#334155;margin-top:8px;">'
+        html += f'<div style="font-size:12px;font-weight:600;color:#0f172a;margin-bottom:4px;">Jobs cadastrados</div>'
+        html += f'<div style="margin-bottom:4px;">{total} job(s), {len(regions)} regiao(oes), {len(periods)} periodo(s)</div>'
+        html += '<table style="font-size:11px;border-collapse:collapse;width:100%;">'
+        html += ('<tr style="background:#f8fafc;">'
+                 '<th style="padding:3px 6px;text-align:left;border-bottom:1px solid #e2e8f0;">Regiao</th>'
+                 '<th style="padding:3px 6px;text-align:left;border-bottom:1px solid #e2e8f0;">Periodo</th>'
+                 '<th style="padding:3px 6px;text-align:left;border-bottom:1px solid #e2e8f0;">Status</th>'
+                 '<th style="padding:3px 6px;text-align:left;border-bottom:1px solid #e2e8f0;">Tarefa</th>'
+                 '</tr>')
+        for j in sorted(jobs_list, key=lambda x: (x['region'], x['period'])):
+            status = j.get('status', 'PENDING')
+            color = {'PENDING': '#f59e0b', 'RUNNING': '#3b82f6',
+                     'COMPLETED': '#22c55e'}.get(status, '#94a3b8')
+            task = j.get('task_name', '')
+            html += (f'<tr>'
+                     f'<td style="padding:2px 6px;border-bottom:1px solid #f1f5f9;">{j["region"]}</td>'
+                     f'<td style="padding:2px 6px;border-bottom:1px solid #f1f5f9;">{j["period"]}</td>'
+                     f'<td style="padding:2px 6px;border-bottom:1px solid #f1f5f9;">'
+                     f'<span style="color:{color};">{status}</span></td>'
+                     f'<td style="padding:2px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;">{task}</td>'
+                     f'</tr>')
+        html += '</table></div>'
+        parts.append(widgets.HTML(html, layout=L(margin='4px 0')))
+
+        return widgets.VBox(
+            parts,
+            layout=L(margin='4px 0 8px 24px', padding='8px',
+                     border='1px solid #e2e8f0', border_radius='6px'))
 
     def _tarea_save_click(self, model):
         self.queue = load_queue()
@@ -695,6 +861,65 @@ class M5QueueUI:
         with self.out_msg:
             clear_output()
             display(HTML("<b style='color:red;'>Cola vaciada.</b>"))
+        self._refresh_ui()
+
+    def _on_save_gcs_click(self, model_name):
+        """Salva no GCS os jobs enabled de um card."""
+        fs = _get_fs()
+        self.queue = load_queue()
+        saved = 0
+        skipped = 0
+        for j in self.queue:
+            if j['model'] == model_name and j.get('enabled', True):
+                if j.get('_saved'):
+                    skipped += 1
+                    continue
+                ok = save_pending_job_to_gcs(j, fs=fs)
+                if ok:
+                    j['_saved'] = True
+                    saved += 1
+        if saved > 0:
+            save_queue(self.queue)
+        with self.out_msg:
+            clear_output()
+            if saved > 0:
+                display(HTML(f"<span style='color:green;'>{saved} jobs salvos no GCS.</span>"))
+            if skipped > 0:
+                display(HTML(f"<span style='color:orange;'>{skipped} jobs já estavam salvos.</span>"))
+        self._refresh_ui()
+
+    def _on_dismiss_click(self, model_name):
+        """Remove do m5_queue.json os jobs não salvos de um card."""
+        self.queue = load_queue()
+        kept = [j for j in self.queue
+                if not (j['model'] == model_name and not j.get('_saved'))]
+        removed = len(self.queue) - len(kept)
+        self.queue = kept
+        save_queue(self.queue)
+        with self.out_msg:
+            clear_output()
+            if removed > 0:
+                display(HTML(f"<span style='color:red;'>{removed} jobs temporários removidos.</span>"))
+            else:
+                display(HTML("<span style='color:orange;'>Nenhum job temporário para remover.</span>"))
+        self._refresh_ui()
+
+    def _on_delete_gcs_click(self, model_name):
+        """Remove do GCS pending/ todos os jobs salvos de um card."""
+        fs = _get_fs()
+        self.queue = load_queue()
+        removed = 0
+        for j in self.queue:
+            if j['model'] == model_name and j.get('_saved'):
+                ok = delete_pending_job_gcs(j['model'], j['region'], j['period'], fs=fs)
+                if ok:
+                    j['_saved'] = False
+                    removed += 1
+        if removed > 0:
+            save_queue(self.queue)
+        with self.out_msg:
+            clear_output()
+            display(HTML(f"<span style='color:red;'>{removed} jobs removidos do GCS.</span>"))
         self._refresh_ui()
 
     # --- HABILITACION DE CARDS ---
@@ -1111,6 +1336,12 @@ class M5QueueUI:
         self._render_done()
 
     def display(self):
+        # Sincroniza jobs do GCS pendente com a fila local
+        n_sync = sync_gcs_to_local_queue()
+        if n_sync > 0:
+            with self.out_msg:
+                clear_output()
+                display(HTML(f"<span style='color:green;'>{n_sync} jobs sincronizados del GCS.</span>"))
         self._build_guide()
         self._refresh_ui()
 

@@ -1,7 +1,8 @@
 import os
 import json
 import time
-from M0_auth_config import CONFIG, GLOBAL_OPTS
+import datetime
+from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs
 
 def _lock_path():
     return get_queue_file() + '.lock'
@@ -176,3 +177,225 @@ def list_tareas(fs=None):
         except Exception:
             pass
     return results
+
+
+# --- GCS QUEUE (PENDING / ARCHIVED POR MODELO) ---
+
+def _queue_dir(model_id):
+    """GCS relativo: LIBRARY_MODELS/<model_id>/queue/"""
+    return f"{CONFIG['gcs_library_models']}/{model_id}/queue"
+
+def _pending_dir(model_id):
+    return f"{_queue_dir(model_id)}/pending"
+
+def _archived_dir(model_id):
+    return f"{_queue_dir(model_id)}/archived"
+
+def _pending_job_filename(region, period):
+    return f"pend_{period}_{region}.json"
+
+def _archived_job_filename(region, period, timestamp):
+    return f"arch_{period}_{region}_{timestamp}.json"
+
+def _ensure_dir(fs, path):
+    """Cria diretório GCS se não existir."""
+    full = gcs_full(path)
+    if not fs.exists(full):
+        dir_parent = full.rsplit('/', 1)[0]
+        if not fs.exists(dir_parent):
+            fs.mkdir(dir_parent)
+        fs.mkdir(full)
+
+def save_pending_job_to_gcs(job, fs=None):
+    """Salva um job em pending/ no GCS.
+
+    Args:
+        job: dict com pelo menos model, region, period, id, task_name, campaign, ...
+        fs: opcional, gcsfs instance.
+    Returns:
+        str: caminho GCS completo onde foi salvo, ou None se erro.
+    """
+    import json
+    if fs is None:
+        fs = _get_fs()
+    model_id = job['model']
+    region = job['region']
+    period = job['period']
+    rel_path = _pending_dir(model_id) + '/' + _pending_job_filename(region, period)
+    full = gcs_full(rel_path)
+    _ensure_dir(fs, _pending_dir(model_id))
+    payload = dict(job)
+    payload['_saved_at'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    try:
+        with fs.open(full, 'w') as f:
+            json.dump(payload, f, indent=2)
+        return full
+    except Exception:
+        return None
+
+def delete_pending_job_gcs(model_id, region, period, fs=None):
+    """Remove um job de pending/ no GCS."""
+    if fs is None:
+        fs = _get_fs()
+    rel = _pending_dir(model_id) + '/' + _pending_job_filename(region, period)
+    full = gcs_full(rel)
+    try:
+        if fs.exists(full):
+            fs.rm(full)
+            return True
+    except Exception:
+        pass
+    return False
+
+def archive_job_on_gcs(job, tile_results, fs=None):
+    """Move de pending/ → archived/ com metadados de conclusão.
+
+    Se o job não existir em pending/ (nunca foi salvo), apenas retorna False.
+    """
+    import json
+    if fs is None:
+        fs = _get_fs()
+    model_id = job['model']
+    region = job['region']
+    period = job['period']
+    # Verifica se existe em pending/
+    pend_rel = _pending_dir(model_id) + '/' + _pending_job_filename(region, period)
+    pend_full = gcs_full(pend_rel)
+    if not fs.exists(pend_full):
+        return False
+    # Lê o job original
+    try:
+        with fs.open(pend_full, 'r') as f:
+            payload = json.load(f)
+    except Exception:
+        return False
+    # Agrega estatísticas
+    total_pixels = sum(tr.get('total_pixels', 0) for tr in tile_results)
+    burned_pixels = sum(tr.get('burned_pixels', 0) for tr in tile_results)
+    confidences = [tr.get('mean_confidence', 0) for tr in tile_results if tr.get('burned_pixels', 0) > 0]
+    resolution_m = 10
+    pixel_area_m2 = resolution_m ** 2
+    burned_area_km2 = burned_pixels * pixel_area_m2 / 1_000_000
+    timestamp = datetime.datetime.utcnow().strftime('T%Y%m%dT%H%M%SZ')
+    payload['status'] = 'FINISHED'
+    payload['progress'] = '100%'
+    payload['_finished_at'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    payload['_completed_tiles'] = len(tile_results)
+    payload['_total_pixels'] = total_pixels
+    payload['_burned_pixels'] = burned_pixels
+    payload['_burned_area_km2'] = round(burned_area_km2, 4)
+    payload['_mean_confidence'] = round(float(sum(confidences) / len(confidences)), 4) if confidences else 0.0
+    # Salva em archived/
+    arch_rel = _archived_dir(model_id) + '/' + _archived_job_filename(region, period, timestamp)
+    arch_full = gcs_full(arch_rel)
+    _ensure_dir(fs, _archived_dir(model_id))
+    try:
+        with fs.open(arch_full, 'w') as f:
+            json.dump(payload, f, indent=2)
+    except Exception:
+        return False
+    # Remove de pending/
+    try:
+        fs.rm(pend_full)
+    except Exception:
+        pass
+    return True
+
+def load_pending_from_gcs(model_id, fs=None):
+    """Lista todos os jobs em pending/ de um modelo. Retorna list[dict]."""
+    import json
+    if fs is None:
+        fs = _get_fs()
+    pattern = gcs_full(_pending_dir(model_id)) + '/*.json'
+    results = []
+    try:
+        files = fs.glob(pattern)
+    except Exception:
+        return results
+    for fp in sorted(files):
+        try:
+            with fs.open(fp, 'r') as f:
+                job = json.load(f)
+            job['_saved'] = True
+            results.append(job)
+        except Exception:
+            pass
+    return results
+
+def load_all_pending_from_gcs(fs=None):
+    """Varre todos os modelos, retorna dict {model_id: [jobs...]}."""
+    import json
+    if fs is None:
+        fs = _get_fs()
+    # Ex: gs://bucket/sudamerica/peru/CATALOG_01/LIBRARY_MODELS/*/queue/pending/*.json
+    pattern = gcs_full(CONFIG['gcs_library_models']) + '/*/queue/pending/*.json'
+    results = {}
+    try:
+        files = fs.glob(pattern)
+    except Exception:
+        return results
+    for fp in sorted(files):
+        try:
+            with fs.open(fp, 'r') as f:
+                job = json.load(f)
+            model = job.get('model', '')
+            if model:
+                job['_saved'] = True
+                results.setdefault(model, []).append(job)
+        except Exception:
+            pass
+    return results
+
+def list_archived_jobs(model_id, fs=None):
+    """Lista jobs em archived/ de um modelo. Retorna list[dict]."""
+    import json
+    if fs is None:
+        fs = _get_fs()
+    pattern = gcs_full(_archived_dir(model_id)) + '/*.json'
+    results = []
+    try:
+        files = fs.glob(pattern)
+    except Exception:
+        return results
+    for fp in sorted(files):
+        try:
+            with fs.open(fp, 'r') as f:
+                results.append(json.load(f))
+        except Exception:
+            pass
+    return results
+
+def delete_archived_job(model_id, gcs_path, fs=None):
+    """Remove um job específico de archived/."""
+    if fs is None:
+        fs = _get_fs()
+    try:
+        if fs.exists(gcs_path):
+            fs.rm(gcs_path)
+            return True
+    except Exception:
+        pass
+    return False
+
+def sync_gcs_to_local_queue(fs=None):
+    """Sincroniza jobs do GCS pending/ para o m5_queue.json local.
+
+    Para cada modelo com pendentes no GCS, adiciona ao m5_queue.json
+    jobs que ainda não existem (por id). Marca como _saved=True.
+    """
+    if fs is None:
+        fs = _get_fs()
+    queue = load_queue()
+    existing_ids = set(j['id'] for j in queue)
+    added = 0
+    all_pending = load_all_pending_from_gcs(fs=fs)
+    for model, jobs in all_pending.items():
+        for pj in jobs:
+            if pj['id'] not in existing_ids:
+                pj['_saved'] = True
+                queue.append(pj)
+                existing_ids.add(pj['id'])
+                added += 1
+    if added > 0:
+        save_queue(queue)
+    return added
