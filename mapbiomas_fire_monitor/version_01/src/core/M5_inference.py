@@ -28,11 +28,12 @@ def load_model_from_gcs(model_dir, fs, logger=None):
     if not bands_config:
         raise ValueError("Modelo no tiene 'bands_config' en los metadatos.")
 
-    # Orden explícito das bandas salvo no treinamento
-    band_order = meta.get('band_order', None)
-    if band_order is None:
-        # Fallback para modelos antigos sem band_order
-        band_order = sorted(bands_config.keys())
+    band_order = meta.get('band_order')
+    if not band_order:
+        raise ValueError(
+            "Modelo no tiene 'band_order' en los metadatos. "
+            "Reentrena el modelo con la versión actual del M4 (commit 9b95392+)."
+        )
 
     norm_stats = {int(k): tuple(v) for k, v in meta.get('norm_stats', {}).items()}
     num_input = meta['num_input']
