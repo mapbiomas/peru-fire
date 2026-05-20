@@ -249,7 +249,7 @@ def compute_normalizer(X):
     return stats
 
 def normalize(X, stats):
-    X_norm = X.copy().astype(np.float32)
+    X_norm = np.ascontiguousarray(X).astype(np.float32)
     for i, (mean, std) in stats.items():
         X_norm[:, i] = (X_norm[:, i] - mean) / std
     return X_norm

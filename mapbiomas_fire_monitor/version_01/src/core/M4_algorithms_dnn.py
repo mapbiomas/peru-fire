@@ -318,6 +318,7 @@ class ModelTrainer:
 
                 # Dados de entrada
                 'bands_input':  getattr(self, '_bands_input', CONFIG['bands_model_default']),
+                'band_order':   sorted(getattr(self, '_bands_config', {}).keys()),
                 'bands_config': getattr(self, '_bands_config', {}),
                 'sample_collections': getattr(self, '_sample_collections', []),
                 'sample_count': getattr(self, '_sample_count', {}),

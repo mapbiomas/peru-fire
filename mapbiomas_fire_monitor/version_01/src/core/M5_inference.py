@@ -9,7 +9,11 @@ from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_pat
 from M4_data_extractor import normalize
 
 def load_model_from_gcs(model_dir, fs, logger=None):
-    """Carga modelo Keras + metadatos desde GCS."""
+    """Carga modelo Keras + metadatos desde GCS.
+
+    Returns:
+        (model, meta, bands_config, norm_stats, band_order)
+    """
     import json
     import tensorflow as tf
 
@@ -24,15 +28,39 @@ def load_model_from_gcs(model_dir, fs, logger=None):
     if not bands_config:
         raise ValueError("Modelo no tiene 'bands_config' en los metadatos.")
 
+    # Orden explícito das bandas salvo no treinamento
+    band_order = meta.get('band_order', None)
+    if band_order is None:
+        # Fallback para modelos antigos sem band_order
+        band_order = sorted(bands_config.keys())
+
     norm_stats = {int(k): tuple(v) for k, v in meta.get('norm_stats', {}).items()}
     num_input = meta['num_input']
     layers_cfg = meta['layers']
+
+    # Validação: consistência entre band_order, norm_stats, num_input e bands_config
+    n_bands = len(band_order)
+    n_stats = len(norm_stats)
+    n_cfg = len(bands_config)
+    mismatches = []
+    if n_bands != num_input:
+        mismatches.append(f"band_order ({n_bands}) != num_input ({num_input})")
+    if n_stats != num_input:
+        mismatches.append(f"norm_stats ({n_stats}) != num_input ({num_input})")
+    if n_cfg != num_input:
+        mismatches.append(f"bands_config ({n_cfg}) != num_input ({num_input})")
+    # Verifica se os nomes das bandas em band_order existem em bands_config
+    missing = [b for b in band_order if b not in bands_config]
+    if missing:
+        mismatches.append(f"band_order contém bandas ausentes em bands_config: {missing}")
+    if mismatches:
+        raise ValueError(f"Inconsistência nos metadados do modelo: {'; '.join(mismatches)}")
 
     local_npz = os.path.join(get_temp_dir('weights'), f"{meta.get('training_id', 'model')}_weights.npz")
     _gcs_download(f"{model_dir}/weights.npz", local_npz)
 
     if logger:
-        logger(f"    Modelo cargado: {meta.get('training_id')} | {num_input} bandas | layers {layers_cfg}")
+        logger(f"    Modelo cargado: {meta.get('training_id')} | {num_input} bandas | orden {band_order}")
 
     model = tf.keras.Sequential()
     model.add(tf.keras.layers.Input(shape=(num_input,)))
@@ -49,7 +77,7 @@ def load_model_from_gcs(model_dir, fs, logger=None):
     model.set_weights(weights_list)
 
     os.remove(local_npz)
-    return model, meta, bands_config, norm_stats
+    return model, meta, bands_config, norm_stats, band_order
 
 def build_band_paths(bands_config, year, month):
     """Construye diccionario {banda: gcs_path} para un periodo."""
@@ -79,14 +107,14 @@ def _reproject_geometry(geom_coords, src_crs):
         return [mapping(geom_proj)]
     return [geom_coords]
 
-def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_gcs_path, cogs, logger=None):
+def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_gcs_path, cogs, band_order, logger=None):
     """Clasifica un tile cim-world usando COGs ya descargados.
 
     Args:
-        cogs: dict {banda: ruta_local_o_vsig} con los COGs listos para abrir.
+        cogs: dict {banda: ruta_local} con los COGs listos para abrir.
+        band_order: orden de las bandas (del modelo), ej: ['nir','red','swir1','swir2'].
     """
     import ee
-    bands_sorted = sorted(bands_config.keys())
 
     cim = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
     cell_feature = cim.filter(ee.Filter.eq('name', cell_id)).first()
@@ -96,26 +124,27 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
     try:
         geom_coords = cell_geom.getInfo()
 
-        for b in bands_sorted:
+        for b in band_order:
             sources[b] = rasterio.open(cogs[b])
 
-        src_crs = sources[bands_sorted[0]].crs
+        src_crs = sources[band_order[0]].crs
         clip_geom = _reproject_geometry(geom_coords, src_crs)
 
         band_data = {}
         profile = None
 
-        for b in bands_sorted:
+        for b in band_order:
             out_image, out_transform = mask(
                 sources[b], clip_geom, crop=True, filled=True,
                 nodata=sources[b].nodata or -9999
             )
-            band_data[b] = out_image.data[0]
+            # Força contiguidade para evitar "multi-dimensional sub-views" do NumPy
+            band_data[b] = np.ascontiguousarray(out_image.data[0])
             if profile is None:
                 profile = sources[b].profile.copy()
 
-        height, width = band_data[bands_sorted[0]].shape
-        stack = np.stack([band_data[b] for b in bands_sorted], axis=-1)
+        height, width = band_data[band_order[0]].shape
+        stack = np.stack([band_data[b] for b in band_order], axis=-1)
         valid_mask = np.all(stack > -9999, axis=-1)
 
         valid_pixels = stack[valid_mask]
@@ -144,7 +173,7 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
             dst.write(output_class, 1)
             dst.write(output_prob, 2)
 
-        fs.put(local_tmp, out_gcs_path)
+        _gcs_upload(local_tmp, out_gcs_path)
         os.remove(local_tmp)
 
         burned_mask = probs > 0.5

@@ -158,14 +158,13 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
     model_dir = f"{CONFIG['bucket']}/{_gcs_models_base()}/{model_id}"
     with out:
         print(f"    Model dir: gs://{model_dir}/")
-    model, meta, bands_config, norm_stats = load_model_from_gcs(
+    model, meta, bands_config, norm_stats, band_order = load_model_from_gcs(
         model_dir, fs, logger=lambda m, l=None: out.append_display_data(m)
     )
     predict_fn = lambda x: model.predict(x, verbose=0)
 
     # 2. Construir paths e verificar COGs via CacheManager primeiro
     band_paths = build_band_paths(bands_config, year, month)
-    bands_sorted = sorted(bands_config.keys())
 
     period_type = 'monthly' if month else 'annually'
     state = CacheManager.get_state()
@@ -181,7 +180,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
         with out:
             print(f"    {b}: gs://{p}  [{exists}]")
 
-    first_full = f"gs://{band_paths[bands_sorted[0]]}"
+    first_full = f"gs://{band_paths[band_order[0]]}"
     first_basename = os.path.basename(first_full).lower().replace('_cog.tif', '')
     if first_basename not in known_cogs and not fs.exists(first_full):
         raise FileNotFoundError(f"COG not found at: {first_full}")
@@ -189,7 +188,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
     # 3. Download de COGs (uma vez para o periodo inteiro)
     cogs = {}
     try:
-        for b in bands_sorted:
+        for b in band_order:
             cog_full = f"gs://{band_paths[b]}"
             local_path = os.path.join(get_temp_dir('cogs'), os.path.basename(band_paths[b]))
             if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
@@ -274,7 +273,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
                 try:
                     stats = classify_cell_with_cogs(
                         cell_id, predict_fn, bands_config, norm_stats,
-                        out_full, cogs,
+                        out_full, cogs, band_order,
                         logger=lambda m, l=None: out.append_display_data(m)
                     )
                 except Exception as e:
