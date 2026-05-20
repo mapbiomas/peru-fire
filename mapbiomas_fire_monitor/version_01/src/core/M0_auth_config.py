@@ -348,12 +348,26 @@ def gcs_chunks_prefix(periodicity):
     """Retorna o prefixo da pasta de chunks no GCS para listagem."""
     return f"{CONFIG['gcs_chunks']}/{periodicity}"
 
-def get_temp_dir():
-    """Cria e retorna o caminho absoluto para a pasta temporária local."""
-    tmp = os.path.abspath("temp_mosaics")
-    if not os.path.exists(tmp):
-        os.makedirs(tmp)
-    return tmp
+def get_temp_dir(subdir=None):
+    """Cria e retorna o caminho absoluto para a pasta temporária local.
+
+    Args:
+        subdir: Subpasta opcional (cogs, tiles, mosaics, samples, weights, stats).
+
+    No Colab usa /content/TEMPORARIO/, local usa ./TEMPORARIO/.
+    Subpastas conhecidas săo criadas automaticamente.
+    """
+    is_colab = 'COLAB_RELEASE_TAG' in os.environ
+    base = '/content/TEMPORARIO' if is_colab else os.path.abspath('TEMPORARIO')
+    os.makedirs(base, exist_ok=True)
+    # Garante subpastas conhecidas
+    for name in ('cogs', 'tiles', 'mosaics', 'samples', 'weights', 'stats'):
+        os.makedirs(os.path.join(base, name), exist_ok=True)
+    if subdir:
+        path = os.path.join(base, subdir)
+        os.makedirs(path, exist_ok=True)
+        return path
+    return base
 
 def check_command_exists(cmd):
     """Verifica se um comando (ex: gdal_merge) existe no sistema."""

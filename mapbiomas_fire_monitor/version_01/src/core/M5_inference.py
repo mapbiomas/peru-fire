@@ -28,7 +28,7 @@ def load_model_from_gcs(model_dir, fs, logger=None):
     num_input = meta['num_input']
     layers_cfg = meta['layers']
 
-    local_npz = os.path.join(get_temp_dir(), f"{meta.get('training_id', 'model')}_weights.npz")
+    local_npz = os.path.join(get_temp_dir('weights'), f"{meta.get('training_id', 'model')}_weights.npz")
     _gcs_download(f"{model_dir}/weights.npz", local_npz)
 
     if logger:
@@ -139,7 +139,7 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
 
         profile.update(dtype=rasterio.float32, count=2, compress='lzw', nodata=-9999)
 
-        local_tmp = os.path.join(get_temp_dir(), f"{cell_id}.tif")
+        local_tmp = os.path.join(get_temp_dir('tiles'), f"{cell_id}.tif")
         with rasterio.open(local_tmp, 'w', **profile) as dst:
             dst.write(output_class, 1)
             dst.write(output_prob, 2)

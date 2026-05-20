@@ -286,7 +286,7 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
                 
                 if not is_colab:
                     from M0_auth_config import get_temp_dir
-                    local_file = os.path.join(get_temp_dir(), os.path.basename(cog_path))
+                    local_file = os.path.join(get_temp_dir('samples'), os.path.basename(cog_path))
                     if logger: logger(f"  [Baixar] Bajando banda {b}...", "info")
                     fs.get(cog_path, local_file)
                     src_path = local_file

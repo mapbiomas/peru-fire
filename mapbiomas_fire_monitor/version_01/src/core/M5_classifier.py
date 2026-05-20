@@ -191,7 +191,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
     try:
         for b in bands_sorted:
             cog_full = f"gs://{band_paths[b]}"
-            local_path = os.path.join(get_temp_dir(), os.path.basename(band_paths[b]))
+            local_path = os.path.join(get_temp_dir('cogs'), os.path.basename(band_paths[b]))
             if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
                 with out:
                     print(f"    {b}: using cached {os.path.basename(band_paths[b])}")

@@ -1,12 +1,12 @@
 import os
 import csv
 import json
-import tempfile
+import time
 import shutil
 import numpy as np
 import rasterio
 from rasterio.merge import merge
-from M0_auth_config import CONFIG, _get_fs, _gcs_download, _gcs_upload
+from M0_auth_config import CONFIG, _get_fs, _gcs_download, _gcs_upload, get_temp_dir
 from M5_queue import (
     classified_tiles_dir, classified_region_dir, region_path,
     tile_stats_path, region_stats_path, consolidated_stats_path,
@@ -34,7 +34,7 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=
         logger(f"    Merge: {len(tile_paths)} tiles para {region}")
 
     out_gcs = gcs_full(region_path(model_id, region, period, campaign))
-    tmpdir = tempfile.mkdtemp()
+    tmpdir = os.path.join(get_temp_dir('mosaics'), f"merge_{model_id}_{region}_{period}_{int(time.time())}")
 
     try:
         local_tiles = []
@@ -81,8 +81,7 @@ def generate_tile_stats(model_id, region, period, tile_results, fs=None, logger=
         return
 
     gcs_path = gcs_full(tile_stats_path(model_id, campaign))
-    local_tmp = os.path.join(tempfile.mkdtemp(), "stats_tile.csv")
-    os.makedirs(os.path.dirname(local_tmp), exist_ok=True)
+    local_tmp = os.path.join(get_temp_dir('stats'), "stats_tile.csv")
 
     fieldnames = ['model_id', 'region', 'period', 'tile_id',
                   'total_pixels', 'burned_pixels', 'mean_confidence']
@@ -144,15 +143,14 @@ def generate_region_stats(model_id, region, period, tile_results, fs=None, logge
     }
 
     # Guarda region_stats.csv (sobrescribe, es siempre la vista mas reciente)
-    local_tmp = os.path.join(tempfile.mkdtemp(), "stats_region.csv")
-    os.makedirs(os.path.dirname(local_tmp), exist_ok=True)
+    local_tmp = os.path.join(get_temp_dir('stats'), "stats_region.csv")
     fieldnames = list(row.keys())
 
     # Verifica si ya existe en GCS para hacer append
     gcs_path = gcs_full(region_stats_path(model_id, campaign))
     existing_rows = []
     try:
-        local_existing = os.path.join(tempfile.mkdtemp(), "existing.csv")
+        local_existing = os.path.join(get_temp_dir('stats'), "existing.csv")
         _gcs_download(gcs_path, local_existing)
         with open(local_existing, 'r') as f:
             reader = csv.DictReader(f)
@@ -178,7 +176,7 @@ def generate_region_stats(model_id, region, period, tile_results, fs=None, logge
     consolidated_path = gcs_full(consolidated_stats_path())
     cons_rows = []
     try:
-        local_cons = os.path.join(tempfile.mkdtemp(), "consolidated.csv")
+        local_cons = os.path.join(get_temp_dir('stats'), "consolidated.csv")
         _gcs_download(consolidated_path, local_cons)
         with open(local_cons, 'r') as f:
             reader = csv.DictReader(f)
@@ -190,8 +188,7 @@ def generate_region_stats(model_id, region, period, tile_results, fs=None, logge
     except Exception:
         pass
 
-    local_cons = os.path.join(tempfile.mkdtemp(), "consolidated.csv")
-    os.makedirs(os.path.dirname(local_cons), exist_ok=True)
+    local_cons = os.path.join(get_temp_dir('stats'), "consolidated.csv")
     with open(local_cons, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
