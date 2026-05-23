@@ -13,6 +13,7 @@ from M0_auth_config import (
     yearly_chunk_path, yearly_mosaic_path, yearly_cog_path,
     gcs_chunks_prefix, get_temp_dir, check_command_exists
 )
+from M_gcs import upload
 
 # Mapeamento de Tipos de Dados Recomendado (IPAM/MapBiomas)
 BAND_DATATYPES = {
@@ -159,7 +160,7 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
                 ], label=f"Conversão COG ({clean_b_name})")
 
                 dest = f"{CONFIG['bucket']}/{mosaic_prefix}/{cog_remote_name}"
-                fs.put(cog_local_path, dest)
+                upload(cog_local_path, dest)
                 
                 if logger: logger(f" Éxito: {cog_remote_name}", "success")
                 results.append(f"gs://{dest}")

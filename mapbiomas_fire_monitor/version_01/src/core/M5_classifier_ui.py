@@ -343,23 +343,25 @@ class M5QueueUI:
     # --- DELECAO ---
 
     def _delete_tiles(self, tile_fqpaths, fs):
+        from M_gcs import exists, rm
         for fp in tile_fqpaths:
             try:
-                if fs.exists(fp):
-                    fs.rm(fp)
+                if exists(fp):
+                    rm(fp)
             except Exception:
                 pass
         return len(tile_fqpaths)
 
     def _delete_job_tiles_region(self, job):
         from M5_queue import region_path
+        from M_gcs import exists, rm
         fs = _get_fs()
         r, p, m = job['region'], job['period'], job['model']
         c = job.get('campaign', '')
         reg_full = gcs_full(region_path(m, r, p, c))
         try:
-            if fs.exists(reg_full):
-                fs.rm(reg_full)
+            if exists(reg_full):
+                rm(reg_full)
         except Exception:
             pass
         t_dir = gcs_full(classified_tiles_dir(m, c))
@@ -378,7 +380,7 @@ class M5QueueUI:
 
     def _delete_job_complete(self, job):
         from M5_queue import region_path, stats_dir
-        fs = _get_fs()
+        from M_gcs import exists, rm
         r, p, m = job['region'], job['period'], job['model']
         c = job.get('campaign', '')
         n_tiles = self._delete_job_tiles_region(job)
@@ -386,15 +388,15 @@ class M5QueueUI:
         for csv_name in ['stats_tile.csv', 'stats_region.csv']:
             csv_path = f"{s_dir}/{csv_name}"
             try:
-                if fs.exists(csv_path):
-                    fs.rm(csv_path)
+                if exists(csv_path):
+                    rm(csv_path)
             except Exception:
                 pass
         return n_tiles
 
     def _delete_model_region(self, model, region):
         """Elimina todos jobs + tiles + mosaico + stats de (model, region)."""
-        fs = _get_fs()
+        from M_gcs import exists, rm
         self.queue = load_queue()
         jobs = [j for j in self.queue if j['model'] == model and j['region'] == region]
         total_tiles = 0
@@ -408,8 +410,8 @@ class M5QueueUI:
             for csv_name in ['stats_tile.csv', 'stats_region.csv']:
                 try:
                     p = f"{s_dir}/{csv_name}"
-                    if fs.exists(p):
-                        fs.rm(p)
+                    if exists(p):
+                        rm(p)
                 except Exception:
                     pass
         self.queue = [j for j in self.queue if not (j['model'] == model and j['region'] == region)]

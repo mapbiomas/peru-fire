@@ -4,7 +4,6 @@ MapBiomas Fire Monitor
 """
 import ee
 import os
-import subprocess
 import warnings
 import logging
 
@@ -120,6 +119,8 @@ def authenticate(project='mapbiomas-peru', clean_cache=False):
         ee.Initialize(project=project)
         print("[GEE] Authenticated successfully.")
     
+    from M_gcs import authenticate as _mgcs_auth
+    _mgcs_auth()
     print("[GCS] GCS/ADC authentication configured.")
     _AUTHENTICATED = True
 
@@ -127,38 +128,23 @@ def authenticate(project='mapbiomas-peru', clean_cache=False):
 _fs_instance = None
 
 def _get_fs():
-    """Retorna uma instância GCSFileSystem corretamente autenticada para qualquer ambiente (cache)."""
-    global _fs_instance
-    if _fs_instance is not None:
-        return _fs_instance
-    import gcsfs
-    project = CONFIG['gcs_project']
-    is_colab = 'COLAB_RELEASE_TAG' in os.environ or 'COLAB_BACKEND_VERSION' in os.environ
-
-    if is_colab:
-        if _GCS_CREDENTIALS is not None:
-            _fs_instance = gcsfs.GCSFileSystem(project=project, token=_GCS_CREDENTIALS, requests_timeout=60)
-        else:
-            _fs_instance = gcsfs.GCSFileSystem(project=project, requests_timeout=60)
-    else:
-        _fs_instance = gcsfs.GCSFileSystem(project=project, requests_timeout=60)
-    return _fs_instance
+    """Retorna uma instância GCSFileSystem (lazy, read-only)."""
+    from M_gcs import _get_fs as _mgcs_get_fs
+    return _mgcs_get_fs()
 
 
-# ─── GCS (gsutil) ──────────────────────────────────────────────────────────────
+# ─── GCS (gsutil) ──────────────────────────────────────────────
 
 def _gcs_download(gcs_rel_path, local_path):
-    """Download de arquivo do GCS via gsutil cp (rápido em rede interna GCP)."""
-    gsutil = 'gsutil.cmd' if os.name == 'nt' else 'gsutil'
-    src = gcs_rel_path[5:] if gcs_rel_path.startswith('gs://') else gcs_rel_path
-    subprocess.run([gsutil, 'cp', f'gs://{src}', local_path], check=True)
+    """Download de arquivo do GCS via gsutil cp."""
+    from M_gcs import download
+    download(gcs_rel_path, local_path)
 
 
 def _gcs_upload(local_path, gcs_rel_path):
     """Upload de arquivo para GCS via gsutil cp."""
-    gsutil = 'gsutil.cmd' if os.name == 'nt' else 'gsutil'
-    dst = gcs_rel_path[5:] if gcs_rel_path.startswith('gs://') else gcs_rel_path
-    subprocess.run([gsutil, 'cp', local_path, f'gs://{dst}'], check=True)
+    from M_gcs import upload
+    upload(local_path, gcs_rel_path)
 
 
 def set_global_opts(

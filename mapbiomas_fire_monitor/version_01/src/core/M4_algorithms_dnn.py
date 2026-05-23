@@ -4,7 +4,7 @@ import numpy as np
 from datetime import datetime
 TF_AVAILABLE = None
 TF_ERROR = None
-from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
+from M0_auth_config import CONFIG, GLOBAL_OPTS, model_path
 from M_cache import _get_fs
 
 from M4_data_extractor import compute_normalizer, normalize
@@ -242,18 +242,16 @@ class ModelTrainer:
 
     @staticmethod
     def delete_model(training_id, shortname):
-        """Deleta recursivamente a pasta do modelo no GCS usando GCSFS."""
-        from M_cache import _get_fs
+        """Deleta recursivamente a pasta do modelo no GCS."""
+        from M_gcs import exists, rm
         from M0_auth_config import CONFIG
-        fs = _get_fs()
         base_uri = model_path(training_id, shortname)
-        # Caminho completo para o gcsfs (ex: bucket/models/...)
         full_path = f"{CONFIG['bucket']}/{base_uri}"
         
-        print(f" Deleting model folder (GCSFS): {full_path}")
+        print(f" Deleting model folder (GCS): {full_path}")
         try:
-            if fs.exists(full_path):
-                fs.rm(full_path, recursive=True)
+            if exists(full_path):
+                rm(full_path, recursive=True)
             return True
         except Exception as e:
             raise RuntimeError(f"No se pudo eliminar de GCS: {e}")
@@ -261,6 +259,7 @@ class ModelTrainer:
     def save_projector_files(self, training_id, shortname, X, y, logger=None):
         """Gera e salva arquivos .tsv para o TensorBoard Projector no GCS."""
         import tempfile, subprocess
+        from M_gcs import upload
         from M0_auth_config import GLOBAL_OPTS
         base_path = model_path(training_id, shortname)
         
@@ -282,12 +281,11 @@ class ModelTrainer:
             
             # Upload to GCS
             dest_dir = f"{base_path}/projector"
-            fs = _get_fs()
             for fname in ['vectors.tsv', 'metadata.tsv']:
                 src = os.path.join(tmpdir, fname)
                 dest = f"{CONFIG['bucket']}/{dest_dir}/{fname}"
                 if logger: logger(f"  [Enviar] Subiendo {fname} a GCS...", "info")
-                fs.put(src, dest)
+                upload(src, dest)
             
             if logger: 
                 logger(f"[OK] Arquivos do Projector salvos em: {dest_dir}", "info")
@@ -295,9 +293,9 @@ class ModelTrainer:
 
     def save(self, training_id, shortname, comment="", logger=None):
         import subprocess, tempfile
+        from M_gcs import upload, copy
         from M0_auth_config import GLOBAL_OPTS
         base_path = model_path(training_id, shortname)
-        fs = _get_fs()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # 1. Weights
@@ -356,7 +354,7 @@ class ModelTrainer:
             for fname in ['weights.npz', 'metadata.json']:
                 src  = os.path.join(tmpdir, fname)
                 dest = f"{CONFIG['bucket']}/{base_path}/{fname}"
-                fs.put(src, dest)
+                upload(src, dest)
             
             # 2.5 Metrics
             if logger: logger("Generación y guardado de métricas de evaluación...", "info")
@@ -397,7 +395,7 @@ class ModelTrainer:
             }
             with open(os.path.join(tmpdir, 'metrics.json'), 'w') as f:
                 json.dump(metrics, f, indent=2)
-            fs.put(os.path.join(tmpdir, 'metrics.json'), f"{CONFIG['bucket']}/{base_path}/metrics.json")
+            upload(os.path.join(tmpdir, 'metrics.json'), f"{CONFIG['bucket']}/{base_path}/metrics.json")
             
             # --- 2.6 Metadata já salva layers+num_input em metadata.json + weights.npz ---
 
@@ -416,7 +414,7 @@ class ModelTrainer:
                 for sf in all_files:
                     src_sf = os.path.join(self.snapshot_dir, sf)
                     dest_sf = f"{CONFIG['bucket']}/{base_path}/history/{sf}"
-                    fs.put(src_sf, dest_sf)
+                    upload(src_sf, dest_sf)
 
             # 3. Extracted Pixels
             if logger: logger("Guardar una matriz de píxeles en GCS...", "info")
@@ -426,7 +424,7 @@ class ModelTrainer:
             for fname in ['X_data.npy', 'y_data.npy']:
                 src  = os.path.join(tmpdir, fname)
                 dest = f"{CONFIG['bucket']}/{base_path}/extracted_pixels/{fname}"
-                fs.put(src, dest)
+                upload(src, dest)
                 
         # 4. Copy samples
         if logger: logger("Copiar archivos CSV de las muestras para su almacenamiento...", "info")
@@ -436,10 +434,7 @@ class ModelTrainer:
             src = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{campaign}/{coll}.csv"
             dest = f"{CONFIG['bucket']}/{base_path}/samples/{coll}.csv"
             try:
-                dest_dir = '/'.join(dest.split('/')[:-1])
-                if not fs.exists(dest_dir):
-                    fs.makedirs(dest_dir)
-                fs.copy(src, dest)
+                copy(src, dest)
             except Exception:
                 pass
 
@@ -450,26 +445,20 @@ class ModelTrainer:
     @staticmethod
     def update_model_metadata(training_id, shortname, updates):
         """Atualiza campos específicos do metadata.json no GCS."""
-        import json, subprocess, tempfile
-        from M0_auth_config import gcs_path
+        import json, tempfile
+        from M_gcs import read_text, upload
         base_path = model_path(training_id, shortname)
-        fs = _get_fs()
         
         try:
-            # 1. Download atual
             path = f"{base_path}/metadata.json"
-            with fs.open(f"gs://{CONFIG['bucket']}/{path}", 'r') as f:
-                hp = json.load(f)
-            
-            # 2. Aplicar updates
+            hp = json.loads(read_text(f"gs://{CONFIG['bucket']}/{path}"))
             hp.update(updates)
             
-            # 3. Upload novo
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp_file = os.path.join(tmpdir, 'metadata.json')
                 with open(tmp_file, 'w') as f:
                     json.dump(hp, f, indent=2)
-                fs.put(tmp_file, f"{CONFIG['bucket']}/{path}")
+                upload(tmp_file, f"{CONFIG['bucket']}/{path}")
             return True
         except Exception as e:
             print(f"[ERR] Error updating metadata: {e}")

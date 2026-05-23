@@ -196,9 +196,9 @@ def generate_region_stats(model_id, region, period, tile_results, fs=None, logge
             writer.writerow(r)
         writer.writerow(row)
 
+    from M_gcs import mkdir
     dir_path = consolidated_path.rsplit('/', 1)[0]
-    if not fs.exists(dir_path):
-        fs.mkdir(dir_path)
+    mkdir(dir_path)
     _gcs_upload(local_cons, consolidated_path)
     os.remove(local_cons)
 

@@ -398,14 +398,10 @@ class CacheManager:
     @staticmethod
     def save(state=None):
         """Salva cache no GCS."""
+        from M_gcs import write_json
         with CacheManager._lock:
-            # Suprimir tracebacks internos do gcsfs durante o save
-            _gcsfs_logger = logging.getLogger('gcsfs')
-            _prev_level = _gcsfs_logger.level
-            _gcsfs_logger.setLevel(logging.CRITICAL)
             try:
                 gcs_path = CacheManager._get_gcs_path()
-                fs = _get_fs()
                 
                 if state is None:
                     state = CacheManager._state
@@ -420,15 +416,12 @@ class CacheManager:
                 except Exception as e:
                     print(f"Warning: Local cache write failed: {e}")
                 
-                with fs.open(gcs_path, 'w') as f:
-                    json.dump(state, f, indent=2)
+                write_json(gcs_path, state)
                 
                 CacheManager._state = state
             except Exception as e:
                 # Aviso limpo sem traceback assustador
                 print(f"Warning: Local cache OK (GCS sync pending) - Error: {e}")
-            finally:
-                _gcsfs_logger.setLevel(_prev_level)
 
     @staticmethod
     def get_state():

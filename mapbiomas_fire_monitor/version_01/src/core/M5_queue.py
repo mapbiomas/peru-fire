@@ -128,32 +128,27 @@ def save_tarea(model_id, regions, periods, fs=None):
     """Guarda una tarea compartida en GCS."""
     import json
     import datetime
-    from M0_auth_config import _get_fs
-    if fs is None:
-        fs = _get_fs()
-    path = gcs_full(tarea_path(model_id))
+    from M_gcs import write_json, mkdir, exists
     tarea = {
         'model': model_id,
         'regions': sorted(set(regions)),
         'periods': sorted(set(periods)),
         'created_at': datetime.datetime.now().isoformat(timespec='seconds')
     }
+    path = gcs_full(tarea_path(model_id))
     dir_path = path.rsplit('/', 1)[0]
-    if not fs.exists(dir_path):
-        fs.mkdir(dir_path)
-    with fs.open(path, 'w') as f:
-        json.dump(tarea, f, indent=2)
+    if not exists(dir_path):
+        mkdir(dir_path)
+    write_json(path, tarea)
     return path
 
 def delete_tarea(model_id, fs=None):
     """Elimina una tarea compartida de GCS."""
-    from M0_auth_config import _get_fs
-    if fs is None:
-        fs = _get_fs()
+    from M_gcs import exists, rm
     path = gcs_full(tarea_path(model_id))
     try:
-        if fs.exists(path):
-            fs.rm(path)
+        if exists(path):
+            rm(path)
     except Exception:
         pass
 
@@ -199,12 +194,13 @@ def _archived_job_filename(region, period, timestamp):
 
 def _ensure_dir(fs, path):
     """Cria diretório GCS se não existir."""
+    from M_gcs import exists, mkdir as gcs_mkdir
     full = gcs_full(path)
     if not fs.exists(full):
         dir_parent = full.rsplit('/', 1)[0]
         if not fs.exists(dir_parent):
-            fs.mkdir(dir_parent)
-        fs.mkdir(full)
+            gcs_mkdir(dir_parent)
+        gcs_mkdir(full)
 
 def save_pending_job_to_gcs(job, fs=None):
     """Salva um job em pending/ no GCS.
@@ -215,7 +211,7 @@ def save_pending_job_to_gcs(job, fs=None):
     Returns:
         str: caminho GCS completo onde foi salvo, ou None se erro.
     """
-    import json
+    from M_gcs import write_json
     if fs is None:
         fs = _get_fs()
     model_id = job['model']
@@ -227,21 +223,19 @@ def save_pending_job_to_gcs(job, fs=None):
     payload = dict(job)
     payload['_saved_at'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
     try:
-        with fs.open(full, 'w') as f:
-            json.dump(payload, f, indent=2)
+        write_json(full, payload)
         return full
     except Exception:
         return None
 
 def delete_pending_job_gcs(model_id, region, period, fs=None):
     """Remove um job de pending/ no GCS."""
-    if fs is None:
-        fs = _get_fs()
+    from M_gcs import exists, rm
     rel = _pending_dir(model_id) + '/' + _pending_job_filename(region, period)
     full = gcs_full(rel)
     try:
-        if fs.exists(full):
-            fs.rm(full)
+        if exists(full):
+            rm(full)
             return True
     except Exception:
         pass
@@ -253,23 +247,21 @@ def archive_job_on_gcs(job, tile_results, fs=None):
     Se o job não existir em pending/ (nunca foi salvo), apenas retorna False.
     """
     import json
+    from M_gcs import write_json, rm as gcs_rm, exists as gcs_exists
     if fs is None:
         fs = _get_fs()
     model_id = job['model']
     region = job['region']
     period = job['period']
-    # Verifica se existe em pending/
     pend_rel = _pending_dir(model_id) + '/' + _pending_job_filename(region, period)
     pend_full = gcs_full(pend_rel)
     if not fs.exists(pend_full):
         return False
-    # Lê o job original
     try:
         with fs.open(pend_full, 'r') as f:
             payload = json.load(f)
     except Exception:
         return False
-    # Agrega estatísticas
     total_pixels = sum(tr.get('total_pixels', 0) for tr in tile_results)
     burned_pixels = sum(tr.get('burned_pixels', 0) for tr in tile_results)
     confidences = [tr.get('mean_confidence', 0) for tr in tile_results if tr.get('burned_pixels', 0) > 0]
@@ -285,18 +277,15 @@ def archive_job_on_gcs(job, tile_results, fs=None):
     payload['_burned_pixels'] = burned_pixels
     payload['_burned_area_km2'] = round(burned_area_km2, 4)
     payload['_mean_confidence'] = round(float(sum(confidences) / len(confidences)), 4) if confidences else 0.0
-    # Salva em archived/
     arch_rel = _archived_dir(model_id) + '/' + _archived_job_filename(region, period, timestamp)
     arch_full = gcs_full(arch_rel)
     _ensure_dir(fs, _archived_dir(model_id))
     try:
-        with fs.open(arch_full, 'w') as f:
-            json.dump(payload, f, indent=2)
+        write_json(arch_full, payload)
     except Exception:
         return False
-    # Remove de pending/
     try:
-        fs.rm(pend_full)
+        gcs_rm(pend_full)
     except Exception:
         pass
     return True
@@ -367,11 +356,10 @@ def list_archived_jobs(model_id, fs=None):
 
 def delete_archived_job(model_id, gcs_path, fs=None):
     """Remove um job específico de archived/."""
-    if fs is None:
-        fs = _get_fs()
+    from M_gcs import exists, rm
     try:
-        if fs.exists(gcs_path):
-            fs.rm(gcs_path)
+        if exists(gcs_path):
+            rm(gcs_path)
             return True
     except Exception:
         pass

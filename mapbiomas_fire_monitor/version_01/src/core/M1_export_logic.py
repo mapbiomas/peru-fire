@@ -278,7 +278,7 @@ def clear_gcs_chunks(year, month=None, period='monthly'):
     Remove chunks antigos do GCS para evitar que se misturem com novos.
     """
     from M0_auth_config import monthly_chunk_path, yearly_chunk_path, CONFIG, GLOBAL_OPTS
-    from M0_auth_config import _get_fs
+    from M_gcs import exists, rm
     
     m_method = GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()
     if period == 'monthly':
@@ -289,9 +289,8 @@ def clear_gcs_chunks(year, month=None, period='monthly'):
     path = f"{CONFIG['bucket']}/{folder}/"
     print(f"[GCS] Cleaning old chunks to avoid mixing: gs://{path}")
     try:
-        fs = _get_fs()
-        if fs.exists(path):
-            fs.rm(path, recursive=True)
+        if exists(path):
+            rm(path, recursive=True)
     except Exception as e:
         print(f"[WARN] Failed to clean chunks: {e}")
 
@@ -299,17 +298,16 @@ def clear_gcs_chunks(year, month=None, period='monthly'):
 def delete_gcs_band(year, month, period, band):
     """Deleta os chunks de uma banda específica no GCS."""
     from M0_auth_config import monthly_chunk_path, yearly_chunk_path, CONFIG, mosaic_name, GLOBAL_OPTS
-    from M0_auth_config import _get_fs
+    from M_gcs import glob, rm
     m_method = GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()
     folder = monthly_chunk_path(year, month, mosaic=m_method) if period == 'monthly' else yearly_chunk_path(year, mosaic=m_method)
     name = mosaic_name(year, month, period, mosaic=m_method)
     prefix = f"{CONFIG['bucket']}/{folder}/{name}_{band}"
     print(f"[GCS] Removing band {band}: gs://{prefix}*")
     try:
-        fs = _get_fs()
-        files = fs.glob(prefix + "*")
+        files = glob(prefix + "*")
         for f in files:
-            fs.rm(f)
+            rm(f)
     except Exception as e:
         print(f"[WARN] Failed to delete band {band}: {e}")
 
