@@ -742,7 +742,7 @@ class M5QueueUI:
             return self._model_meta_cache[model_name]
         try:
             fs = _get_fs()
-            meta_path = f"{CONFIG['gcs_library_models']}/{model_name}/model/metadata.json"
+            meta_path = f"gs://{CONFIG['bucket']}/{CONFIG['gcs_library_models']}/{model_name}/metadata.json"
             if fs.exists(meta_path):
                 with fs.open(meta_path, 'r') as f:
                     meta = json.load(f)

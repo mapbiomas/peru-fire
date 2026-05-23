@@ -155,9 +155,9 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
     with out:
         print(f"  Loading model '{model_id}'...")
 
-    model_dir = f"{CONFIG['bucket']}/{_gcs_models_base()}/{model_id}"
+    model_dir = f"gs://{CONFIG['bucket']}/{_gcs_models_base()}/{model_id}"
     with out:
-        print(f"    Model dir: gs://{model_dir}/")
+        print(f"    Model dir: {model_dir}/")
     model, meta, bands_config, norm_stats, band_order = load_model_from_gcs(
         model_dir, fs, logger=lambda m, l=None: out.append_display_data(m)
     )
