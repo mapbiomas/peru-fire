@@ -204,11 +204,11 @@ def set_global_opts(
             from M_cache import CacheManager
             CacheManager.clear()
             
-            fs = _get_fs()
+            from M_gcs import exists, rm as gcs_rm
             cache_file = f"state.json"
             gcs_path = f"gs://{CONFIG['bucket']}/{CONFIG['gcs_cache']}/{cache_file}"
-            if fs.exists(gcs_path):
-                fs.rm(gcs_path)
+            if exists(gcs_path):
+                gcs_rm(gcs_path)
                 print(f"GCS cache cleared: {gcs_path}")
             else:
                 print("GCS cache not found (nothing to clear).")

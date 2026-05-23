@@ -31,9 +31,9 @@ class CacheManager:
             # GCS
             try:
                 gcs_path = CacheManager._get_gcs_path()
-                fs = _get_fs()
-                if fs.exists(gcs_path):
-                    fs.rm(gcs_path)
+                from M_gcs import exists, rm
+                if exists(gcs_path):
+                    rm(gcs_path)
             except Exception as e:
                 print(f"Error clearing GCS cache: {e}")
 

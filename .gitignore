@@ -3,6 +3,20 @@
 # ── Reference scripts (not committed — internal only)
 reference/
 
+# ── Internal docs, references, scratch, gee (local/parallel projects)
+mapbiomas_fire_monitor/version_01/src/docs/
+mapbiomas_fire_monitor/version_01/src/referencias/
+mapbiomas_fire_monitor/version_01/src/gee/
+mapbiomas_fire_monitor/version_01/scratch/
+
+# ── Agent skills (local, project-specific)
+.agents/
+
+# ── Secondary notebooks
+mapbiomas_fire_monitor/version_01/notebooks/PSEUDO_NOTEBOOK_REFERENCE.md
+
+# ── Note: fire_landsat_30m/ is a separate parallel project kept in repo
+
 # ── Python
 __pycache__/
 *.py[cod]
