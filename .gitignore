@@ -17,6 +17,18 @@ mapbiomas_fire_monitor/version_01/notebooks/PSEUDO_NOTEBOOK_REFERENCE.md
 
 # ── Note: fire_landsat_30m/ is a separate parallel project kept in repo
 
+# ── Root-level leftover scripts and test artifacts
+/12_files.txt
+/peru_files.txt
+/M1_temp.py
+/refactor_m1.py
+/refactor_m2.py
+/test_basename.txt
+/test_gsutil.py
+/test_tsne.html
+/test_tsne_offline.py
+/gcs_files.json
+
 # ── Python
 __pycache__/
 *.py[cod]
