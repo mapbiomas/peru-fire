@@ -31,9 +31,9 @@ def list_gcs_files(prefix, logger=None):
     if logger: logger(f"Buscando shards em: gs://{CONFIG['bucket']}/{clean_prefix}", "info")
     
     try:
-        files = fs.find(clean_prefix)
+        files = fs.find(f"gs://{CONFIG['bucket']}/{clean_prefix}")
         tif_files = [f for f in files if f.endswith('.tif')]
-        return [f"gs://{CONFIG['bucket']}/{f}" for f in tif_files]
+        return [f"gs://{f}" for f in tif_files]
     except Exception as e:
         if logger: logger(f"Erro ao acessar GCS: {e}", "error")
         return []
@@ -138,9 +138,8 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
 
             try:
                 for shard_url in remote_shards:
-                    shard_rel = shard_url.replace(f"gs://{CONFIG['bucket']}/", "")
                     local_shard = os.path.join(band_tmp, os.path.basename(shard_url))
-                    fs.get(shard_rel, local_shard)
+                    fs.get(shard_url, local_shard)
 
                 local_shards = glob.glob(os.path.join(band_tmp, '*.tif'))
                 if not local_shards: continue
