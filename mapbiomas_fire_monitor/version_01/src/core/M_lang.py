@@ -471,13 +471,13 @@ STRINGS_ES = {
     "SEARCHING": "Buscando...",
     "DONE": "Hecho",
     "ERROR": "Error",
-    "SUCCESS": "Exito",
-    "WARNING": "Atencion",
-    "INFO": "Informacion",
+    "SUCCESS": "Éxito",
+    "WARNING": "Atención",
+    "INFO": "Información",
     "ALL": "Todos",
     "ALL_F": "Todas",
     "NONE": "Ninguno",
-    "BACK": "Voltar",
+    "BACK": "Volver",
     "OK": "OK",
     "CONFIRM": "Confirmar",
     "CANCEL": "Cancelar",
@@ -490,14 +490,14 @@ STRINGS_ES = {
     "APPLY": "Aplicar",
     "CLOSE": "Cerrar",
     "MODEL": "Modelo",
-    "REGION": "Region",
-    "YEAR": "Anio",
-    "PERIOD": "Periodo",
+    "REGION": "Región",
+    "YEAR": "Año",
+    "PERIOD": "Período",
     "TASK": "Tarea",
     "TASK_NAME": "Nombre Tarea",
     "STATUS": "Estado",
     "PROGRESS": "Progreso",
-    "DESCRIPTION": "Descripcion",
+    "DESCRIPTION": "Descripción",
     "NAME": "Nombre",
     "DATE": "Fecha",
     "ID": "ID",
@@ -506,10 +506,10 @@ STRINGS_ES = {
     "NO_RESULTS": "No se encontraron resultados.",
     "NO_TASKS": "No hay tareas pendientes.",
     "NO_TASKS_PUBLISH": "Ninguna tarea lista para publicar.",
-    "NO_TASKS_DONE": "Ninguna tarea finalizada aun.",
-    "NO_TILES_GCS": "Ningun tile en GCS.",
-    "NO_MAP": "No se pudo generar el mapa. Verifique conexion GEE.",
-    "NO_SELECTION": "Ninguna opcion seleccionada.",
+    "NO_TASKS_DONE": "Ninguna tarea finalizada aún.",
+    "NO_TILES_GCS": "Ningún tile en GCS.",
+    "NO_MAP": "No se pudo generar el mapa. Verifique conexión GEE.",
+    "NO_SELECTION": "Ninguna opción seleccionada.",
     "NO_SAMPLES": "No se encontraron muestras con este filtro.",
     "NO_COGS": "No se encontraron COGs en el repositorio GCS.",
     # M5 Widgets
@@ -520,7 +520,7 @@ STRINGS_ES = {
     "SAVE_TASK_GCS": "Guardar Tarea GCS",
     "EXCLUDE_TASK_GCS": "Excluir Tarea GCS",
     "DELETE_MODEL": "Eliminar Modelo",
-    "DELETE_REGION": "Eliminar Region",
+    "DELETE_REGION": "Eliminar Región",
     "DELETE_SELECTED": "Eliminar Seleccionados",
     "DELETE_ALL": "Eliminar Todos",
     "DELETE_JOB": "Eliminar Todo",
@@ -529,25 +529,25 @@ STRINGS_ES = {
     "REFRESH_MAP": "Actualizar Mapa",
     "TASK_NAME_PLACEHOLDER": "Ej: Clasificar Amazonia Baja 2025 (Lucas)",
     # M5 Tabs
-    "TAB_GUIDE": "Guia",
+    "TAB_GUIDE": "Guía",
     "TAB_REGISTER": "Registrar",
     "TAB_PENDING": "Pendientes",
     "TAB_PUBLISH": "Para Publicar",
     "TAB_MAP": "Mapa",
     "TAB_DONE": "Finalizadas",
     "GUIDE_M5_HTML": """<div style='padding:20px; font-family:sans-serif;'>
-        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Clasificacion Regional de Gran Escala</h3>
-        <p>Clasifica multiples regiones (cartas cim-world-1-250000) usando modelos del M4.</p>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Clasificacion Regiónal de Gran Escala</h3>
+        <p>Clasifica múltiples regiones (cartas cim-world-1-250000) usando modelos del M4.</p>
         <h4>Flujo:</h4>
         <ol style='line-height:1.6;'>
-            <li><b>{tab_register}</b> — seleccione modelo + regiones + periodos.</li>
-            <li><b>{tab_pending}</b> — siga la clasificacion tile a tile.</li>
-            <li><b>{tab_publish}</b> — trabajos COMPLETED con gestion de tiles.</li>
+            <li><b>{tab_register}</b> — seleccione modelo + regiones + períodos.</li>
+            <li><b>{tab_pending}</b> — siga la clasificación tile a tile.</li>
+            <li><b>{tab_publish}</b> — trabajos COMPLETED con gestión de tiles.</li>
             <li><b>{tab_map}</b> — visibilidad general del progreso.</li>
             <li><b>{tab_done}</b> — trabajos FINISHED con timeline de cobertura.</li>
             <li>Ejecute <code>run_m5_workplan()</code> en el notebook para procesar.</li>
         </ol>
-        <h4>Eliminacion granular:</h4>
+        <h4>Eliminación granular:</h4>
         <ul>
             <li><b>{tab_pending}</b> — elimine trabajos individuales del plan.</li>
             <li><b>{tab_publish}</b> — elimine tiles individuales o todos de un trabajo.</li>
@@ -556,16 +556,16 @@ STRINGS_ES = {
         </ul>
     </div>""",
     "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
-        <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Modulo 1 (M1) — Exportacion GEE Multi-Sensor</h3>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Modulo 1 (M1) — Exportación GEE Multi-Sensor</h3>
         <p>M1 exporta mosaicos satelitales sin nubes desde Google Earth Engine hacia Google Cloud Storage (GCS) o Assets GEE.
-        Soporta LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS y MODIS con correcciones radiometricas y mascaras de nubes especificas por sensor.</p>
+        Soporta LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS y MODIS con correcciones radiométricas y máscaras de nubes específicas por sensor.</p>
         <div style='display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px;'>
             <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
                 <h4 style='color:#e67e22;margin-top:0;'>Sensores y Fuentes</h4>
                 <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
-                    <li><b>LANDSAT 5/7</b> — archivo historico (1984–)</li>
+                    <li><b>LANDSAT 5/7</b> — archivo histórico (1984–)</li>
                     <li><b>LANDSAT 8/9</b> — OLI/TIRS actual con bandas termales</li>
-                    <li><b>Sentinel-2</b> — 10m de resolucion, 5 dias de revista</li>
+                    <li><b>Sentinel-2</b> — 10m de resolución, 5 días de revista</li>
                     <li><b>HLS</b> — producto armonizado LANDSAT/Sentinel</li>
                     <li><b>MODIS</b> — cobertura global diaria (250m–1km)</li>
                 </ul>
@@ -573,26 +573,26 @@ STRINGS_ES = {
             <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
                 <h4 style='color:#e67e22;margin-top:0;'>Metodos de Mosaico</h4>
                 <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
-                    <li><b>minnbr</b> — menor nube segun ranking NBR</li>
-                    <li><b>minndvi</b> — menor nube segun ranking NDVI</li>
-                    <li><b>median</b> — composicion mediana pixel a pixel</li>
-                    <li><b>minnbr_buffer</b> — minnbr con mascara de buffer de fuego INPE</li>
+                    <li><b>minnbr</b> — menor nube según ranking NBR</li>
+                    <li><b>minndvi</b> — menor nube según ranking NDVI</li>
+                    <li><b>median</b> — composición mediana píxel a pixel</li>
+                    <li><b>minnbr_buffer</b> — minnbr con máscara de buffer de fuego INPE</li>
                 </ul>
             </div>
             <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
                 <h4 style='color:#e67e22;margin-top:0;'>Flujo de Trabajo</h4>
                 <ol style='padding-left:18px;font-size:13px;line-height:1.6;'>
-                    <li>Seleccione la pestana del sensor (LANDSAT, S2, HLS, MODIS)</li>
-                    <li>Elija el periodo (mensual / anual)</li>
-                    <li>Escoja el metodo de mosaico</li>
+                    <li>Seleccione la pestaña del sensor (LANDSAT, S2, HLS, MODIS)</li>
+                    <li>Elija el período (mensual / anual)</li>
+                    <li>Escoja el método de mosaico</li>
                     <li>Marque las celdas de fecha y banda</li>
-                    <li>Haga clic en <b>Iniciar Exportacion</b></li>
+                    <li>Haga clic en <b>Iniciar Exportación</b></li>
                 </ol>
             </div>
             <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
-                <h4 style='color:#e67e22;margin-top:0;'>Informacion Tecnica</h4>
+                <h4 style='color:#e67e22;margin-top:0;'>Información Técnica</h4>
                 <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
-                    <li>Correccion radiometrica por sensor</li>
+                    <li>Corrección radiométrica por sensor</li>
                     <li>Mascara de nubes via QA_PIXEL, Fmask, CS+</li>
                     <li>Mascara de buffer de incendios INPE</li>
                     <li>Salida: fragmentos GeoTIFF en GCS / ImageCollection en GEE</li>
@@ -600,7 +600,7 @@ STRINGS_ES = {
             </div>
         </div>
         <div style='margin-top:15px;padding:10px;background:#fef3e2;border-left:4px solid #e67e22;border-radius:4px;font-size:13px;'>
-            <b>Consejo:</b> Use <b>Sincronizar Datos</b> para actualizar el cache. Use <b>Seleccionar Pendientes</b> para marcar automaticamente todas las fechas disponibles.
+            <b>Consejo:</b> Use <b>Sincronizar Datos</b> para actualizar el cache. Use <b>Seleccionar Pendientes</b> para marcar automáticamente todas las fechas disponibles.
         </div>
     </div>""",
     "GUIDE_M2_HTML": """<div style='padding:20px; font-family:sans-serif;'>
@@ -619,14 +619,14 @@ STRINGS_ES = {
             <li>M1 debe haberse ejecutado primero para producir los fragmentos fuente</li>
         </ul>
         <div style='margin-top:15px;padding:10px;background:#e8f8ed;border-left:4px solid #27ae60;border-radius:4px;font-size:13px;'>
-            <b>Consejo:</b> Los COGs se almacenan en <code>.../COG/</code> y son consumidos por M4 (entrenamiento) y M5 (clasificacion).
+            <b>Consejo:</b> Los COGs se almacenan en <code>.../COG/</code> y son consumidos por M4 (entrenamiento) y M5 (clasificación).
         </div>
     </div>""",
     # Map / Grid
     "LIVE_PROCESSING": "Procesando en vivo",
     "CURRENT_TILE": "Tile actual",
     "COMPLETED": "Completados",
-    "GRID_REGION": "Region",
+    "GRID_REGION": "Región",
     "GRID_CELLS": "Celdas cim-world",
     # Tiles / GCS
     "TILES": "tiles",
@@ -646,44 +646,44 @@ STRINGS_ES = {
     # M4 - Training
     "MODEL_TRAINER": "Entrenador del Modelo",
     "ITERATIONS": "Iteraciones",
-    "BATCH_SIZE": "Tamano de Lote",
+    "BATCH_SIZE": "Tamaño de Lote",
     "LEARNING_RATE": "Tasa de Aprendizaje",
     "HIDDEN_LAYERS": "Capas Ocultas",
-    "ACTIVATION": "Activacion",
+    "ACTIVATION": "Activación",
     "DROPOUT": "Dropout",
     "OPTIMIZER": "Optimizador",
-    "LOSS_FN": "Funcion de Perdida",
-    "METRICS": "Metricas",
-    "SAMPLE_SELECTION": "Seleccion de Muestras",
-    "EXTRACTION_MATRIX": "Matriz de Extraccion",
-    "MODEL_CONFIG": "Configuracion del Modelo",
+    "LOSS_FN": "Función de Pérdida",
+    "METRICS": "Métricas",
+    "SAMPLE_SELECTION": "Selección de Muestras",
+    "EXTRACTION_MATRIX": "Matriz de Extracción",
+    "MODEL_CONFIG": "Configuración del Modelo",
     "GCS_DEST": "Destino GCS",
-    "USAGE_GUIDE": "Guia de Uso",
+    "USAGE_GUIDE": "Guía de Uso",
     "GUIDE_M4_HTML": """<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #fdfdfd; color: #2c3e50; line-height: 1.6;">
-        <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">M4 Model Trainer - Guia de Uso</h1>
+        <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">M4 Model Trainer - Guía de Uso</h1>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px;">
             <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
                 <h3 style="color: #3498db; margin-top:0;">Estructura de la Plataforma</h3>
                 <ul style="padding-left: 20px; font-size:13px;">
-                    <li><b>{usage_guide}:</b> Pantalla de orientacion y documentacion.</li>
-                    <li><b>{new_training}:</b> Configuracion de nuevos experimentos, seleccion de muestras y bandas.</li>
-                    <li><b>{trainings}:</b> Ranking historico con metricas detalladas y gestion de modelos.</li>
-                    <li><b>Canvas:</b> Mesa de auditoria paralela para comparar multiples modelos en profundidad.</li>
+                    <li><b>{usage_guide}:</b> Pantalla de orientación y documentación.</li>
+                    <li><b>{new_training}:</b> Configuración de nuevos experimentos, selección de muestras y bandas.</li>
+                    <li><b>{trainings}:</b> Ranking histórico con métricas detalladas y gestión de modelos.</li>
+                    <li><b>Canvas:</b> Mesa de auditoria paralela para comparar múltiples modelos en profundidad.</li>
                 </ul>
             </div>
             <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                <h3 style="color: #9b59b6; margin-top:0;">Conceptos Tecnicos</h3>
+                <h3 style="color: #9b59b6; margin-top:0;">Conceptos Técnicos</h3>
                 <ul style="padding-left: 20px; font-size:13px;">
-                    <li><b>TensorFlow:</b> Motor de IA de Google para calculos matematicos masivos.</li>
+                    <li><b>TensorFlow:</b> Motor de IA de Google para cálculos matemáticos masivos.</li>
                     <li><b>DNN (Deep Neural Network):</b> Red profunda que imita el aprendizaje humano.</li>
-                    <li><b>Neuronas:</b> Unidades que procesan senales y activan patrones de aprendizaje.</li>
+                    <li><b>Neuronas:</b> Unidades que procesan señales y activan patrones de aprendizaje.</li>
                 </ul>
             </div>
             <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
                 <h3 style="color: #e67e22; margin-top:0;">Hiperparametros (DNN)</h3>
                 <ul style="padding-left: 20px; font-size:13px;">
-                    <li><b>Layers:</b> Arquitectura de la red. Mas capas captan detalles mas finos.</li>
-                    <li><b>Learning Rate (LR):</b> Controla que tan rapido se ajusta el modelo.</li>
+                    <li><b>Layers:</b> Arquitectura de la red. Más capas captan detalles más finos.</li>
+                    <li><b>Learning Rate (LR):</b> Controla que tan rápido se ajusta el modelo.</li>
                     <li><b>Epochs:</b> Ciclos de entrenamiento completos sobre el set de muestras.</li>
                     <li><b>Batch Size:</b> Bloques de datos procesados antes de cada actualizacion.</li>
                 </ul>
@@ -692,53 +692,53 @@ STRINGS_ES = {
                 <h3 style="color: #27ae60; margin-top:0;">Diccionario de Calidad</h3>
                 <ul style="padding-left: 20px; font-size:13px;">
                     <li><b>Accuracy:</b> Porcentaje total de aciertos globales.</li>
-                    <li><b>Precision:</b> Fidelidad: Cuanto del fuego marcado es real? (Evita falsos positivos).</li>
-                    <li><b>Recall:</b> Cobertura: Cuanto del fuego real se encontro? (Evita omisiones).</li>
-                    <li><b>F1-Score:</b> Media armonica. El mejor balance entre Precision y Recall.</li>
-                    <li><b>Nota IA:</b> Auditoria automatica que castiga severamente las omisiones.</li>
-                    <li><b>Nota Humana:</b> Evaluacion subjetiva (1-5) sobre el Espacio Latente.</li>
+                    <li><b>Precision:</b> Fidelidad: ¿Cuánto del fuego marcado es real? (Evita falsos positivos).</li>
+                    <li><b>Recall:</b> Cobertura: ¿Cuánto del fuego real se encontró? (Evita omisiones).</li>
+                    <li><b>F1-Score:</b> Media armónica. El mejor balance entre Precision y Recall.</li>
+                    <li><b>Nota IA:</b> Auditoría automática que castiga severamente las omisiones.</li>
+                    <li><b>Nota Humana:</b> Evaluación subjetiva (1-5) sobre el Espacio Latente.</li>
                 </ul>
             </div>
         </div>
         <div style="margin-top: 30px; padding: 15px; background: #e8f4fd; border-left: 5px solid #3498db; border-radius: 4px; font-size:14px;">
-            <b>[Consejo] Pro-Tip del Auditor:</b> Use el <b>Canvas</b> para cargar un modelo antiguo (benchmark) y su modelo nuevo. Compare si la separacion de clases en t-SNE 3D ha mejorado o si hay nuevas zonas de confusion.
+            <b>[Consejo] Pro-Tip del Auditor:</b> Use el <b>Canvas</b> para cargar un modelo antiguo (benchmark) y su modelo nuevo. Compare si la separación de clases en t-SNE 3D ha mejorado o si hay nuevas zonas de confusión.
         </div>
     </div>""",
     # M4 - Canvas
     "METADATA": "Metadatos",
     "KPIS": "KPIs",
-    "CONFUSION": "Confusion",
+    "CONFUSION": "Confusión",
     "HISTORY": "Historial",
     "PROB": "Prob",
     "PR_CURVE": "PR-Curve",
-    "MANAGEMENT": "Gestion",
+    "MANAGEMENT": "Gestión",
     "RANKING": "Ranking / Repositorio",
     "SELECTED_CANVAS": "Seleccionados en Canvas",
     "SEARCH_REPO": "Buscar en repositorio...",
     "SEARCH_SAMPLES": "Buscar muestras...",
-    "SYNC_CATALOG": "Sincronizar Catalogo (GCS)",
+    "SYNC_CATALOG": "Sincronizar Catálogo (GCS)",
     "APPLY_VISIBILITY": "Aplicar Visibilidad",
     # M1 / M2
     "SYNC_DATA": "Sincronizar Datos",
     "SELECT_PENDING": "Seleccionar Pendientes",
     "CLEAR_SELECTION": "Limpiar Seleccion",
-    "EXPORT_START": "Iniciar Exportacion",
+    "EXPORT_START": "Iniciar Exportación",
     "MOSAIC_START": "Iniciar Montaje",
     # M6
-    "POST_CLASSIFICATION": "Procesador Post-Clasificacion",
-    "USING_PRESET": "Usando Configuracion Preset",
+    "POST_CLASSIFICATION": "Procesador Post-Clasificación",
+    "USING_PRESET": "Usando Configuración Preset",
     "FILTER_START": "Iniciar Filtrado",
-    "EXPORT_TASK_STARTED": "Tarea exportacion iniciada",
-    "CONFIG_SUMMARY": "Resumen de Configuracion Usada",
+    "EXPORT_TASK_STARTED": "Tarea de exportación iniciada",
+    "CONFIG_SUMMARY": "Resumen de Configuración Usada",
     # M7
     "CURATOR": "Curador",
-    "CURATOR_DESC": "Publicacion de Coleccion Pre-Oficial",
+    "CURATOR_DESC": "Publicación de Colección Pre-Oficial",
     "USING_VOTES_PRESET": "Usando Votacion Preset",
-    "CURATION_START": "Iniciar Curaduria",
-    "EXPORT_ASSET_STARTED": "Exportacion GEE Asset iniciada",
+    "CURATION_START": "Iniciar Curaduría",
+    "EXPORT_ASSET_STARTED": "Exportación GEE Asset iniciada",
     # Cache
-    "CACHE_REMOVED": "Cache local removido",
-    "CACHE_NOT_FOUND": "Cache no encontrado",
+    "CACHE_REMOVED": "Caché local removido",
+    "CACHE_NOT_FOUND": "Caché no encontrado",
     # Misc
     "LOADING_TILES": "Cargando tiles...",
     "CONFIRM_DELETE": "Confirmar Eliminacion",
@@ -747,27 +747,27 @@ STRINGS_ES = {
     "GLOBAL_OPTS_SET": "Opciones globales configuradas",
     # Dropdown labels
     "DROP_MODEL": "Modelo:",
-    "DROP_REGION": "Region:",
-    "DROP_YEAR": "Anio:",
+    "DROP_REGION": "Región:",
+    "DROP_YEAR": "Año:",
     "DROP_TASK": "Tarea:",
     "DROP_TASK_NAME": "Nombre Tarea:",
     # Hyperparams
-    "HP_EPOCHS": "Epocas",
+    "HP_EPOCHS": "Épocas",
     "HP_PATIENCE": "Paciencia",
     "HP_TEST_SPLIT": "Split de Test",
     "HP_BALANCE": "Balanceo",
     "HP_AUGMENT": "Aumento de Datos",
-    "HP_ACTIVATION": "Funcion de Activacion",
+    "HP_ACTIVATION": "Función de Activación",
     "HP_OPTIMIZER": "Optimizador",
-    "HP_LOSS": "Funcion de Perdida",
+    "HP_LOSS": "Función de Pérdida",
     # Extraction
-    "EXTRACTION_TITLE": "Matriz de Extraccion (Multisensor GCS)",
+    "EXTRACTION_TITLE": "Matriz de Extracción (Multisensor GCS)",
     "SAMPLE_SELECT": "Seleccion de Muestras",
     "AVAILABLE": "Disponibles",
     "SELECTED": "Seleccionados",
     "ADD": "Agregar",
     "REMOVE": "Remover",
-    "CAMPAIGN": "Campana",
+    "CAMPAIGN": "Campaña",
     "SENSOR": "Sensor",
     "BANDS": "Bandas",
     "STATUS_OK": "OK",
@@ -778,13 +778,13 @@ STRINGS_ES = {
     "SHORTNAME": "Nombre Rapido:",
     "COMMENTS": "Comentarios...",
     "START_TRAINING": "Iniciar Entrenamiento",
-    "CANVAS_TITLE": "Centro de Treinamentos y Auditoria",
-    "CANVAS_EMPTY": "Canvas vazio",
-    "CANVAS_HINT": "Busque y seleccione modelos en el panel lateral para visualizarlos aqui.",
+    "CANVAS_TITLE": "Centro de Entrenamientos y Auditoría",
+    "CANVAS_EMPTY": "Canvas vacío",
+    "CANVAS_HINT": "Busque y seleccione modelos en el panel lateral para visualizarlos aquí.",
     "LOSS_ACC": "Loss / Accuracy",
     "VIZ_METADATA": "Metadatos",
     "VIZ_KPIS": "KPIs",
-    "VIZ_CONFUSION": "Confusion",
+    "VIZ_CONFUSION": "Confusión",
     "VIZ_HISTORY": "Historial",
     "VIZ_PROB": "Prob",
     "VIZ_PR_CURVE": "PR-Curve",
@@ -797,61 +797,61 @@ STRINGS_ES = {
     "REPO_CLEAR": "Limpiar",
     "REPO_SYNC_CATALOG": "Sincronizar Catalogo (GCS)",
     "REPO_SCANNING": "Escaneando GCS... Aguarde.",
-    "REPO_SCAN_DONE": "!Catalogo Sincronizado!",
+    "REPO_SCAN_DONE": "¡Catálogo Sincronizado!",
     # Tab titles
     "SORT_BY": "Ordenar:",
-    "NEW_TRAINING": "Novo Treinamento",
-    "TRAININGS": "Treinamentos",
+    "NEW_TRAINING": "Nuevo Entrenamiento",
+    "TRAININGS": "Entrenamientos",
     # M1 - Export
-    "EXPORT_TITLE": "Exportacion de Colecciones",
+    "EXPORT_TITLE": "Exportación de Colecciones",
     "EXPORT_SYNC": "Sincronizar Datos",
     "EXPORT_SELECT": "Seleccionar Pendientes",
     "EXPORT_CLEAR": "Limpiar Seleccion",
-    "EXPORT_START_BTN": "Iniciar Exportacion",
+    "EXPORT_START_BTN": "Iniciar Exportación",
     "EXPORT_SENT": "tareas enviadas.",
-    "EXPORT_NONE_SEL": "Ninguna opcion seleccionada para exportacion.",
+    "EXPORT_NONE_SEL": "Ninguna opción seleccionada para exportación.",
     # M2 - Mosaic
     "MOSAIC_TITLE": "Montaje de Mosaicos",
     "MOSAIC_SYNC": "Sincronizar Datos",
     "MOSAIC_SELECT": "Seleccionar Pendientes",
     "MOSAIC_CLEAR": "Limpiar Seleccion",
     "MOSAIC_START_BTN": "Iniciar Montaje",
-    "MOSAIC_DONE": "Montaje concluida con exito",
+    "MOSAIC_DONE": "Montaje concluido con éxito",
     # M0 - Startup
-    "START_COUNTRY": "Pais",
+    "START_COUNTRY": "País",
     "START_BUCKET": "Bucket",
     "START_VERSION": "Version",
     "START_SENSOR": "Sensor",
     "START_PERIODICITY": "Periodicidad",
-    "START_CAMPAIGN": "Campana",
+    "START_CAMPAIGN": "Campaña",
     "START_FOUND": "encontrado",
     "START_NOT_FOUND": "no encontrado",
     "START_GDAL_OK": "GDAL encontrado y agregado al PATH",
     "START_GDAL_MISSING": "Aviso: Utilitarios GDAL no encontrados",
     "START_COLAB_HINT": "En Google Colab, ejecute: !apt-get install -y gdal-bin",
-    "START_WIN_HINT": "En Windows, asegurese de que GDAL este en su PATH",
+    "START_WIN_HINT": "En Windows, asegúrese de que GDAL esté en su PATH",
     # M6
-    "M6_TITLE": "Procesador Post-Clasificacion",
-    "M6_PRESET": "Usando Configuracion Preset",
+    "M6_TITLE": "Procesador Post-Clasificación",
+    "M6_PRESET": "Usando Configuración Preset",
     "M6_DOWNLOAD": "Descargando fragmentos",
     "M6_VRT": "Construyendo VRT",
     "M6_COG": "Convirtiendo a COG",
     "M6_UPLOAD": "Subido",
     "M6_START": "Iniciando Filtrado",
-    "M6_EXPORT_OK": "Tarea exportacion iniciada",
-    "M6_SUMMARY": "Resumen de Configuracion Usada",
+    "M6_EXPORT_OK": "Tarea de exportación iniciada",
+    "M6_SUMMARY": "Resumen de Configuración Usada",
     # M7
     "M7_TITLE": "Curador",
-    "M7_DESC": "Publicacion de Coleccion Pre-Oficial",
+    "M7_DESC": "Publicación de Colección Pre-Oficial",
     "M7_PRESET": "Usando Votacion Preset",
-    "M7_START": "Iniciando Curaduria",
-    "M7_EXPORT_OK": "Exportacion GEE Asset iniciada para",
-    "M7_SUMMARY": "Resumen de Configuracion Usada",
+    "M7_START": "Iniciando Curaduría",
+    "M7_EXPORT_OK": "Exportación GEE Asset iniciada para",
+    "M7_SUMMARY": "Resumen de Configuración Usada",
     # M3
     "M3_TITLE": "M3 - Colecta de Muestras (GEE Toolkit Gateway)",
     "M3_SOURCE": "Acceso al codigo fuente (GitHub)",
     "M3_EDITOR": "Acceso directo (Editor GEE)",
-    "M3_DOCS": "Documentacion y normas de uso",
+    "M3_DOCS": "Documentación y normas de uso",
 }
 
 STRINGS_PT = {
@@ -865,8 +865,8 @@ STRINGS_PT = {
     "DONE": "Feito",
     "ERROR": "Erro",
     "SUCCESS": "Sucesso",
-    "WARNING": "Atencao",
-    "INFO": "Informacao",
+    "WARNING": "Atenção",
+    "INFO": "Informação",
     "ALL": "Todos",
     "ALL_F": "Todas",
     "NONE": "Nenhum",
@@ -883,44 +883,44 @@ STRINGS_PT = {
     "APPLY": "Aplicar",
     "CLOSE": "Fechar",
     "MODEL": "Modelo",
-    "REGION": "Regiao",
+    "REGION": "Região",
     "YEAR": "Ano",
     "PERIOD": "Periodo",
     "TASK": "Tarefa",
     "TASK_NAME": "Nome Tarefa",
     "STATUS": "Estado",
     "PROGRESS": "Progresso",
-    "DESCRIPTION": "Descricao",
+    "DESCRIPTION": "Descrição",
     "NAME": "Nome",
     "DATE": "Data",
     "ID": "ID",
     # Empty states
-    "NO_DATA": "Nenhum dado disponivel.",
+    "NO_DATA": "Nenhum dado disponível.",
     "NO_RESULTS": "Nenhum resultado encontrado.",
     "NO_TASKS": "Nenhuma tarefa pendente.",
     "NO_TASKS_PUBLISH": "Nenhuma tarefa pronta para publicar.",
     "NO_TASKS_DONE": "Nenhuma tarefa finalizada ainda.",
     "NO_TILES_GCS": "Nenhum tile no GCS.",
-    "NO_MAP": "Nao foi possivel gerar o mapa. Verifique conexao GEE.",
-    "NO_SELECTION": "Nenhuma opcao selecionada.",
+    "NO_MAP": "Não foi possível gerar o mapa. Verifique conexão GEE.",
+    "NO_SELECTION": "Nenhuma opção selecionada.",
     "NO_SAMPLES": "Nenhuma amostra encontrada com este filtro.",
-    "NO_COGS": "Nenhum COG encontrado no repositorio GCS.",
+    "NO_COGS": "Nenhum COG encontrado no repositório GCS.",
     # M5 Widgets
     "ADD_BATCH": "Adicionar Lote ao Plano",
     "REFRESH_VIEW": "Atualizar Vista",
     "LOAD_TO_QUEUE": "Carregar no Plano",
-    "CLEAR_TEMP_TASKS": "Limpar Tarefas Temporarias",
+    "CLEAR_TEMP_TASKS": "Limpar Tarefas Temporárias",
     "SAVE_TASK_GCS": "Salvar Tarefa GCS",
     "EXCLUDE_TASK_GCS": "Excluir Tarefa GCS",
     "DELETE_MODEL": "Excluir Modelo",
-    "DELETE_REGION": "Excluir Regiao",
+    "DELETE_REGION": "Excluir Região",
     "DELETE_SELECTED": "Excluir Selecionados",
     "DELETE_ALL": "Excluir Todos",
     "DELETE_JOB": "Excluir Tudo",
     "VIEW_TILES": "Ver Tiles",
     "HIDE_TILES": "Ocultar",
     "REFRESH_MAP": "Atualizar Mapa",
-    "TASK_NAME_PLACEHOLDER": "Ex: Classificar Amazonia Baixa 2025 (Lucas)",
+    "TASK_NAME_PLACEHOLDER": "Ex: Classificar Amazônia Baixa 2025 (Lucas)",
     # M5 Tabs
     "TAB_GUIDE": "Guia",
     "TAB_REGISTER": "Registrar",
@@ -929,38 +929,38 @@ STRINGS_PT = {
     "TAB_MAP": "Mapa",
     "TAB_DONE": "Finalizadas",
     "GUIDE_M5_HTML": """<div style='padding:20px; font-family:sans-serif;'>
-        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Classificacao Regional de Grande Escala</h3>
-        <p>Classifica multiplas regioes (cartas cim-world-1-250000) usando modelos do M4.</p>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Classificação Regional de Grande Escala</h3>
+        <p>Classifica múltiplas regiões (cartas cim-world-1-250000) usando modelos do M4.</p>
         <h4>Fluxo:</h4>
         <ol style='line-height:1.6;'>
-            <li><b>{tab_register}</b> — selecione modelo + regioes + periodos.</li>
-            <li><b>{tab_pending}</b> — acompanhe a classificacao tile a tile.</li>
-            <li><b>{tab_publish}</b> — trabalhos COMPLETED com gestao de tiles.</li>
+            <li><b>{tab_register}</b> — selecione modelo + regiões + períodos.</li>
+            <li><b>{tab_pending}</b> — acompanhe a classificação tile a tile.</li>
+            <li><b>{tab_publish}</b> — trabalhos COMPLETED com gestão de tiles.</li>
             <li><b>{tab_map}</b> — visibilidade geral do progresso.</li>
             <li><b>{tab_done}</b> — trabalhos FINISHED com timeline de cobertura.</li>
             <li>Execute <code>run_m5_workplan()</code> no notebook para processar.</li>
         </ol>
-        <h4>Exclusao granular:</h4>
+        <h4>Exclusão granular:</h4>
         <ul>
             <li><b>{tab_pending}</b> — exclua trabalhos individuais do plano.</li>
             <li><b>{tab_publish}</b> — exclua tiles individuais ou todos de um trabalho.</li>
-            <li><b>{tab_done}</b> — exclua por regiao ou modelo completo.</li>
-            <li>Apos excluir, registre novamente o trabalho em <b>{tab_register}</b>.</li>
+            <li><b>{tab_done}</b> — exclua por região ou modelo completo.</li>
+            <li>Após excluir, registre novamente o trabalho em <b>{tab_register}</b>.</li>
         </ul>
     </div>""",
     "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
-        <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Modulo 1 (M1) — Exportacao GEE Multi-Sensor</h3>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Modulo 1 (M1) — Exportação GEE Multi-Sensor</h3>
         <p>M1 exporta mosaicos de satelite sem nuvens do Google Earth Engine para o Google Cloud Storage (GCS) ou Assets GEE.
-        Suporta LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS e MODIS com correcoes radiometricas e mascaras de nuvens especificas por sensor.</p>
+        Suporta LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS e MODIS com correções radiométricas e máscaras de nuvens específicas por sensor.</p>
         <div style='display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px;'>
             <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
                 <h4 style='color:#e67e22;margin-top:0;'>Sensores e Fontes</h4>
                 <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
-                    <li><b>LANDSAT 5/7</b> — arquivo historico (1984–)</li>
+                    <li><b>LANDSAT 5/7</b> — arquivo histórico (1984–)</li>
                     <li><b>LANDSAT 8/9</b> — OLI/TIRS atual com bandas termais</li>
-                    <li><b>Sentinel-2</b> — 10m de resolucao, 5 dias de revisita</li>
+                    <li><b>Sentinel-2</b> — 10m de resolução, 5 dias de revisita</li>
                     <li><b>HLS</b> — produto harmonizado LANDSAT/Sentinel</li>
-                    <li><b>MODIS</b> — cobertura global diaria (250m–1km)</li>
+                    <li><b>MODIS</b> — cobertura global diária (250m–1km)</li>
                 </ul>
             </div>
             <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
@@ -968,32 +968,32 @@ STRINGS_PT = {
                 <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
                     <li><b>minnbr</b> — menor nuvem segundo ranking NBR</li>
                     <li><b>minndvi</b> — menor nuvem segundo ranking NDVI</li>
-                    <li><b>median</b> — composicao mediana pixel a pixel</li>
-                    <li><b>minnbr_buffer</b> — minnbr com mascara de buffer de fogo INPE</li>
+                    <li><b>median</b> — composição mediana pixel a pixel</li>
+                    <li><b>minnbr_buffer</b> — minnbr com máscara de buffer de fogo INPE</li>
                 </ul>
             </div>
             <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
                 <h4 style='color:#e67e22;margin-top:0;'>Fluxo de Trabalho</h4>
                 <ol style='padding-left:18px;font-size:13px;line-height:1.6;'>
                     <li>Selecione a aba do sensor (LANDSAT, S2, HLS, MODIS)</li>
-                    <li>Escolha o periodo (mensal / anual)</li>
-                    <li>Selecione o metodo de mosaico</li>
-                    <li>Marque as celulas de data e banda</li>
-                    <li>Clique em <b>Iniciar Exportacao</b></li>
+                    <li>Escolha o período (mensal / anual)</li>
+                    <li>Selecione o método de mosaico</li>
+                    <li>Marque as células de data e banda</li>
+                    <li>Clique em <b>Iniciar Exportação</b></li>
                 </ol>
             </div>
             <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
-                <h4 style='color:#e67e22;margin-top:0;'>Informacao Tecnica</h4>
+                <h4 style='color:#e67e22;margin-top:0;'>Informação Técnica</h4>
                 <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
-                    <li>Correcao radiometrica por sensor</li>
+                    <li>Correção radiométrica por sensor</li>
                     <li>Mascara de nuvens via QA_PIXEL, Fmask, CS+</li>
                     <li>Mascara de buffer de incendios INPE</li>
-                    <li>Saida: fragmentos GeoTIFF no GCS / ImageCollection no GEE</li>
+                    <li>Saída: fragmentos GeoTIFF no GCS / ImageCollection no GEE</li>
                 </ul>
             </div>
         </div>
         <div style='margin-top:15px;padding:10px;background:#fef3e2;border-left:4px solid #e67e22;border-radius:4px;font-size:13px;'>
-            <b>Dica:</b> Use <b>Sincronizar Dados</b> para atualizar o cache. Use <b>Selecionar Pendentes</b> para marcar automaticamente todas as datas disponiveis.
+            <b>Dica:</b> Use <b>Sincronizar Dados</b> para atualizar o cache. Use <b>Selecionar Pendentes</b> para marcar automáticamente todas as datas disponíveis.
         </div>
     </div>""",
     "GUIDE_M2_HTML": """<div style='padding:20px; font-family:sans-serif;'>
@@ -1001,10 +1001,10 @@ STRINGS_PT = {
         <p>M2 monta os fragmentos GeoTIFF exportados pelo M1 em COGs (Cloud-Optimized GeoTIFF) nacionais completos usando GDAL.</p>
         <h4>Fluxo:</h4>
         <ol style='line-height:1.6;'>
-            <li><b>Verifique o status</b> — OK (COG existe), READY (fragmentos disponiveis), MISS (nada disponivel)</li>
+            <li><b>Verifique o status</b> — OK (COG existe), READY (fragmentos disponíveis), MISS (nada disponivel)</li>
             <li><b>Selecione celulas</b> — marque as bandas que deseja montar</li>
             <li>Clique em <b>Iniciar Montagem</b></li>
-            <li>GDAL baixa fragmentos → constroi VRT → converte para COG (LZW) → envia ao GCS</li>
+            <li>GDAL baixa fragmentos → constrói VRT → converte para COG (LZW) → envia ao GCS</li>
         </ol>
         <h4>Requisitos:</h4>
         <ul style='line-height:1.6;'>
@@ -1012,21 +1012,21 @@ STRINGS_PT = {
             <li>M1 deve ter sido executado primeiro para produzir os fragmentos fonte</li>
         </ul>
         <div style='margin-top:15px;padding:10px;background:#e8f8ed;border-left:4px solid #27ae60;border-radius:4px;font-size:13px;'>
-            <b>Dica:</b> Os COGs sao armazenados em <code>.../COG/</code> e consumidos pelo M4 (treinamento) e M5 (classificacao).
+            <b>Dica:</b> Os COGs são armazenados em <code>.../COG/</code> e consumidos pelo M4 (treinamento) e M5 (classificação).
         </div>
     </div>""",
     # Map / Grid
     "LIVE_PROCESSING": "Processando ao vivo",
     "CURRENT_TILE": "Tile atual",
     "COMPLETED": "Completados",
-    "GRID_REGION": "Regiao",
-    "GRID_CELLS": "Celulas cim-world",
+    "GRID_REGION": "Região",
+    "GRID_CELLS": "Células cim-world",
     # Tiles / GCS
     "TILES": "tiles",
     "MOSAIC": "mosaico",
     "STATS": "stats",
     "SELECT_TILES_DELETE": "Selecione tiles para excluir.",
-    "TILES_REMOVED": "tiles excluidos.",
+    "TILES_REMOVED": "tiles excluídos.",
     # Task status
     "STATUS_QUEUED": "No plano",
     "STATUS_RUNNING": "Executando",
@@ -1038,18 +1038,18 @@ STRINGS_PT = {
     "STATUS_SKIPPED": "Omitido",
     # M4 - Training
     "MODEL_TRAINER": "Treinador de Modelo",
-    "ITERATIONS": "Iteracoes",
+    "ITERATIONS": "Iterações",
     "BATCH_SIZE": "Tamanho do Lote",
     "LEARNING_RATE": "Taxa de Aprendizado",
     "HIDDEN_LAYERS": "Camadas Ocultas",
-    "ACTIVATION": "Ativacao",
+    "ACTIVATION": "Ativação",
     "DROPOUT": "Dropout",
     "OPTIMIZER": "Otimizador",
-    "LOSS_FN": "Funcao de Perda",
-    "METRICS": "Metricas",
-    "SAMPLE_SELECTION": "Selecao de Amostras",
-    "EXTRACTION_MATRIX": "Matriz de Extracao",
-    "MODEL_CONFIG": "Configuracao do Modelo",
+    "LOSS_FN": "Função de Perda",
+    "METRICS": "Métricas",
+    "SAMPLE_SELECTION": "Seleção de Amostras",
+    "EXTRACTION_MATRIX": "Matriz de Extração",
+    "MODEL_CONFIG": "Configuração do Modelo",
     "GCS_DEST": "Destino GCS",
     "USAGE_GUIDE": "Guia de Uso",
     "GUIDE_M4_HTML": """<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #fdfdfd; color: #2c3e50; line-height: 1.6;">
@@ -1058,18 +1058,18 @@ STRINGS_PT = {
             <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
                 <h3 style="color: #3498db; margin-top:0;">Estrutura da Plataforma</h3>
                 <ul style="padding-left: 20px; font-size:13px;">
-                    <li><b>{usage_guide}:</b> Tela de orientacao e documentacao.</li>
-                    <li><b>{new_training}:</b> Configuracao de novos experimentos, selecao de amostras e bandas.</li>
-                    <li><b>{trainings}:</b> Ranking historico com metricas detalhadas e gestao de modelos.</li>
-                    <li><b>Canvas:</b> Mesa de auditoria paralela para comparar multiplos modelos em profundidade.</li>
+                    <li><b>{usage_guide}:</b> Tela de orientação e documentação.</li>
+                    <li><b>{new_training}:</b> Configuração de novos experimentos, seleção de amostras e bandas.</li>
+                    <li><b>{trainings}:</b> Ranking histórico com métricas detalhadas e gestão de modelos.</li>
+                    <li><b>Canvas:</b> Mesa de auditoria paralela para comparar múltiplos modelos em profundidade.</li>
                 </ul>
             </div>
             <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                <h3 style="color: #9b59b6; margin-top:0;">Conceitos Tecnicos</h3>
+                <h3 style="color: #9b59b6; margin-top:0;">Conceitos Técnicos</h3>
                 <ul style="padding-left: 20px; font-size:13px;">
-                    <li><b>TensorFlow:</b> Motor de IA do Google para calculos matematicos massivos.</li>
+                    <li><b>TensorFlow:</b> Motor de IA do Google para cálculos matemáticos massivos.</li>
                     <li><b>DNN (Deep Neural Network):</b> Rede profunda que imita o aprendizado humano.</li>
-                    <li><b>Neuronios:</b> Unidades que processam sinais e ativam padroes de aprendizado.</li>
+                    <li><b>Neurônios:</b> Unidades que processam sinais e ativam padrões de aprendizado.</li>
                 </ul>
             </div>
             <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
@@ -1078,81 +1078,81 @@ STRINGS_PT = {
                     <li><b>Layers:</b> Arquitetura da rede. Mais camadas captam detalhes mais finos.</li>
                     <li><b>Learning Rate (LR):</b> Controla a velocidade de ajuste do modelo.</li>
                     <li><b>Epochs:</b> Ciclos completos de treinamento sobre o conjunto de amostras.</li>
-                    <li><b>Batch Size:</b> Blocos de dados processados antes de cada atualizacao.</li>
+                    <li><b>Batch Size:</b> Blocos de dados processados antes de cada atualização.</li>
                 </ul>
             </div>
             <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                <h3 style="color: #27ae60; margin-top:0;">Dicionario de Qualidade</h3>
+                <h3 style="color: #27ae60; margin-top:0;">Dicionário de Qualidade</h3>
                 <ul style="padding-left: 20px; font-size:13px;">
                     <li><b>Accuracy:</b> Porcentagem total de acertos globais.</li>
-                    <li><b>Precision:</b> Fidelidade: Quanto do fogo marcado e real? (Evita falsos positivos).</li>
-                    <li><b>Recall:</b> Cobertura: Quanto do fogo real foi encontrado? (Evita omissoes).</li>
-                    <li><b>F1-Score:</b> Media harmonica. O melhor equilibrio entre Precision e Recall.</li>
-                    <li><b>Nota IA:</b> Auditoria automatica que pune severamente as omissoes.</li>
-                    <li><b>Nota Humana:</b> Avaliacao subjetiva (1-5) sobre o Espaco Latente.</li>
+                    <li><b>Precision:</b> Fidelidade: Quanto do fogo marcado é real? (Evita falsos positivos).</li>
+                    <li><b>Recall:</b> Cobertura: Quanto do fogo real foi encontrado? (Evita omissões).</li>
+                    <li><b>F1-Score:</b> Média harmônica. O melhor equilibrio entre Precision e Recall.</li>
+                    <li><b>Nota IA:</b> Auditoria automática que pune severamente as omissões.</li>
+                    <li><b>Nota Humana:</b> Avaliação subjetiva (1-5) sobre o Espaco Latente.</li>
                 </ul>
             </div>
         </div>
         <div style="margin-top: 30px; padding: 15px; background: #e8f4fd; border-left: 5px solid #3498db; border-radius: 4px; font-size:14px;">
-            <b>[Dica] Pro-Tip do Auditor:</b> Use o <b>Canvas</b> para carregar um modelo antigo (benchmark) e seu modelo novo. Compare se a separacao de classes em t-SNE 3D melhorou ou se ha novas zonas de confusao.
+            <b>[Dica] Pro-Tip do Auditor:</b> Use o <b>Canvas</b> para carregar um modelo antigo (benchmark) e seu modelo novo. Compare se a separação de classes em t-SNE 3D melhorou ou se há novas zonas de confusão.
         </div>
     </div>""",
     # M4 - Canvas
     "METADATA": "Metadados",
     "KPIS": "KPIs",
-    "CONFUSION": "Confusao",
+    "CONFUSION": "Confusão",
     "HISTORY": "Historico",
     "PROB": "Prob",
     "PR_CURVE": "PR-Curve",
-    "MANAGEMENT": "Gestao",
+    "MANAGEMENT": "Gestão",
     "RANKING": "Ranking / Repositorio",
     "SELECTED_CANVAS": "Selecionados no Canvas",
     "SEARCH_REPO": "Buscar no repositorio...",
     "SEARCH_SAMPLES": "Buscar amostras...",
-    "SYNC_CATALOG": "Sincronizar Catalogo (GCS)",
+    "SYNC_CATALOG": "Sincronizar Catálogo (GCS)",
     "APPLY_VISIBILITY": "Aplicar Visibilidade",
     # M1 / M2
     "SYNC_DATA": "Sincronizar Dados",
     "SELECT_PENDING": "Selecionar Pendentes",
-    "CLEAR_SELECTION": "Limpar Selecao",
-    "EXPORT_START": "Iniciar Exportacao",
+    "CLEAR_SELECTION": "Limpar Seleção",
+    "EXPORT_START": "Iniciar Exportação",
     "MOSAIC_START": "Iniciar Montagem",
     # M6
-    "POST_CLASSIFICATION": "Processador Pos-Classificacao",
-    "USING_PRESET": "Usando Configuracao Predefinida",
+    "POST_CLASSIFICATION": "Processador Pós-Classificação",
+    "USING_PRESET": "Usando Configuração Predefinida",
     "FILTER_START": "Iniciar Filtragem",
-    "EXPORT_TASK_STARTED": "Tarefa de exportacao iniciada",
-    "CONFIG_SUMMARY": "Resumo da Configuracao",
+    "EXPORT_TASK_STARTED": "Tarefa de exportação iniciada",
+    "CONFIG_SUMMARY": "Resumo da Configuração",
     # M7
     "CURATOR": "Curador",
-    "CURATOR_DESC": "Publicacao de Colecao Pre-Oficial",
-    "USING_VOTES_PRESET": "Usando Votacao Predefinida",
+    "CURATOR_DESC": "Publicação de Coleção Pré-Oficial",
+    "USING_VOTES_PRESET": "Usando Votação Predefinida",
     "CURATION_START": "Iniciar Curadoria",
-    "EXPORT_ASSET_STARTED": "Exportacao GEE Asset iniciada",
+    "EXPORT_ASSET_STARTED": "Exportação GEE Asset iniciada",
     # Cache
     "CACHE_REMOVED": "Cache local removido",
-    "CACHE_NOT_FOUND": "Cache nao encontrado",
+    "CACHE_NOT_FOUND": "Cache não encontrado",
     # Misc
     "LOADING_TILES": "Carregando tiles...",
-    "CONFIRM_DELETE": "Confirmar Exclusao",
-    "CONFIRM_DELETE_ALL": "Confirmar Exclusao Total",
+    "CONFIRM_DELETE": "Confirmar Exclusão",
+    "CONFIRM_DELETE_ALL": "Confirmar Exclusão Total",
     "CANCELED": "Cancelado.",
-    "GLOBAL_OPTS_SET": "Opcoes globais configuradas",
+    "GLOBAL_OPTS_SET": "Opções globais configuradas",
     # Dropdown labels
     "DROP_MODEL": "Modelo:",
-    "DROP_REGION": "Regiao:",
+    "DROP_REGION": "Região:",
     "DROP_YEAR": "Ano:",
     "DROP_TASK": "Tarefa:",
     "DROP_TASK_NAME": "Nome Tarefa:",
     # Hyperparams
-    "HP_EPOCHS": "Epocas",
-    "HP_PATIENCE": "Paciencia",
+    "HP_EPOCHS": "Épocas",
+    "HP_PATIENCE": "Paciência",
     "HP_TEST_SPLIT": "Split de Teste",
     "HP_BALANCE": "Balanceamento",
     "HP_AUGMENT": "Aumento de Dados",
-    "HP_ACTIVATION": "Funcao de Ativacao",
+    "HP_ACTIVATION": "Função de Ativação",
     "HP_OPTIMIZER": "Otimizador",
-    "HP_LOSS": "Funcao de Perda",
+    "HP_LOSS": "Função de Perda",
     # Extraction
     "EXTRACTION_TITLE": "Matriz de Extracao (Multissensor GCS)",
     "SAMPLE_SELECT": "Selecao de Amostras",
@@ -1168,7 +1168,7 @@ STRINGS_PT = {
     "STATUS_MISS": "Falt.",
     # Training
     "TRAINING_ID": "ID Treinamento:",
-    "SHORTNAME": "Nome Rapido:",
+    "SHORTNAME": "Nome Rápido:",
     "COMMENTS": "Comentarios...",
     "START_TRAINING": "Iniciar Treinamento",
     "CANVAS_TITLE": "Centro de Treinamentos e Auditoria",
@@ -1190,61 +1190,61 @@ STRINGS_PT = {
     "REPO_CLEAR": "Limpar",
     "REPO_SYNC_CATALOG": "Sincronizar Catalogo (GCS)",
     "REPO_SCANNING": "Escaneando GCS... Aguarde.",
-    "REPO_SCAN_DONE": "Catalogo Sincronizado!",
+    "REPO_SCAN_DONE": "Catálogo Sincronizado!",
     # Tab titles
     "SORT_BY": "Ordenar por:",
     "NEW_TRAINING": "Novo Treinamento",
     "TRAININGS": "Treinamentos",
     # M1 - Export
-    "EXPORT_TITLE": "Exportacao de Colecoes",
+    "EXPORT_TITLE": "Exportação de Coleções",
     "EXPORT_SYNC": "Sincronizar Dados",
     "EXPORT_SELECT": "Selecionar Pendentes",
     "EXPORT_CLEAR": "Limpar Selecao",
-    "EXPORT_START_BTN": "Iniciar Exportacao",
+    "EXPORT_START_BTN": "Iniciar Exportação",
     "EXPORT_SENT": "tarefas enviadas.",
-    "EXPORT_NONE_SEL": "Nenhuma opcao selecionada para exportacao.",
+    "EXPORT_NONE_SEL": "Nenhuma opção selecionada para exportação.",
     # M2 - Mosaic
     "MOSAIC_TITLE": "Montagem de Mosaicos",
     "MOSAIC_SYNC": "Sincronizar Dados",
     "MOSAIC_SELECT": "Selecionar Pendentes",
-    "MOSAIC_CLEAR": "Limpar Selecao",
+    "MOSAIC_CLEAR": "Limpar Seleção",
     "MOSAIC_START_BTN": "Iniciar Montagem",
-    "MOSAIC_DONE": "Montagem concluida com sucesso",
+    "MOSAIC_DONE": "Montagem concluída com sucesso",
     # M0 - Startup
-    "START_COUNTRY": "Pais",
+    "START_COUNTRY": "País",
     "START_BUCKET": "Bucket",
     "START_VERSION": "Versao",
     "START_SENSOR": "Sensor",
     "START_PERIODICITY": "Periodicidade",
     "START_CAMPAIGN": "Campanha",
     "START_FOUND": "encontrado",
-    "START_NOT_FOUND": "nao encontrado",
+    "START_NOT_FOUND": "não encontrado",
     "START_GDAL_OK": "GDAL encontrado e adicionado ao PATH",
-    "START_GDAL_MISSING": "Aviso: Utilitarios GDAL nao encontrados",
+    "START_GDAL_MISSING": "Aviso: Utilitários GDAL não encontrados",
     "START_COLAB_HINT": "No Google Colab, execute: !apt-get install -y gdal-bin",
     "START_WIN_HINT": "No Windows, certifique-se de que o GDAL esteja no seu PATH",
     # M6
-    "M6_TITLE": "Processador Pos-Classificacao",
-    "M6_PRESET": "Usando Configuracao Predefinida",
+    "M6_TITLE": "Processador Pós-Classificação",
+    "M6_PRESET": "Usando Configuração Predefinida",
     "M6_DOWNLOAD": "Baixando fragmentos",
     "M6_VRT": "Construindo VRT",
     "M6_COG": "Convertendo para COG",
     "M6_UPLOAD": "Enviado",
     "M6_START": "Iniciando Filtragem",
-    "M6_EXPORT_OK": "Tarefa de exportacao iniciada",
-    "M6_SUMMARY": "Resumo da Configuracao",
+    "M6_EXPORT_OK": "Tarefa de exportação iniciada",
+    "M6_SUMMARY": "Resumo da Configuração",
     # M7
     "M7_TITLE": "Curador",
-    "M7_DESC": "Publicacao de Colecao Pre-Oficial",
+    "M7_DESC": "Publicação de Coleção Pré-Oficial",
     "M7_PRESET": "Usando Votacao Predefinida",
     "M7_START": "Iniciando Curadoria",
-    "M7_EXPORT_OK": "Exportacao GEE Asset iniciada para",
-    "M7_SUMMARY": "Resumo da Configuracao",
+    "M7_EXPORT_OK": "Exportação GEE Asset iniciada para",
+    "M7_SUMMARY": "Resumo da Configuração",
     # M3
     "M3_TITLE": "M3 - Coleta de Amostras (GEE Toolkit Gateway)",
-    "M3_SOURCE": "Acesso ao codigo fonte (GitHub)",
+    "M3_SOURCE": "Acesso ao código fonte (GitHub)",
     "M3_EDITOR": "Acesso direto (Editor GEE)",
-    "M3_DOCS": "Documentacao e normas de uso",
+    "M3_DOCS": "Documentação e normas de uso",
 }
 
 STRINGS_FR = {
@@ -1255,9 +1255,9 @@ STRINGS_FR = {
     "SAVING": "Enregistrement...",
     "SYNCING": "Synchronisation...",
     "SEARCHING": "Recherche...",
-    "DONE": "Termine",
+    "DONE": "Terminé",
     "ERROR": "Erreur",
-    "SUCCESS": "Succes",
+    "SUCCESS": "Succès",
     "WARNING": "Attention",
     "INFO": "Information",
     "ALL": "Tous",
@@ -1275,12 +1275,12 @@ STRINGS_FR = {
     "REFRESH": "Actualiser",
     "APPLY": "Appliquer",
     "CLOSE": "Fermer",
-    "MODEL": "Modele",
-    "REGION": "Region",
-    "YEAR": "Annee",
-    "PERIOD": "Periode",
-    "TASK": "Tache",
-    "TASK_NAME": "Nom Tache",
+    "MODEL": "Modèle",
+    "REGION": "Région",
+    "YEAR": "Année",
+    "PERIOD": "Période",
+    "TASK": "Tâche",
+    "TASK_NAME": "Nom Tâche",
     "STATUS": "Statut",
     "PROGRESS": "Progression",
     "DESCRIPTION": "Description",
@@ -1288,26 +1288,26 @@ STRINGS_FR = {
     "DATE": "Date",
     "ID": "ID",
     # Empty states
-    "NO_DATA": "Aucune donnee disponible.",
-    "NO_RESULTS": "Aucun resultat trouve.",
-    "NO_TASKS": "Aucune tache en attente.",
-    "NO_TASKS_PUBLISH": "Aucune tache prete a publier.",
-    "NO_TASKS_DONE": "Aucune tache terminee.",
+    "NO_DATA": "Aucune donnée disponible.",
+    "NO_RESULTS": "Aucun résultat trouvé.",
+    "NO_TASKS": "Aucune tâche en attente.",
+    "NO_TASKS_PUBLISH": "Aucune tâche prête à publier.",
+    "NO_TASKS_DONE": "Aucune tâche terminée.",
     "NO_TILES_GCS": "Aucun tile dans GCS.",
-    "NO_MAP": "Impossible de generer la carte. Verifier connexion GEE.",
-    "NO_SELECTION": "Aucune option selectionnee.",
-    "NO_SAMPLES": "Aucun echantillon trouve avec ce filtre.",
-    "NO_COGS": "Aucun COG trouve dans le depot GCS.",
+    "NO_MAP": "Impossible de générer la carte. Vérifier connexion GEE.",
+    "NO_SELECTION": "Aucune option sélectionnée.",
+    "NO_SAMPLES": "Aucun échantillon trouvé avec ce filtre.",
+    "NO_COGS": "Aucun COG trouvé dans le dépôt GCS.",
     # M5 Widgets
     "ADD_BATCH": "Ajouter un lot au plan",
     "REFRESH_VIEW": "Actualiser la vue",
     "LOAD_TO_QUEUE": "Charger dans le plan",
-    "CLEAR_TEMP_TASKS": "Effacer les taches temporaires",
-    "SAVE_TASK_GCS": "Enregistrer tache GCS",
-    "EXCLUDE_TASK_GCS": "Exclure tache GCS",
-    "DELETE_MODEL": "Supprimer le modele",
-    "DELETE_REGION": "Supprimer la region",
-    "DELETE_SELECTED": "Supprimer selectionnes",
+    "CLEAR_TEMP_TASKS": "Effacer les tâches temporaires",
+    "SAVE_TASK_GCS": "Enregistrer tâche GCS",
+    "EXCLUDE_TASK_GCS": "Exclure tâche GCS",
+    "DELETE_MODEL": "Supprimer le modèle",
+    "DELETE_REGION": "Supprimer la région",
+    "DELETE_SELECTED": "Supprimer sélectionnés",
     "DELETE_ALL": "Tout supprimer",
     "DELETE_JOB": "Tout supprimer",
     "VIEW_TILES": "Voir les tiles",
@@ -1318,32 +1318,32 @@ STRINGS_FR = {
     "TAB_GUIDE": "Guide",
     "TAB_REGISTER": "Enregistrer",
     "TAB_PENDING": "En attente",
-    "TAB_PUBLISH": "A publier",
+    "TAB_PUBLISH": "À publier",
     "TAB_MAP": "Carte",
-    "TAB_DONE": "Terminees",
+    "TAB_DONE": "Terminées",
     "GUIDE_M5_HTML": """<div style='padding:20px; font-family:sans-serif;'>
-        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Classification Regionale a Grande Echelle</h3>
-        <p>Classifie plusieurs regions (grille cim-world-1-250000) en utilisant les modeles M4.</p>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Classification Régionale à Grande Échelle</h3>
+        <p>Classifie plusieurs régions (grille cim-world-1-250000) en utilisant les modèles M4.</p>
         <h4>Flux:</h4>
         <ol style='line-height:1.6;'>
-            <li><b>{tab_register}</b> — selectionnez modele + regions + periodes.</li>
+            <li><b>{tab_register}</b> — selectionnez modèle + régions + périodes.</li>
             <li><b>{tab_pending}</b> — suivez la classification tile par tile.</li>
             <li><b>{tab_publish}</b> — travaux COMPLETED avec gestion des tiles.</li>
             <li><b>{tab_map}</b> — apercu general de l avancement.</li>
             <li><b>{tab_done}</b> — travaux FINISHED avec chronologie de couverture.</li>
-            <li>Executez <code>run_m5_workplan()</code> dans le notebook pour traiter.</li>
+            <li>Exécutez <code>run_m5_workplan()</code> dans le notebook pour traiter.</li>
         </ol>
         <h4>Suppression granulaire:</h4>
         <ul>
             <li><b>{tab_pending}</b> — supprimez des travaux individuels du plan.</li>
             <li><b>{tab_publish}</b> — supprimez des tiles individuelles ou toutes d un travail.</li>
-            <li><b>{tab_done}</b> — supprimez par region ou modele complet.</li>
-            <li>Apres suppression, reenregistrez le travail dans <b>{tab_register}</b>.</li>
+            <li><b>{tab_done}</b> — supprimez par region ou modèle complet.</li>
+            <li>Après suppression, réenregistrez le travail dans <b>{tab_register}</b>.</li>
         </ul>
     </div>""",
     "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
         <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Module 1 (M1) — Exportation GEE Multi-Capteur</h3>
-        <p>M1 exporte des mosaiques satellitaires sans nuage depuis Google Earth Engine vers Google Cloud Storage (GCS) ou des Assets GEE.
+        <p>M1 exporte des mosaïques satellitaires sans nuage depuis Google Earth Engine vers Google Cloud Storage (GCS) ou des Assets GEE.
         Supporte LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS et MODIS avec corrections radiometriques et masquage des nuages specifiques par capteur.</p>
         <div style='display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px;'>
             <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
@@ -1368,11 +1368,11 @@ STRINGS_FR = {
             <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
                 <h4 style='color:#e67e22;margin-top:0;'>Flux de Travail</h4>
                 <ol style='padding-left:18px;font-size:13px;line-height:1.6;'>
-                    <li>Selectionnez l onglet du capteur (LANDSAT, S2, HLS, MODIS)</li>
+                    <li>Sélectionnez l onglet du capteur (LANDSAT, S2, HLS, MODIS)</li>
                     <li>Choisissez la periode (mensuelle / annuelle)</li>
-                    <li>Selectionnez la methode de mosaique</li>
+                    <li>Sélectionnez la methode de mosaique</li>
                     <li>Cochez les cellules de date et de bande</li>
-                    <li>Cliquez sur <b>Demarrer Exportation</b></li>
+                    <li>Cliquez sur <b>Démarrer Exportation</b></li>
                 </ol>
             </div>
             <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
@@ -1395,8 +1395,8 @@ STRINGS_FR = {
         <h4>Flux:</h4>
         <ol style='line-height:1.6;'>
             <li><b>Verifiez le statut</b> — OK (COG existe), READY (fragments disponibles), MISS (rien de disponible)</li>
-            <li><b>Selectionnez les cellules</b> — cochez les bandes a assembler</li>
-            <li>Cliquez sur <b>Demarrer Assemblage</b></li>
+            <li><b>Sélectionnez les cellules</b> — cochez les bandes a assembler</li>
+            <li>Cliquez sur <b>Démarrer Assemblage</b></li>
             <li>GDAL telecharge les fragments → construit VRT → convertit en COG (LZW) → upload vers GCS</li>
         </ol>
         <h4>Exigences:</h4>
@@ -1411,40 +1411,40 @@ STRINGS_FR = {
     # Map / Grid
     "LIVE_PROCESSING": "Traitement en direct",
     "CURRENT_TILE": "Tile actuel",
-    "COMPLETED": "Termines",
-    "GRID_REGION": "Region",
+    "COMPLETED": "Terminés",
+    "GRID_REGION": "Région",
     "GRID_CELLS": "Cellules cim-world",
     # Tiles / GCS
     "TILES": "tiles",
     "MOSAIC": "mosaique",
     "STATS": "stats",
-    "SELECT_TILES_DELETE": "Selectionnez les tiles a supprimer.",
-    "TILES_REMOVED": "tiles supprimes.",
+    "SELECT_TILES_DELETE": "Sélectionnez les tiles a supprimer.",
+    "TILES_REMOVED": "tiles supprimés.",
     # Task status
     "STATUS_QUEUED": "Dans le plan",
     "STATUS_RUNNING": "En cours",
-    "STATUS_COMPLETED": "Complete",
-    "STATUS_FINISHED": "Termine",
+    "STATUS_COMPLETED": "Complété",
+    "STATUS_FINISHED": "Terminé",
     "STATUS_ERROR": "Erreur",
     "STATUS_PUBLISHING": "Publication",
-    "STATUS_PUBLISHED": "Publie",
-    "STATUS_SKIPPED": "Ignore",
+    "STATUS_PUBLISHED": "Publié",
+    "STATUS_SKIPPED": "Ignoré",
     # M4 - Training
-    "MODEL_TRAINER": "Entraineur de modele",
-    "ITERATIONS": "Iterations",
+    "MODEL_TRAINER": "Entraîneur de modèle",
+    "ITERATIONS": "Itérations",
     "BATCH_SIZE": "Taille du lot",
-    "LEARNING_RATE": "Taux d apprentissage",
-    "HIDDEN_LAYERS": "Couches cachees",
+    "LEARNING_RATE": "Taux d'apprentissage",
+    "HIDDEN_LAYERS": "Couches cachées",
     "ACTIVATION": "Activation",
     "DROPOUT": "Dropout",
     "OPTIMIZER": "Optimiseur",
     "LOSS_FN": "Fonction de perte",
-    "METRICS": "Metriques",
-    "SAMPLE_SELECTION": "Selection d echantillons",
-    "EXTRACTION_MATRIX": "Matrice d extraction",
-    "MODEL_CONFIG": "Configuration du modele",
+    "METRICS": "Métriques",
+    "SAMPLE_SELECTION": "Sélection d'échantillons",
+    "EXTRACTION_MATRIX": "Matrice d'extraction",
+    "MODEL_CONFIG": "Configuration du modèle",
     "GCS_DEST": "Destination GCS",
-    "USAGE_GUIDE": "Guide d utilisation",
+    "USAGE_GUIDE": "Guide d'utilisation",
     "GUIDE_M4_HTML": """<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #fdfdfd; color: #2c3e50; line-height: 1.6;">
         <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">M4 Model Trainer - Guide d Utilisation</h1>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px;">
@@ -1452,9 +1452,9 @@ STRINGS_FR = {
                 <h3 style="color: #3498db; margin-top:0;">Structure de la Plateforme</h3>
                 <ul style="padding-left: 20px; font-size:13px;">
                     <li><b>{usage_guide}:</b> Ecran d orientation et de documentation.</li>
-                    <li><b>{new_training}:</b> Configuration de nouvelles experiences, selection d echantillons et de bandes.</li>
-                    <li><b>{trainings}:</b> Classement historique avec metriques detaillees et gestion des modeles.</li>
-                    <li><b>Canvas:</b> Bureau d audit parallele pour comparer plusieurs modeles en profondeur.</li>
+                    <li><b>{new_training}:</b> Configuration de nouvelles experiences, selection d échantillons et de bandes.</li>
+                    <li><b>{trainings}:</b> Classement historique avec metriques detaillees et gestion des modèles.</li>
+                    <li><b>Canvas:</b> Bureau d audit parallele pour comparer plusieurs modèles en profondeur.</li>
                 </ul>
             </div>
             <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
@@ -1462,16 +1462,16 @@ STRINGS_FR = {
                 <ul style="padding-left: 20px; font-size:13px;">
                     <li><b>TensorFlow:</b> Moteur IA de Google pour les calculs mathematiques massifs.</li>
                     <li><b>DNN (Deep Neural Network):</b> Reseau profond qui imite l apprentissage humain.</li>
-                    <li><b>Neurones:</b> Unites qui traitent les signaux et activent les modeles d apprentissage.</li>
+                    <li><b>Neurones:</b> Unites qui traitent les signaux et activent les modèles d apprentissage.</li>
                 </ul>
             </div>
             <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
                 <h3 style="color: #e67e22; margin-top:0;">Hyperparametres (DNN)</h3>
                 <ul style="padding-left: 20px; font-size:13px;">
                     <li><b>Layers:</b> Architecture du reseau. Plus de couches capturent des details plus fins.</li>
-                    <li><b>Learning Rate (LR):</b> Controle la vitesse d ajustement du modele.</li>
-                    <li><b>Epochs:</b> Cycles d entrainement complets sur l ensemble d echantillons.</li>
-                    <li><b>Batch Size:</b> Blocs de donnees traites avant chaque mise a jour.</li>
+                    <li><b>Learning Rate (LR):</b> Controle la vitesse d ajustement du modèle.</li>
+                    <li><b>Epochs:</b> Cycles d entrainement complets sur l ensemble d échantillons.</li>
+                    <li><b>Batch Size:</b> Blocs de données traites avant chaque mise a jour.</li>
                 </ul>
             </div>
             <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
@@ -1479,7 +1479,7 @@ STRINGS_FR = {
                 <ul style="padding-left: 20px; font-size:13px;">
                     <li><b>Accuracy:</b> Pourcentage total de reussites globales.</li>
                     <li><b>Precision:</b> Fidelite: Quelle part du feu marque est reelle? (Evite les faux positifs).</li>
-                    <li><b>Recall:</b> Couverture: Quelle part du feu reel a ete trouvee? (Evite les omissions).</li>
+                    <li><b>Recall:</b> Couverture: Quelle part du feu reel a ete trouvée? (Evite les omissions).</li>
                     <li><b>F1-Score:</b> Moyenne harmonique. Le meilleur equilibre entre Precision et Recall.</li>
                     <li><b>Note IA:</b> Audit automatique qui penalise severement les omissions.</li>
                     <li><b>Note Humaine:</b> Evaluation subjective (1-5) sur l Espace Latent.</li>
@@ -1487,88 +1487,88 @@ STRINGS_FR = {
             </div>
         </div>
         <div style="margin-top: 30px; padding: 15px; background: #e8f4fd; border-left: 5px solid #3498db; border-radius: 4px; font-size:14px;">
-            <b>[Conseil] Pro-Tip de l Auditeur:</b> Utilisez le <b>Canvas</b> pour charger un ancien modele (benchmark) et votre nouveau modele. Comparez si la separation des classes en t-SNE 3D s est amelioree ou s il y a de nouvelles zones de confusion.
+            <b>[Conseil] Pro-Tip de l Auditeur:</b> Utilisez le <b>Canvas</b> pour charger un ancien modèle (benchmark) et votre nouveau modèle. Comparez si la separation des classes en t-SNE 3D s est amelioree ou s il y a de nouvelles zones de confusion.
         </div>
     </div>""",
     # M4 - Canvas
-    "METADATA": "Metadonnees",
+    "METADATA": "Métadonnées",
     "KPIS": "KPIs",
     "CONFUSION": "Confusion",
     "HISTORY": "Historique",
     "PROB": "Prob",
     "PR_CURVE": "Courbe PR",
     "MANAGEMENT": "Gestion",
-    "RANKING": "Classement / Depot",
-    "SELECTED_CANVAS": "Selectionnes dans Canvas",
-    "SEARCH_REPO": "Rechercher dans le depot...",
-    "SEARCH_SAMPLES": "Rechercher echantillons...",
+    "RANKING": "Classement / Dépôt",
+    "SELECTED_CANVAS": "Sélectionnés dans Canvas",
+    "SEARCH_REPO": "Rechercher dans le dépôt...",
+    "SEARCH_SAMPLES": "Rechercher échantillons...",
     "SYNC_CATALOG": "Synchroniser catalogue (GCS)",
-    "APPLY_VISIBILITY": "Appliquer la visibilite",
+    "APPLY_VISIBILITY": "Appliquer la visibilité",
     # M1 / M2
-    "SYNC_DATA": "Synchroniser donnees",
-    "SELECT_PENDING": "Selectionner en attente",
+    "SYNC_DATA": "Synchroniser données",
+    "SELECT_PENDING": "Sélectionner en attente",
     "CLEAR_SELECTION": "Effacer la selection",
-    "EXPORT_START": "Demarrer exportation",
-    "MOSAIC_START": "Demarrer assemblage",
+    "EXPORT_START": "Démarrer exportation",
+    "MOSAIC_START": "Démarrer assemblage",
     # M6
     "POST_CLASSIFICATION": "Processeur post-classification",
     "USING_PRESET": "Utilisation configuration predefinie",
-    "FILTER_START": "Demarrer filtrage",
-    "EXPORT_TASK_STARTED": "Tache d exportation demarree",
-    "CONFIG_SUMMARY": "Resume de configuration",
+    "FILTER_START": "Démarrer filtrage",
+    "EXPORT_TASK_STARTED": "Tâche d'exportation démarrée",
+    "CONFIG_SUMMARY": "Résumé de configuration",
     # M7
     "CURATOR": "Curateur",
     "CURATOR_DESC": "Publication collection pre-officielle",
-    "USING_VOTES_PRESET": "Utilisation vote predefini",
-    "CURATION_START": "Demarrer curation",
+    "USING_VOTES_PRESET": "Utilisation vote prédéfini",
+    "CURATION_START": "Démarrer curation",
     "EXPORT_ASSET_STARTED": "Exportation GEE Asset demarree",
     # Cache
-    "CACHE_REMOVED": "Cache local supprime",
+    "CACHE_REMOVED": "Cache local supprimé",
     "CACHE_NOT_FOUND": "Cache introuvable",
     # Misc
     "LOADING_TILES": "Chargement tiles...",
     "CONFIRM_DELETE": "Confirmer la suppression",
     "CONFIRM_DELETE_ALL": "Confirmer la suppression totale",
-    "CANCELED": "Annule.",
-    "GLOBAL_OPTS_SET": "Options globales configurees",
+    "CANCELED": "Annulé.",
+    "GLOBAL_OPTS_SET": "Options globales configurées",
     # Dropdown labels
-    "DROP_MODEL": "Modele:",
-    "DROP_REGION": "Region:",
-    "DROP_YEAR": "Annee:",
-    "DROP_TASK": "Tache:",
-    "DROP_TASK_NAME": "Nom Tache:",
+    "DROP_MODEL": "Modèle:",
+    "DROP_REGION": "Région:",
+    "DROP_YEAR": "Année:",
+    "DROP_TASK": "Tâche:",
+    "DROP_TASK_NAME": "Nom Tâche:",
     # Hyperparams
-    "HP_EPOCHS": "Epoques",
+    "HP_EPOCHS": "Époques",
     "HP_PATIENCE": "Patience",
     "HP_TEST_SPLIT": "Split de test",
-    "HP_BALANCE": "Equilibrage",
-    "HP_AUGMENT": "Augmentation donnees",
-    "HP_ACTIVATION": "Fonction d activation",
+    "HP_BALANCE": "Équilibrage",
+    "HP_AUGMENT": "Augmentation données",
+    "HP_ACTIVATION": "Fonction d'activation",
     "HP_OPTIMIZER": "Optimiseur",
     "HP_LOSS": "Fonction de perte",
     # Extraction
-    "EXTRACTION_TITLE": "Matrice d extraction (Multicapteur GCS)",
-    "SAMPLE_SELECT": "Selection echantillons",
+    "EXTRACTION_TITLE": "Matrice d'extraction (Multicapteur GCS)",
+    "SAMPLE_SELECT": "Sélection échantillons",
     "AVAILABLE": "Disponibles",
-    "SELECTED": "Selectionnes",
+    "SELECTED": "Sélectionnés",
     "ADD": "Ajouter",
     "REMOVE": "Retirer",
     "CAMPAIGN": "Campagne",
     "SENSOR": "Capteur",
-    "BANDS": "Bandas",
+    "BANDS": "Bandes",
     "STATUS_OK": "OK",
     "STATUS_RUN": "Exec.",
     "STATUS_MISS": "Manq.",
     # Training
-    "TRAINING_ID": "ID Entrainement:",
+    "TRAINING_ID": "ID Entraînement:",
     "SHORTNAME": "Nom court:",
     "COMMENTS": "Commentaires...",
-    "START_TRAINING": "Demarrer entrainement",
-    "CANVAS_TITLE": "Centre d entrainement et d audit",
+    "START_TRAINING": "Démarrer l'entraînement",
+    "CANVAS_TITLE": "Centre d'entraînement et d'audit",
     "CANVAS_EMPTY": "Canvas vide",
-    "CANVAS_HINT": "Parcourez et selectionnez des modeles dans le panneau lateral.",
-    "LOSS_ACC": "Perte / Precision",
-    "VIZ_METADATA": "Metadonnees",
+    "CANVAS_HINT": "Parcourez et sélectionnez des modèles dans le panneau latéral.",
+    "LOSS_ACC": "Perte / Précision",
+    "VIZ_METADATA": "Metadonnées",
     "VIZ_KPIS": "KPIs",
     "VIZ_CONFUSION": "Confusion",
     "VIZ_HISTORY": "Historique",
@@ -1577,67 +1577,67 @@ STRINGS_FR = {
     "VIZ_MANAGEMENT": "Gestion",
     # Repository
     "REPO_TITLE": "Classement / Depot",
-    "REPO_SEARCH": "Rechercher dans le depot...",
+    "REPO_SEARCH": "Rechercher dans le dépôt...",
     "REPO_SYNC": "Synchroniser GCS",
     "REPO_ALL": "Tous",
     "REPO_CLEAR": "Effacer",
     "REPO_SYNC_CATALOG": "Synchroniser catalogue (GCS)",
     "REPO_SCANNING": "Analyse GCS... Patientez.",
-    "REPO_SCAN_DONE": "Catalogue synchronise!",
+    "REPO_SCAN_DONE": "Catalogue synchronisé!",
     # Tab titles
     "SORT_BY": "Trier par:",
-    "NEW_TRAINING": "Nouvel entrainement",
-    "TRAININGS": "Entrainements",
+    "NEW_TRAINING": "Nouvel entraînement",
+    "TRAININGS": "Entraînements",
     # M1 - Export
     "EXPORT_TITLE": "Exportation de collections",
-    "EXPORT_SYNC": "Synchroniser donnees",
+    "EXPORT_SYNC": "Synchroniser données",
     "EXPORT_SELECT": "Selectionner en attente",
     "EXPORT_CLEAR": "Effacer selection",
-    "EXPORT_START_BTN": "Demarrer exportation",
-    "EXPORT_SENT": "taches envoyees.",
-    "EXPORT_NONE_SEL": "Aucune option selectionnee pour l exportation.",
+    "EXPORT_START_BTN": "Démarrer exportation",
+    "EXPORT_SENT": "tâches envoyées.",
+    "EXPORT_NONE_SEL": "Aucune option sélectionnée pour l'exportation.",
     # M2 - Mosaic
-    "MOSAIC_TITLE": "Assemblage de mosaiques",
-    "MOSAIC_SYNC": "Synchroniser donnees",
-    "MOSAIC_SELECT": "Selectionner en attente",
-    "MOSAIC_CLEAR": "Effacer selection",
-    "MOSAIC_START_BTN": "Demarrer assemblage",
-    "MOSAIC_DONE": "Assemblage termine avec succes",
+    "MOSAIC_TITLE": "Assemblage de mosaïques",
+    "MOSAIC_SYNC": "Synchroniser données",
+    "MOSAIC_SELECT": "Sélectionner en attente",
+    "MOSAIC_CLEAR": "Effacer sélection",
+    "MOSAIC_START_BTN": "Démarrer assemblage",
+    "MOSAIC_DONE": "Assemblage terminé avec succès",
     # M0 - Startup
     "START_COUNTRY": "Pays",
     "START_BUCKET": "Bucket",
     "START_VERSION": "Version",
     "START_SENSOR": "Capteur",
-    "START_PERIODICITY": "Periodicite",
+    "START_PERIODICITY": "Périodicité",
     "START_CAMPAIGN": "Campagne",
-    "START_FOUND": "trouve",
-    "START_NOT_FOUND": "non trouve",
-    "START_GDAL_OK": "GDAL trouve et ajoute au PATH",
-    "START_GDAL_MISSING": "Avertissement: Utilitaires GDAL non trouves",
-    "START_COLAB_HINT": "Sur Google Colab, executez: !apt-get install -y gdal-bin",
+    "START_FOUND": "trouvé",
+    "START_NOT_FOUND": "non trouvé",
+    "START_GDAL_OK": "GDAL trouvé et ajouté au PATH",
+    "START_GDAL_MISSING": "Avertissement: Utilitaires GDAL non trouvés",
+    "START_COLAB_HINT": "Sur Google Colab, exécutez: !apt-get install -y gdal-bin",
     "START_WIN_HINT": "Sur Windows, assurez-vous que GDAL est dans votre PATH",
     # M6
     "M6_TITLE": "Processeur post-classification",
-    "M6_PRESET": "Utilisation configuration predefinie",
-    "M6_DOWNLOAD": "Telechargement fragments",
+    "M6_PRESET": "Utilisation configuration prédéfinie",
+    "M6_DOWNLOAD": "Téléchargement fragments",
     "M6_VRT": "Construction VRT",
     "M6_COG": "Conversion en COG",
-    "M6_UPLOAD": "Telecharge",
-    "M6_START": "Demarrage filtrage",
-    "M6_EXPORT_OK": "Tache exportation demarree",
-    "M6_SUMMARY": "Resume configuration",
+    "M6_UPLOAD": "Téléchargé",
+    "M6_START": "Démarrage filtrage",
+    "M6_EXPORT_OK": "Tâche d'exportation démarrée",
+    "M6_SUMMARY": "Résumé configuration",
     # M7
     "M7_TITLE": "Curateur",
-    "M7_DESC": "Publication collection pre-officielle",
-    "M7_PRESET": "Utilisation vote predefini",
-    "M7_START": "Demarrage curation",
-    "M7_EXPORT_OK": "Exportation GEE Asset demarree pour",
-    "M7_SUMMARY": "Resume configuration",
+    "M7_DESC": "Publication collection pré-officielle",
+    "M7_PRESET": "Utilisation vote prédéfini",
+    "M7_START": "Démarrage curation",
+    "M7_EXPORT_OK": "Exportation GEE Asset démarrée pour",
+    "M7_SUMMARY": "Résumé configuration",
     # M3
-    "M3_TITLE": "M3 - Collecte d echantillons (Passerelle GEE Toolkit)",
+    "M3_TITLE": "M3 - Collecte d'échantillons (Passerelle GEE Toolkit)",
     "M3_SOURCE": "Code source (GitHub)",
-    "M3_EDITOR": "Acces direct (Editeur GEE)",
-    "M3_DOCS": "Documentation et normes d utilisation",
+    "M3_EDITOR": "Accès direct (Éditeur GEE)",
+    "M3_DOCS": "Documentation et normes d'utilisation",
 }
 
 STRINGS_ID = {
@@ -1684,7 +1684,7 @@ STRINGS_ID = {
     "NO_DATA": "Tidak ada data tersedia.",
     "NO_RESULTS": "Tidak ada hasil ditemukan.",
     "NO_TASKS": "Tidak ada tugas tertunda.",
-    "NO_TASKS_PUBLISH": "Tidak ada tugas siap dipublikasi.",
+    "NO_TASKS_PUBLISH": "Tidak ada tugas siap dipublikasikan.",
     "NO_TASKS_DONE": "Belum ada tugas selesai.",
     "NO_TILES_GCS": "Tidak ada tile di GCS.",
     "NO_MAP": "Tidak dapat membuat peta. Periksa koneksi GEE.",
@@ -2043,9 +2043,9 @@ SUPPORTED_LOCALES = {
 
 LOCALE_LABELS = {
     "en": "English",
-    "es": "Espanol",
-    "pt": "Portugues",
-    "fr": "Francais",
+    "es": "Español",
+    "pt": "Português",
+    "fr": "Français",
     "id": "Bahasa Indonesia",
 }
 
