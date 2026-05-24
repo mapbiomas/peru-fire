@@ -315,7 +315,7 @@ class M5WorkplanUI:
         for r in regions:
             for period in periods:
                 job_id = make_job_id(model, r, period, campaign)
-                if any(job['id'] == job_id for job in self.queue):
+                if any(job['id'] == job_id for job in self.plan):
                     skipped += 1
                     continue
                 self.plan.append(new_job(model, r, period, task_name=task_name))
@@ -398,7 +398,7 @@ class M5WorkplanUI:
         """Elimina todos jobs + tiles + mosaico + stats de (model, region)."""
         from M_gcs import exists, rm
         self.plan = load_workplan()
-        jobs = [j for j in self.queue if j['model'] == model and j['region'] == region]
+        jobs = [j for j in self.plan if j['model'] == model and j['region'] == region]
         total_tiles = 0
         for job in jobs:
             if job['status'] in ('COMPLETED', 'FINISHED'):
@@ -414,14 +414,14 @@ class M5WorkplanUI:
                         rm(p)
                 except Exception:
                     pass
-        self.queue = [j for j in self.queue if not (j['model'] == model and j['region'] == region)]
+        self.plan = [j for j in self.plan if not (j['model'] == model and j['region'] == region)]
         save_workplan(self.plan)
         return total_tiles, len(jobs)
 
     def _delete_model_all(self, model):
         """Elimina todo de um modelo (todas regioes)."""
         self.plan = load_workplan()
-        regions = set(j['region'] for j in self.queue if j['model'] == model)
+        regions = set(j['region'] for j in self.plan if j['model'] == model)
         total = 0
         total_jobs = 0
         for region in regions:
@@ -432,7 +432,7 @@ class M5WorkplanUI:
 
     def _remove_from_plan(self, job_id):
         self.plan = load_workplan()
-        self.queue = [j for j in self.queue if j['id'] != job_id]
+        self.plan = [j for j in self.plan if j['id'] != job_id]
         save_workplan(self.plan)
         self._refresh_ui()
 
@@ -466,7 +466,7 @@ class M5WorkplanUI:
                     for r in regs:
                         for p in pers:
                             jid = make_job_id(m, r, p, campaign)
-                            if any(job['id'] == jid for job in self.queue):
+                            if any(job['id'] == jid for job in self.plan):
                                 skipped += 1
                                 continue
                             self.plan.append(new_job(m, r, p))
@@ -543,7 +543,7 @@ class M5WorkplanUI:
     def _render_pending(self):
         self.plan = load_workplan()
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
-        jobs = [j for j in self.queue if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)]
+        jobs = [j for j in self.plan if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)]
 
         filter_box = widgets.HBox([self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task], layout=L(margin='0 0 10px 0'))
         filtered = self._apply_filters(jobs, self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task)
@@ -842,8 +842,8 @@ class M5WorkplanUI:
 
     def _tarea_save_click(self, model):
         self.plan = load_workplan()
-        regions = sorted(set(j['region'] for j in self.queue if j['model'] == model))
-        periods = sorted(set(j['period'] for j in self.queue if j['model'] == model))
+        regions = sorted(set(j['region'] for j in self.plan if j['model'] == model))
+        periods = sorted(set(j['period'] for j in self.plan if j['model'] == model))
         save_tarea(model, regions, periods)
         with self.out_msg:
             clear_output()
@@ -858,7 +858,7 @@ class M5WorkplanUI:
         self._refresh_ui()
 
     def _on_clear_click(self):
-        self.queue = []
+        self.plan = []
         save_workplan(self.plan)
         with self.out_msg:
             clear_output()
@@ -871,7 +871,7 @@ class M5WorkplanUI:
         self.plan = load_workplan()
         saved = 0
         skipped = 0
-        for j in self.queue:
+        for j in self.plan:
             if j['model'] == model_name and j.get('enabled', True):
                 if j.get('_saved'):
                     skipped += 1
@@ -893,10 +893,10 @@ class M5WorkplanUI:
     def _on_dismiss_click(self, model_name):
         """Remove do m5_workplan.json os jobs não salvos de um card."""
         self.plan = load_workplan()
-        kept = [j for j in self.queue
+        kept = [j for j in self.plan
                 if not (j['model'] == model_name and not j.get('_saved'))]
-        removed = len(self.queue) - len(kept)
-        self.queue = kept
+        removed = len(self.plan) - len(kept)
+        self.plan = kept
         save_workplan(self.plan)
         with self.out_msg:
             clear_output()
@@ -911,7 +911,7 @@ class M5WorkplanUI:
         fs = _get_fs()
         self.plan = load_workplan()
         removed = 0
-        for j in self.queue:
+        for j in self.plan:
             if j['model'] == model_name and j.get('_saved'):
                 ok = delete_pending_job_gcs(j['model'], j['region'], j['period'], fs=fs)
                 if ok:
@@ -929,7 +929,7 @@ class M5WorkplanUI:
     def _sync_card_enabled(self, model_name, checked):
         """Seta enabled=True/False em todos jobs de um modelo."""
         self.plan = load_workplan()
-        for j in self.queue:
+        for j in self.plan:
             if j['model'] == model_name:
                 j['enabled'] = checked
         save_workplan(self.plan)
@@ -997,7 +997,7 @@ class M5WorkplanUI:
     def _render_publish(self):
         self.plan = load_workplan()
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
-        jobs = [j for j in self.queue if j['status'] == 'COMPLETED' and (not campaign or j.get('campaign', '') == campaign)]
+        jobs = [j for j in self.plan if j['status'] == 'COMPLETED' and (not campaign or j.get('campaign', '') == campaign)]
         filter_box = widgets.HBox([self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task], layout=L(margin='0 0 15px 0'))
         filtered = self._apply_filters(jobs, self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task)
 
@@ -1159,7 +1159,7 @@ class M5WorkplanUI:
 
             # grid counts table
             campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
-            region_names = sorted(set(j['region'] for j in self.queue if not campaign or j.get('campaign', '') == campaign))
+            region_names = sorted(set(j['region'] for j in self.plan if not campaign or j.get('campaign', '') == campaign))
             if not region_names:
                 try:
                     region_names = all_regions.aggregate_array(REGION_NAME_PROPERTY).distinct().getInfo()
@@ -1199,7 +1199,7 @@ class M5WorkplanUI:
     def _render_done(self):
         self.plan = load_workplan()
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
-        jobs = [j for j in self.queue if j['status'] == 'FINISHED' and (not campaign or j.get('campaign', '') == campaign)]
+        jobs = [j for j in self.plan if j['status'] == 'FINISHED' and (not campaign or j.get('campaign', '') == campaign)]
         filter_box = widgets.HBox([self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task], layout=L(margin='0 0 15px 0'))
         filtered = self._apply_filters(jobs, self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task)
 
@@ -1279,7 +1279,7 @@ class M5WorkplanUI:
     def _toggle_gee(self, change, job_id):
         if 'new' in change:
             self.plan = load_workplan()
-            for j in self.queue:
+            for j in self.plan:
                 if j['id'] == job_id:
                     j['upload_gee'] = change['new']
             save_workplan(self.plan)
@@ -1316,17 +1316,17 @@ class M5WorkplanUI:
             (['COMPLETED'], self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task),
             (['FINISHED'], self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task),
         ]:
-            subset = [j for j in self.queue if j['status'] in status and (not campaign or j.get('campaign', '') == campaign)]
+            subset = [j for j in self.plan if j['status'] in status and (not campaign or j.get('campaign', '') == campaign)]
             _safe_update(f_m, ['Todos'] + sorted(set(j['model'] for j in subset)))
             _safe_update(f_r, ['Todas'] + sorted(set(j['region'] for j in subset)))
             _safe_update(f_y, ['Todos'] + sorted(set(j['period'].split('_')[0] for j in subset), reverse=True))
             _safe_update(f_t, ['Todas'] + sorted(set(j.get('task_name', '') for j in subset if j.get('task_name', ''))))
 
         # Mapa filters
-        filtered_queue = [j for j in self.queue if not campaign or j.get('campaign', '') == campaign]
-        all_models = sorted(set(j['model'] for j in filtered_queue))
-        all_regions = sorted(set(j['region'] for j in filtered_queue))
-        all_years = sorted(set(j['period'].split('_')[0] for j in filtered_queue), reverse=True)
+        filtered_plan = [j for j in self.plan if not campaign or j.get('campaign', '') == campaign]
+        all_models = sorted(set(j['model'] for j in filtered_plan))
+        all_regions = sorted(set(j['region'] for j in filtered_plan))
+        all_years = sorted(set(j['period'].split('_')[0] for j in filtered_plan), reverse=True)
         for f_m, f_r, f_y in [(self.f_mapa_model, self.f_mapa_region, self.f_mapa_year)]:
             _safe_update(f_m, ['Todos'] + all_models)
             _safe_update(f_r, ['Todas'] + all_regions)
@@ -1358,12 +1358,12 @@ class M5WorkplanUI:
         self.tabs.set_title(0, Lang.TAB_GUIDE)
         self.tabs.set_title(1, Lang.TAB_REGISTER)
 
-        n_pend = len([j for j in self.queue if j['status'] in ('PENDING', 'RUNNING')])
+        n_pend = len([j for j in self.plan if j['status'] in ('PENDING', 'RUNNING')])
         self.tabs.set_title(2, f"{Lang.TAB_PENDING} ({n_pend})")
         self.tabs.set_title(3, Lang.TAB_PUBLISH)
         self.tabs.set_title(4, Lang.TAB_MAP)
 
-        n_done = len([j for j in self.queue if j['status'] == 'FINISHED'])
+        n_done = len([j for j in self.plan if j['status'] == 'FINISHED'])
         self.tabs.set_title(5, f"{Lang.TAB_DONE} ({n_done})")
 
         header_actions = widgets.HBox([
