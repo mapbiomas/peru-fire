@@ -5,7 +5,7 @@ import datetime
 from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs
 
 def _lock_path():
-    return get_queue_file() + '.lock'
+    return get_workplan_file() + '.lock'
 
 def _acquire_lock(timeout=5.0):
     lock = _lock_path()
@@ -26,31 +26,31 @@ def _release_lock():
     except FileNotFoundError:
         pass
 
-def get_queue_file():
+def get_workplan_file():
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    return os.path.join(base_dir, 'm5_queue.json')
+    return os.path.join(base_dir, 'm5_workplan.json')
 
-def load_queue():
-    q_file = get_queue_file()
+def load_workplan():
+    plan_file = get_workplan_file()
     if not _acquire_lock():
-        print("[WARN] Queue busy, returning empty")
+        print("[WARN] Workplan busy, returning empty")
         return []
     try:
-        if os.path.exists(q_file):
-            with open(q_file, 'r') as f:
+        if os.path.exists(plan_file):
+            with open(plan_file, 'r') as f:
                 return json.load(f)
         return []
     finally:
         _release_lock()
 
-def save_queue(q):
-    q_file = get_queue_file()
+def save_workplan(plan):
+    plan_file = get_workplan_file()
     if not _acquire_lock():
-        print("[WARN] Queue busy, save skipped")
+        print("[WARN] Workplan busy, save skipped")
         return
     try:
-        with open(q_file, 'w') as f:
-            json.dump(q, f, indent=2)
+        with open(plan_file, 'w') as f:
+            json.dump(plan, f, indent=2)
     finally:
         _release_lock()
 
@@ -174,17 +174,17 @@ def list_tareas(fs=None):
     return results
 
 
-# --- GCS QUEUE (PENDING / ARCHIVED POR MODELO) ---
+# --- GCS WORKPLAN (PENDING / ARCHIVED POR MODELO) ---
 
-def _queue_dir(model_id):
-    """GCS relativo: LIBRARY_MODELS/<model_id>/queue/"""
-    return f"{CONFIG['gcs_library_models']}/{model_id}/queue"
+def _workplan_dir(model_id):
+    """GCS relativo: LIBRARY_MODELS/<model_id>/workplan/"""
+    return f"{CONFIG['gcs_library_models']}/{model_id}/workplan"
 
 def _pending_dir(model_id):
-    return f"{_queue_dir(model_id)}/pending"
+    return f"{_workplan_dir(model_id)}/pending"
 
 def _archived_dir(model_id):
-    return f"{_queue_dir(model_id)}/archived"
+    return f"{_workplan_dir(model_id)}/archived"
 
 def _pending_job_filename(region, period):
     return f"pend_{period}_{region}.json"
@@ -316,8 +316,8 @@ def load_all_pending_from_gcs(fs=None):
     import json
     if fs is None:
         fs = _get_fs()
-    # Ex: gs://bucket/sudamerica/peru/CATALOG_01/LIBRARY_MODELS/*/queue/pending/*.json
-    pattern = gcs_full(CONFIG['gcs_library_models']) + '/*/queue/pending/*.json'
+    # Ex: gs://bucket/sudamerica/peru/CATALOG_01/LIBRARY_MODELS/*/workplan/pending/*.json
+    pattern = gcs_full(CONFIG['gcs_library_models']) + '/*/workplan/pending/*.json'
     results = {}
     try:
         files = fs.glob(pattern)
@@ -365,25 +365,25 @@ def delete_archived_job(model_id, gcs_path, fs=None):
         pass
     return False
 
-def sync_gcs_to_local_queue(fs=None):
-    """Sincroniza jobs do GCS pending/ para o m5_queue.json local.
+def sync_gcs_to_local_workplan(fs=None):
+    """Sincroniza jobs do GCS pending/ para o m5_workplan.json local.
 
-    Para cada modelo com pendentes no GCS, adiciona ao m5_queue.json
+    Para cada modelo com pendentes no GCS, adiciona ao m5_workplan.json
     jobs que ainda não existem (por id). Marca como _saved=True.
     """
     if fs is None:
         fs = _get_fs()
-    queue = load_queue()
-    existing_ids = set(j['id'] for j in queue)
+    plan = load_workplan()
+    existing_ids = set(j['id'] for j in plan)
     added = 0
     all_pending = load_all_pending_from_gcs(fs=fs)
     for model, jobs in all_pending.items():
         for pj in jobs:
             if pj['id'] not in existing_ids:
                 pj['_saved'] = True
-                queue.append(pj)
+                plan.append(pj)
                 existing_ids.add(pj['id'])
                 added += 1
     if added > 0:
-        save_queue(queue)
+        save_workplan(plan)
     return added

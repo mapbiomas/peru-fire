@@ -7,7 +7,7 @@ import numpy as np
 import rasterio
 from rasterio.merge import merge
 from M0_auth_config import CONFIG, _get_fs, _gcs_download, _gcs_upload, get_temp_dir
-from M5_queue import (
+from M5_workplan import (
     classified_tiles_dir, classified_region_dir, region_path,
     tile_stats_path, region_stats_path, consolidated_stats_path,
     tile_path, gcs_full

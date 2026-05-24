@@ -3,10 +3,10 @@ import base64
 from IPython.display import display, HTML, clear_output
 import ipywidgets as widgets
 from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs
-from M5_queue import load_queue, save_queue, make_job_id, new_job, gcs_full, classified_tiles_dir, \
+from M5_workplan import load_workplan, save_workplan, make_job_id, new_job, gcs_full, classified_tiles_dir, \
     tarea_path, save_tarea, delete_tarea, list_tareas, \
     save_pending_job_to_gcs, delete_pending_job_gcs, \
-    load_pending_from_gcs, sync_gcs_to_local_queue
+    load_pending_from_gcs, sync_gcs_to_local_workplan
 from M4_data_extractor import list_campaigns_gcs
 from M_ui_components import inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output
 from M_lang import L as Lang
@@ -14,11 +14,11 @@ from M_regions import REGION_NAME_PROPERTY
 
 L = widgets.Layout
 
-class M5QueueUI:
+class M5WorkplanUI:
     def __init__(self, years=None, periodicity_active=None):
         self.years = years or [2025, 2026]
         self.periodicity_active = periodicity_active or ['monthly']
-        self.queue = load_queue()
+        self.plan = load_workplan()
 
         self._thumb_cache = {}
         self._grid_count_cache = {}
@@ -208,7 +208,7 @@ class M5QueueUI:
                 <li><b>""" + Lang.TAB_PUBLISH + """</b> — trabajos COMPLETED con gestion de tiles.</li>
                 <li><b>""" + Lang.TAB_MAP + """</b> — visibilidad general del progreso.</li>
                 <li><b>""" + Lang.TAB_DONE + """</b> — trabajos FINISHED con timeline de cobertura.</li>
-                <li>Ejecute <code>run_m5_queue()</code> en el notebook para procesar.</li>
+                <li>Ejecute <code>run_m5_workplan()</code> en el notebook para procesar.</li>
             </ol>
             <h4>Eliminacion granular:</h4>
             <ul>
@@ -294,7 +294,7 @@ class M5QueueUI:
     # --- REGISTRAR ---
 
     def _on_add_click(self, b):
-        self.queue = load_queue()
+        self.plan = load_workplan()
         model = next((c.description for c in self.chk_models if c.value), None)
         regions = [c.description for c in self.chk_regions if c.value]
         periods = [c.description for c in self.chk_periods if c.value]
@@ -318,9 +318,9 @@ class M5QueueUI:
                 if any(job['id'] == job_id for job in self.queue):
                     skipped += 1
                     continue
-                self.queue.append(new_job(model, r, period, task_name=task_name))
+                self.plan.append(new_job(model, r, period, task_name=task_name))
                 added += 1
-        save_queue(self.queue)
+        save_workplan(self.plan)
         for c in self.chk_regions + self.chk_periods:
             c.value = False
         with self.out_msg:
@@ -353,7 +353,7 @@ class M5QueueUI:
         return len(tile_fqpaths)
 
     def _delete_job_tiles_region(self, job):
-        from M5_queue import region_path
+        from M5_workplan import region_path
         from M_gcs import exists, rm
         fs = _get_fs()
         r, p, m = job['region'], job['period'], job['model']
@@ -379,7 +379,7 @@ class M5QueueUI:
         return n
 
     def _delete_job_complete(self, job):
-        from M5_queue import region_path, stats_dir
+        from M5_workplan import region_path, stats_dir
         from M_gcs import exists, rm
         r, p, m = job['region'], job['period'], job['model']
         c = job.get('campaign', '')
@@ -397,13 +397,13 @@ class M5QueueUI:
     def _delete_model_region(self, model, region):
         """Elimina todos jobs + tiles + mosaico + stats de (model, region)."""
         from M_gcs import exists, rm
-        self.queue = load_queue()
+        self.plan = load_workplan()
         jobs = [j for j in self.queue if j['model'] == model and j['region'] == region]
         total_tiles = 0
         for job in jobs:
             if job['status'] in ('COMPLETED', 'FINISHED'):
                 total_tiles += self._delete_job_tiles_region(job)
-        from M5_queue import stats_dir
+        from M5_workplan import stats_dir
         campaigns = set(j.get('campaign', '') for j in jobs)
         for c in campaigns:
             s_dir = gcs_full(stats_dir(model, c))
@@ -415,12 +415,12 @@ class M5QueueUI:
                 except Exception:
                     pass
         self.queue = [j for j in self.queue if not (j['model'] == model and j['region'] == region)]
-        save_queue(self.queue)
+        save_workplan(self.plan)
         return total_tiles, len(jobs)
 
     def _delete_model_all(self, model):
         """Elimina todo de um modelo (todas regioes)."""
-        self.queue = load_queue()
+        self.plan = load_workplan()
         regions = set(j['region'] for j in self.queue if j['model'] == model)
         total = 0
         total_jobs = 0
@@ -430,10 +430,10 @@ class M5QueueUI:
             total_jobs += n_jobs
         return total, total_jobs
 
-    def _remove_from_queue(self, job_id):
-        self.queue = load_queue()
+    def _remove_from_plan(self, job_id):
+        self.plan = load_workplan()
         self.queue = [j for j in self.queue if j['id'] != job_id]
-        save_queue(self.queue)
+        save_workplan(self.plan)
         self._refresh_ui()
 
     # --- TAREAS ---
@@ -460,7 +460,7 @@ class M5QueueUI:
             def _make_cargar(m, regs, pers):
                 def _h(_):
                     campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
-                    self.queue = load_queue()
+                    self.plan = load_workplan()
                     added = 0
                     skipped = 0
                     for r in regs:
@@ -469,9 +469,9 @@ class M5QueueUI:
                             if any(job['id'] == jid for job in self.queue):
                                 skipped += 1
                                 continue
-                            self.queue.append(new_job(m, r, p))
+                            self.plan.append(new_job(m, r, p))
                             added += 1
-                    save_queue(self.queue)
+                    save_workplan(self.plan)
                     with self.out_msg:
                         clear_output()
                         display(HTML(f"<span style='color:green;'>{added} cargadas, {skipped} omitidas.</span>"))
@@ -541,7 +541,7 @@ class M5QueueUI:
     # --- RENDER PENDIENTES ---
 
     def _render_pending(self):
-        self.queue = load_queue()
+        self.plan = load_workplan()
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
         jobs = [j for j in self.queue if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)]
 
@@ -841,7 +841,7 @@ class M5QueueUI:
                      border='1px solid #e2e8f0', border_radius='6px'))
 
     def _tarea_save_click(self, model):
-        self.queue = load_queue()
+        self.plan = load_workplan()
         regions = sorted(set(j['region'] for j in self.queue if j['model'] == model))
         periods = sorted(set(j['period'] for j in self.queue if j['model'] == model))
         save_tarea(model, regions, periods)
@@ -859,7 +859,7 @@ class M5QueueUI:
 
     def _on_clear_click(self):
         self.queue = []
-        save_queue(self.queue)
+        save_workplan(self.plan)
         with self.out_msg:
             clear_output()
             display(HTML("<b style='color:red;'>Cola vaciada.</b>"))
@@ -868,7 +868,7 @@ class M5QueueUI:
     def _on_save_gcs_click(self, model_name):
         """Salva no GCS os jobs enabled de um card."""
         fs = _get_fs()
-        self.queue = load_queue()
+        self.plan = load_workplan()
         saved = 0
         skipped = 0
         for j in self.queue:
@@ -881,7 +881,7 @@ class M5QueueUI:
                     j['_saved'] = True
                     saved += 1
         if saved > 0:
-            save_queue(self.queue)
+            save_workplan(self.plan)
         with self.out_msg:
             clear_output()
             if saved > 0:
@@ -891,13 +891,13 @@ class M5QueueUI:
         self._refresh_ui()
 
     def _on_dismiss_click(self, model_name):
-        """Remove do m5_queue.json os jobs não salvos de um card."""
-        self.queue = load_queue()
+        """Remove do m5_workplan.json os jobs não salvos de um card."""
+        self.plan = load_workplan()
         kept = [j for j in self.queue
                 if not (j['model'] == model_name and not j.get('_saved'))]
         removed = len(self.queue) - len(kept)
         self.queue = kept
-        save_queue(self.queue)
+        save_workplan(self.plan)
         with self.out_msg:
             clear_output()
             if removed > 0:
@@ -909,7 +909,7 @@ class M5QueueUI:
     def _on_delete_gcs_click(self, model_name):
         """Remove do GCS pending/ todos os jobs salvos de um card."""
         fs = _get_fs()
-        self.queue = load_queue()
+        self.plan = load_workplan()
         removed = 0
         for j in self.queue:
             if j['model'] == model_name and j.get('_saved'):
@@ -918,7 +918,7 @@ class M5QueueUI:
                     j['_saved'] = False
                     removed += 1
         if removed > 0:
-            save_queue(self.queue)
+            save_workplan(self.plan)
         with self.out_msg:
             clear_output()
             display(HTML(f"<span style='color:red;'>{removed} jobs removidos do GCS.</span>"))
@@ -928,11 +928,11 @@ class M5QueueUI:
 
     def _sync_card_enabled(self, model_name, checked):
         """Seta enabled=True/False em todos jobs de um modelo."""
-        self.queue = load_queue()
+        self.plan = load_workplan()
         for j in self.queue:
             if j['model'] == model_name:
                 j['enabled'] = checked
-        save_queue(self.queue)
+        save_workplan(self.plan)
         self._card_checkboxes[model_name].value = checked
 
     # --- LIVE MAPA (PROCESSING CALLBACK) ---
@@ -995,7 +995,7 @@ class M5QueueUI:
     # --- RENDER PUBLISH ---
 
     def _render_publish(self):
-        self.queue = load_queue()
+        self.plan = load_workplan()
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
         jobs = [j for j in self.queue if j['status'] == 'COMPLETED' and (not campaign or j.get('campaign', '') == campaign)]
         filter_box = widgets.HBox([self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task], layout=L(margin='0 0 15px 0'))
@@ -1038,7 +1038,7 @@ class M5QueueUI:
                     top = widgets.HBox([chk_gee, lbl_status, btn_tiles, btn_del_all],
                                        layout=L(align_items='center', padding='5px 8px', margin='2px 0',
                                                 border_bottom='1px solid #f1f5f9'))
-                    btn_del_all.on_click(lambda b, jb=job, c=top: inline_confirm(b, lambda: (self._delete_job_tiles_region(jb), self._remove_from_queue(jb['id']), self._refresh_ui()), container=c))
+                    btn_del_all.on_click(lambda b, jb=job, c=top: inline_confirm(b, lambda: (self._delete_job_tiles_region(jb), self._remove_from_plan(jb['id']), self._refresh_ui()), container=c))
                     rows.append(widgets.VBox([top, tile_out]))
 
                 right_col = widgets.VBox([header] + rows, layout=L(flex='1', margin='0 0 0 12px'))
@@ -1117,7 +1117,7 @@ class M5QueueUI:
     # --- RENDER MAPA ---
 
     def _render_mapa(self):
-        self.queue = load_queue()
+        self.plan = load_workplan()
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
         filter_box = widgets.HBox([self.f_mapa_model, self.f_mapa_region, self.f_mapa_year, self.btn_mapa_refresh], layout=L(margin='0 0 15px 0'))
 
@@ -1197,7 +1197,7 @@ class M5QueueUI:
     # --- RENDER DONE ---
 
     def _render_done(self):
-        self.queue = load_queue()
+        self.plan = load_workplan()
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
         jobs = [j for j in self.queue if j['status'] == 'FINISHED' and (not campaign or j.get('campaign', '') == campaign)]
         filter_box = widgets.HBox([self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task], layout=L(margin='0 0 15px 0'))
@@ -1278,11 +1278,11 @@ class M5QueueUI:
 
     def _toggle_gee(self, change, job_id):
         if 'new' in change:
-            self.queue = load_queue()
+            self.plan = load_workplan()
             for j in self.queue:
                 if j['id'] == job_id:
                     j['upload_gee'] = change['new']
-            save_queue(self.queue)
+            save_workplan(self.plan)
 
     def _apply_filters(self, jobs, f_model, f_region, f_year, f_task=None):
         if f_model.value != 'Todos':
@@ -1298,7 +1298,7 @@ class M5QueueUI:
     # --- REFRESH ---
 
     def _refresh_ui(self):
-        self.queue = load_queue()
+        self.plan = load_workplan()
 
         def _safe_update(f, new_ops):
             if not hasattr(f, 'options') or not new_ops:
@@ -1339,7 +1339,7 @@ class M5QueueUI:
 
     def display(self):
         # Sincroniza jobs do GCS pendente com a fila local
-        n_sync = sync_gcs_to_local_queue()
+        n_sync = sync_gcs_to_local_workplan()
         if n_sync > 0:
             with self.out_msg:
                 clear_output()
@@ -1375,6 +1375,6 @@ class M5QueueUI:
 
 
 def run_m5_ui(years=None, periodicity_active=None):
-    ui = M5QueueUI(years=years, periodicity_active=periodicity_active)
+    ui = M5WorkplanUI(years=years, periodicity_active=periodicity_active)
     ui.display()
     return ui

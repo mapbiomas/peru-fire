@@ -1,19 +1,29 @@
 import os
+import time
 from collections import defaultdict
 from M0_auth_config import CONFIG, _get_fs, _gcs_models_base
 from M_cache import CacheManager
-from M5_queue import load_queue, save_queue, make_job_id, tile_path, gcs_full, archive_job_on_gcs, delete_pending_job_gcs
+from M5_workplan import load_workplan, save_workplan, make_job_id, tile_path, gcs_full, archive_job_on_gcs, delete_pending_job_gcs
 from M5_inference import load_model_from_gcs, classify_cell_with_cogs, build_band_paths
 from M5_publisher import merge_region_tiles, generate_tile_stats, generate_region_stats, upload_to_gee
 from M_regions import REGION_NAME_PROPERTY
 
 VALID_PHASES = ['classification', 'publish']
 
+def _fmt_time(s):
+    h, r = divmod(int(s), 3600)
+    m, s = divmod(r, 60)
+    if h:
+        return f"{h}h{m:02d}m{s:02d}s"
+    if m:
+        return f"{m}m{s:02d}s"
+    return f"{s}s"
+
 def _log(out, msg):
     with out:
         print(msg)
 
-def run_m5_queue(phases=None, progress_callback=None):
+def run_m5_workplan(phases=None, progress_callback=None):
     """Motor de procesamiento M5.
 
     Args:
@@ -36,19 +46,19 @@ def run_m5_queue(phases=None, progress_callback=None):
     out = widgets.Output()
     display(out)
 
-    queue = load_queue()
+    plan = load_workplan()
 
     if 'classification' in phases:
-        _run_classification(queue, out, progress_callback)
-        queue = load_queue()
+        _run_classification(plan, out, progress_callback)
+        plan = load_workplan()
 
     if 'publish' in phases:
-        _run_publish(queue, out)
+        _run_publish(plan, out)
 
 
-def _run_classification(queue, out, progress_callback=None):
+def _run_classification(plan, out, progress_callback=None):
     """Fase 1: agrupa jobs por (modelo, periodo) y clasifica compartiendo COGs."""
-    pending = [j for j in queue if j['status'] == 'PENDING' and j.get('enabled', True)]
+    pending = [j for j in plan if j['status'] == 'PENDING' and j.get('enabled', True)]
 
     if not pending:
         with out:
@@ -74,18 +84,18 @@ def _run_classification(queue, out, progress_callback=None):
             with out:
                 print(f"[FATAL] Group '{model_id}' | {period} failed:")
                 traceback.print_exc()
-            q = load_queue()
+            p = load_workplan()
             for job in group:
-                for qj in q:
-                    if qj['id'] == job['id']:
-                        qj['status'] = 'FAILED'
-            save_queue(q)
+                for pj in p:
+                    if pj['id'] == job['id']:
+                        pj['status'] = 'FAILED'
+            save_workplan(p)
             continue
 
 
-def _run_publish(queue, out):
+def _run_publish(plan, out):
     """Fase 2: mosaicado, estadisticas y upload GEE."""
-    to_publish = [j for j in queue if j['status'] == 'COMPLETED' and j.get('enabled', True)]
+    to_publish = [j for j in plan if j['status'] == 'COMPLETED' and j.get('enabled', True)]
 
     if not to_publish:
         with out:
@@ -111,13 +121,13 @@ def _run_publish(queue, out):
             if not mosaic_path:
                 job['status'] = 'FAILED'
                 job['progress'] = 'error: no mosaic generated'
-                save_queue(queue)
+                save_workplan(plan)
                 with out:
                     print(f"  No tiles to mosaic for {job['id']}, marking FAILED")
                 continue
 
             job['progress'] = '50% (mosaic)'
-            save_queue(queue)
+            save_workplan(plan)
 
             if job.get('upload_gee'):
                 upload_to_gee(model_id, region, period, fs=fs, campaign=campaign, scale=10)
@@ -126,7 +136,7 @@ def _run_publish(queue, out):
                 job['progress'] = '100% (mosaic)'
 
             job['status'] = 'FINISHED'
-            save_queue(queue)
+            save_workplan(plan)
 
             with out:
                 print(f"OK: {job['id']} finished")
@@ -198,17 +208,19 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
         region_cells_map[job['region']] = _get_region_cells(job['region'])
     total_cells_group = sum(len(cells) for cells in region_cells_map.values())
     processed = 0
+    _t0 = time.time()
+    _done = 0
 
     # 5. Procesar cada region del grupo
     for job_idx, job in enumerate(group_jobs):
         region_name = job['region']
 
         job['status'] = 'RUNNING'
-        q = load_queue()
-        for qj in q:
-            if qj['id'] == job['id']:
-                qj['status'] = 'RUNNING'
-        save_queue(q)
+        p = load_workplan()
+        for pj in p:
+            if pj['id'] == job['id']:
+                pj['status'] = 'RUNNING'
+        save_workplan(p)
 
         with out:
             print(f"\n  Region {job_idx+1}/{len(group_jobs)}: {region_name}")
@@ -229,23 +241,28 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
             cell_id = cell['name']
 
             if i % 5 == 0:
-                q = load_queue()
+                p = load_workplan()
                 pct = (processed + i) / total_cells_group if total_cells_group else 0
-                for qj in q:
-                    if qj['id'] == job['id']:
-                        qj['progress'] = f"{processed + i}/{total_cells_group} ({pct:.1%})"
-                save_queue(q)
+                for pj in p:
+                    if pj['id'] == job['id']:
+                        pj['progress'] = f"{processed + i}/{total_cells_group} ({pct:.1%})"
+                save_workplan(p)
 
             out_rel = tile_path(model_id, region_name, cell_id, period, campaign)
             out_full = gcs_full(out_rel)
 
             if fs.exists(out_full):
+                _done += 1
                 if progress_callback:
                     progress_callback(model_id, region_name, cell_id, i, total, 'skipped')
                 continue
 
+            elapsed = time.time() - _t0
+            avg = elapsed / max(_done, 1)
+            remaining_cells = total_cells_group - (processed + i + 1)
+            eta = avg * remaining_cells
             with out:
-                print(f"  [{processed+i+1:03d}/{total_cells_group}] {cell_id} ...")
+                print(f"  [{processed+i+1:03d}/{total_cells_group}] {cell_id}  (elapsed {_fmt_time(elapsed)} | total ~{_fmt_time(elapsed + eta)} | remaining {_fmt_time(eta)})")
 
             if progress_callback:
                 progress_callback(model_id, region_name, cell_id, i, total, 'processing')
@@ -262,6 +279,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
                 stats = None
 
             if stats:
+                _done += 1
                 stats['tile_id'] = cell_id
                 stats['region'] = region_name
                 stats['period'] = period
@@ -288,16 +306,19 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
                 print(f"  No tiles classified for {region_name}")
             delete_pending_job_gcs(model_id, region_name, period, fs=fs)
 
-        q = load_queue()
-        for qj in q:
-            if qj['id'] == job['id']:
-                qj['status'] = 'COMPLETED'
-                qj['progress'] = '100%'
-        save_queue(q)
+        p = load_workplan()
+        for pj in p:
+            if pj['id'] == job['id']:
+                pj['status'] = 'COMPLETED'
+                pj['progress'] = '100%'
+        save_workplan(p)
 
         with out:
             print(f"  OK: {region_name} completed")
 
+    total_time = time.time() - _t0
+    with out:
+        print(f"  --- Group {model_id} | {period} done in {_fmt_time(total_time)} ---")
 
 
 def _get_region_cells(region_name):
