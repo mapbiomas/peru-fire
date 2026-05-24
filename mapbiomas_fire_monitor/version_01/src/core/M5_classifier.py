@@ -173,7 +173,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
     model, meta, bands_config, norm_stats, band_order = load_model_from_gcs(
         model_dir, fs, logger=lambda m: _log(out, m)
     )
-    predict_fn = lambda x: model.predict(x, verbose=0)
+    predict_fn = lambda x: model.predict(x, verbose=0, batch_size=65536)
 
     # 2. Construir paths e verificar COGs via CacheManager primeiro
     band_paths = build_band_paths(bands_config, year, month)

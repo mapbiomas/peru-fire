@@ -1,5 +1,6 @@
 import os
 import math
+import time
 import numpy as np
 import rasterio
 from rasterio.windows import Window, from_bounds
@@ -9,7 +10,16 @@ from pyproj import Transformer
 from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _gcs_download, _gcs_upload
 from M4_data_extractor import normalize
 
-BLOCK_SIZE = 8192
+BLOCK_SIZE = 4096
+
+def _fmt_time(s):
+    h, r = divmod(int(s), 3600)
+    m, s = divmod(r, 60)
+    if h:
+        return f"{h}h{m:02d}m{s:02d}s"
+    if m:
+        return f"{m}m{s:02d}s"
+    return f"{s}s"
 
 def load_model_from_gcs(model_dir, fs, logger=None):
     """Carga modelo Keras + metadatos desde GCS.
@@ -214,7 +224,12 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                         continue
 
                     X_norm = normalize(stack[valid_mask], norm_stats)
+                    if logger and n_valid > 0:
+                        t0 = time.time()
+                        logger(f"    {cell_id}: block {block_idx}/{n_blocks} ({hb}x{wb}, {n_valid} px) predicting...")
                     probs = predict_fn(X_norm)
+                    if logger and n_valid > 0:
+                        logger(f"    {cell_id}: block {block_idx}/{n_blocks} predicted in {_fmt_time(time.time() - t0)}")
                     if probs.ndim > 1 and probs.shape[1] == 1:
                         probs = probs.flatten()
 
@@ -233,9 +248,6 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                     if n_burned > 0:
                         conf_sum += float(probs[burned].sum())
                         conf_count += n_burned
-
-                    if logger and block_idx % max(1, n_blocks // 10) == 0:
-                        logger(f"    {cell_id}: block {block_idx}/{n_blocks}")
 
         if total_valid == 0:
             if logger:
