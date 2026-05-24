@@ -251,7 +251,6 @@ def _classify_one_tile(cell, model_id, region_name, period, campaign,
         stats['tile_id'] = cell_id
         stats['region'] = region_name
         stats['period'] = period
-        _log(out, f"    [W{worker_id}] <<< {cell_id} done")
         return ('done', cell_id, region_name, stats, worker_id)
     else:
         _log(out, f"    [W{worker_id}] <<< {cell_id} warn: no stats")
@@ -322,6 +321,8 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
     processed = 0
     _t0 = time.time()
     _done = 0
+    _completed_cards = 0
+    _total_cards = len(group_jobs)
 
     # 5. Procesar cada region del grupo
     for job_idx, job in enumerate(group_jobs):
@@ -366,6 +367,8 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
             for future in as_completed(futures):
                 status, cell_id, reg, stats, wid = future.result()
                 completed_in_region += 1
+                now = time.time()
+                tile_elapsed = (stats.get('tile_elapsed', 0) if stats else 0)
 
                 if status == 'skipped':
                     _done += 1
@@ -384,25 +387,38 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                     tile_results.append(stats)
                     if progress_callback:
                         progress_callback(model_id, reg, cell_id, completed_in_region, total, 'done')
+                    group_elapsed = now - _t0
+                    avg_tile = group_elapsed / max(_done, 1)
+                    group_remaining = avg_tile * (total_cells_group - _done)
+                    group_total = group_elapsed + group_remaining
+                    _log(out, f"    [W{wid}] <<< {cell_id} done in {_fmt_time(tile_elapsed)} "
+                          f"| tile {completed_in_region}/{total}"
+                          f" | region {job_idx+1}/{_total_cards}"
+                          f" | group {_done}/{total_cells_group}"
+                          f" | elapsed group {_fmt_time(group_elapsed)}"
+                          f" | total ~{_fmt_time(group_total)} | remaining ~{_fmt_time(group_remaining)}")
 
                 # ETA log every 5 tiles or on the last one
-                now = time.time()
                 if completed_in_region == total or now - _last_eta_log >= 15 or completed_in_region % 5 == 0:
                     _last_eta_log = now
-                    elapsed = now - _t0
+                    group_elapsed = now - _t0
                     remaining = total_cells_group - (processed + completed_in_region)
-                    avg = elapsed / max(_done, 1)
+                    avg = group_elapsed / max(_done, 1)
                     eta = avg * remaining
+                    total_proj = group_elapsed + eta
                     with out:
-                        print(f"  > Progress: {_done}/{total_cells_group} tiles (elapsed {_fmt_time(elapsed)} | remaining ~{_fmt_time(eta)})")
+                        print(f"  > Group progress: {_done}/{total_cells_group} tiles "
+                              f"| elapsed {_fmt_time(group_elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(eta)}")
 
             # ETA final da regiao (garantido)
             elapsed = time.time() - _t0
             remaining = total_cells_group - (processed + completed_in_region)
             avg = elapsed / max(_done, 1)
             eta = avg * remaining
+            total_proj = elapsed + eta
             with out:
-                print(f"  > Progress: {_done}/{total_cells_group} tiles (elapsed {_fmt_time(elapsed)} | remaining ~{_fmt_time(eta)})")
+                print(f"  > Group progress: {_done}/{total_cells_group} tiles "
+                      f"| elapsed {_fmt_time(elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(eta)}")
 
             # Salva progresso no workplan
             p = load_workplan()
@@ -426,6 +442,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                 print(f"  No tiles classified for {region_name}")
             delete_pending_job_gcs(model_id, region_name, period, fs=fs)
 
+        _completed_cards += 1
         p = load_workplan()
         for pj in p:
             if pj['id'] == job['id']:
@@ -434,7 +451,11 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
         save_workplan(p)
 
         with out:
-            print(f"  OK: {region_name} completed")
+            total_elapsed = time.time() - _t0
+            print(f"  OK: {region_name} completed"
+                  f" | region {_completed_cards}/{_total_cards}"
+                  f" | group {_done}/{total_cells_group} tiles"
+                  f" | elapsed {_fmt_time(total_elapsed)}")
 
     total_time = time.time() - _t0
     with out:

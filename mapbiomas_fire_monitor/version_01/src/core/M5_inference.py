@@ -192,7 +192,8 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
         conf_sum = 0.0
         conf_count = 0
 
-        with rasterio.open(local_tmp, 'w', **profile) as dst:
+        _tile_t0 = time.time()
+    with rasterio.open(local_tmp, 'w', **profile) as dst:
             n_blocks_h = math.ceil(win_h / BLOCK_SIZE)
             n_blocks_w = math.ceil(win_w / BLOCK_SIZE)
             n_blocks = n_blocks_h * n_blocks_w
@@ -265,6 +266,8 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
             'total_pixels': total_valid,
             'burned_pixels': total_burned,
             'mean_confidence': mean_conf,
+            'tile_elapsed': time.time() - _tile_t0,
+            'n_blocks': n_blocks,
         }
 
     except Exception as e:
