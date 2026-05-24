@@ -1,17 +1,17 @@
 import os
+import csv
 import time
 import threading
+import numpy as np
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from M0_auth_config import CONFIG, _get_fs, _gcs_models_base
+from M0_auth_config import CONFIG, _get_fs, _gcs_models_base, _gcs_download, _gcs_upload, get_temp_dir
 from M_cache import CacheManager
-from M5_workplan import load_workplan, save_workplan, make_job_id, tile_path, gcs_full, archive_job_on_gcs, delete_pending_job_gcs
+from M5_workplan import load_workplan, save_workplan, make_job_id, tile_path, gcs_full, archive_job_on_gcs, delete_pending_job_gcs, tile_stats_path, region_stats_path, consolidated_stats_path
 from M5_inference import load_model_from_gcs, classify_cell_with_cogs, build_band_paths
-from M5_publisher import merge_region_tiles, generate_tile_stats, generate_region_stats, upload_to_gee
 from M_regions import REGION_NAME_PROPERTY
 
 _log_lock = threading.Lock()
-VALID_PHASES = ['classification', 'publish']
 
 def _fmt_time(s):
     h, r = divmod(int(s), 3600)
@@ -29,24 +29,17 @@ def _log(out, msg):
 def _auto_workers():
     return max(1, os.cpu_count() or 1)
 
-def run_m5_workplan(phases=None, progress_callback=None, n_workers=None):
-    """Motor de procesamiento M5.
+def run_m5_workplan(progress_callback=None, n_workers=None):
+    """Motor de clasificacion M5.
+
+    Procesa todos los jobs PENDING del workplan, agrupados por (modelo, periodo).
+    No incluye mosaicado ni publicacion — use M6_publisher.run_m6_publish().
 
     Args:
-        phases: lista con fases a ejecutar.
-            'classification' — clasifica tiles pendientes
-            'publish'        — mosaicado + stats + upload GEE
         progress_callback: opcional, llamado tras cada tile.
             firma: progress_callback(model, region, cell_id, i, total, status)
-        n_workers: cantidad de workers paralelos (default: auto detecta via os.cpu_count())
+        n_workers: workers paralelos (default: auto detecta via os.cpu_count())
     """
-    if phases is None:
-        phases = ['classification', 'publish']
-
-    if not isinstance(phases, list) or not any(p in VALID_PHASES for p in phases):
-        print(f"Warning: Invalid 'phases' argument. Use {VALID_PHASES}.")
-        return
-
     from IPython.display import display, HTML, clear_output
     import ipywidgets as widgets
 
@@ -59,13 +52,7 @@ def run_m5_workplan(phases=None, progress_callback=None, n_workers=None):
     print(f"Workers: {n_workers}")
 
     plan = load_workplan()
-
-    if 'classification' in phases:
-        _run_classification(plan, out, progress_callback, n_workers)
-        plan = load_workplan()
-
-    if 'publish' in phases:
-        _run_publish(plan, out)
+    _run_classification(plan, out, progress_callback, n_workers)
 
 
 def _run_classification(plan, out, progress_callback=None, n_workers=None):
@@ -105,57 +92,137 @@ def _run_classification(plan, out, progress_callback=None, n_workers=None):
             continue
 
 
-def _run_publish(plan, out):
-    """Fase 2: mosaicado, estadisticas y upload GEE."""
-    to_publish = [j for j in plan if j['status'] == 'COMPLETED' and j.get('enabled', True)]
+def generate_tile_stats(model_id, region, period, tile_results, fs=None, logger=None, campaign=None):
+    """Guarda estadisticas por tile en CSV (usado por M5 durante classificacao)."""
+    if fs is None:
+        fs = _get_fs()
 
-    if not to_publish:
-        with out:
-            print("No COMPLETED jobs to publish")
+    if not tile_results:
+        if logger:
+            logger(f"    [WARN] No tile results to compute stats")
         return
 
-    with out:
-        print("--- Phase 2: Publish (mosaic + stats + GEE) ---")
+    gcs_path = gcs_full(tile_stats_path(model_id, campaign))
+    local_tmp = os.path.join(get_temp_dir('stats'), "stats_tile.csv")
 
-    fs = _get_fs()
-    for job in to_publish:
-        model_id = job['model']
-        region = job['region']
-        period = job['period']
-        campaign = job.get('campaign', '')
+    fieldnames = ['model_id', 'region', 'period', 'tile_id',
+                  'total_pixels', 'burned_pixels', 'mean_confidence']
 
-        try:
-            with out:
-                print(f"Publishing: {job['id']}")
+    rows = []
+    for tr in tile_results:
+        rows.append({
+            'model_id': model_id,
+            'region': region,
+            'period': period,
+            'tile_id': tr.get('tile_id', ''),
+            'total_pixels': tr.get('total_pixels', 0),
+            'burned_pixels': tr.get('burned_pixels', 0),
+            'mean_confidence': f"{tr.get('mean_confidence', 0):.4f}",
+        })
 
-            mosaic_path = merge_region_tiles(model_id, region, period, fs=fs, campaign=campaign)
+    with open(local_tmp, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
-            if not mosaic_path:
-                job['status'] = 'FAILED'
-                job['progress'] = 'error: no mosaic generated'
-                save_workplan(plan)
-                with out:
-                    print(f"  No tiles to mosaic for {job['id']}, marking FAILED")
-                continue
+    _gcs_upload(local_tmp, gcs_path)
+    os.remove(local_tmp)
 
-            job['progress'] = '50% (mosaic)'
-            save_workplan(plan)
+    if logger:
+        logger(f"    Tile stats saved ({len(rows)} tiles)")
 
-            if job.get('upload_gee'):
-                upload_to_gee(model_id, region, period, fs=fs, campaign=campaign, scale=10)
-                job['progress'] = '100% (published)'
-            else:
-                job['progress'] = '100% (mosaic)'
 
-            job['status'] = 'FINISHED'
-            save_workplan(plan)
+def generate_region_stats(model_id, region, period, tile_results, fs=None, logger=None, campaign=None):
+    """Agrega estadisticas por region+periodo y alimenta consolidated (usado por M5 durante classificacao)."""
+    from M_gcs import mkdir
 
-            with out:
-                print(f"OK: {job['id']} finished")
+    if fs is None:
+        fs = _get_fs()
 
-        except Exception as e:
-            with out:
-                print(f"[ERROR] Publishing {job['id']}: {e}")
+    if not tile_results:
+        return
+
+    total_pixels = sum(tr.get('total_pixels', 0) for tr in tile_results)
+    burned_pixels = sum(tr.get('burned_pixels', 0) for tr in tile_results)
+    confidences = [tr.get('mean_confidence', 0) for tr in tile_results if tr.get('burned_pixels', 0) > 0]
+
+    resolution_m = 10
+    pixel_area_m2 = resolution_m ** 2
+    burned_area_km2 = burned_pixels * pixel_area_m2 / 1_000_000
+    total_area_km2 = total_pixels * pixel_area_m2 / 1_000_000 if total_pixels else 0
+
+    row = {
+        'model_id': model_id,
+        'region': region,
+        'period': period,
+        'tiles_total': len(tile_results),
+        'tiles_processed': len([tr for tr in tile_results if tr.get('total_pixels', 0) > 0]),
+        'total_pixels': total_pixels,
+        'burned_pixels': burned_pixels,
+        'burned_area_km2': f"{burned_area_km2:.2f}",
+        'total_area_km2': f"{total_area_km2:.2f}",
+        'burned_percentage': f"{(burned_pixels / total_pixels * 100):.2f}" if total_pixels else "0.00",
+        'mean_confidence': f"{np.mean(confidences):.4f}" if confidences else "0.0000",
+    }
+
+    local_tmp = os.path.join(get_temp_dir('stats'), "stats_region.csv")
+    fieldnames = list(row.keys())
+
+    gcs_path = gcs_full(region_stats_path(model_id, campaign))
+    existing_rows = []
+    try:
+        local_existing = os.path.join(get_temp_dir('stats'), "existing.csv")
+        _gcs_download(gcs_path, local_existing)
+        with open(local_existing, 'r') as f:
+            reader = csv.DictReader(f)
+            for r in reader:
+                if r['region'] == region and r['period'] == period:
+                    continue
+                existing_rows.append(r)
+        os.remove(local_existing)
+    except Exception:
+        pass
+
+    with open(local_tmp, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in existing_rows:
+            writer.writerow(r)
+        writer.writerow(row)
+
+    _gcs_upload(local_tmp, gcs_path)
+    os.remove(local_tmp)
+
+    consolidated_path = gcs_full(consolidated_stats_path())
+    cons_rows = []
+    try:
+        local_cons = os.path.join(get_temp_dir('stats'), "consolidated.csv")
+        _gcs_download(consolidated_path, local_cons)
+        with open(local_cons, 'r') as f:
+            reader = csv.DictReader(f)
+            for r in reader:
+                if r['region'] == region and r['period'] == period and r['model_id'] == model_id:
+                    continue
+                cons_rows.append(r)
+        os.remove(local_cons)
+    except Exception:
+        pass
+
+    local_cons = os.path.join(get_temp_dir('stats'), "consolidated.csv")
+    with open(local_cons, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in cons_rows:
+            writer.writerow(r)
+        writer.writerow(row)
+
+    dir_path = consolidated_path.rsplit('/', 1)[0]
+    mkdir(dir_path)
+    _gcs_upload(local_cons, consolidated_path)
+    os.remove(local_cons)
+
+    if logger:
+        logger(f"    Region + consolidated stats updated")
 
 
 def _classify_one_tile(cell, model_id, region_name, period, campaign,

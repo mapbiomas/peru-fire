@@ -93,6 +93,28 @@ class L:
     TAB_MAP = "Map"
     TAB_DONE = "Finished"
 
+    # ── M6 Tabs ──────────────────────────────────────────
+    TAB_ANALYTICS = "Analytics"
+    TAB_M6_COVERAGE = "Coverage"
+    GUIDE_M6_HTML = """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>M6 - Mosaic, Stats & Publication</h3>
+        <p>Publishes classified tiles from M5: creates regional mosaics, computes burned area statistics, and uploads to Google Earth Engine.</p>
+        <h4>Flow:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_publish}</b> — groups of classified tiles waiting for mosaic.</li>
+            <li><b>{tab_done}</b> — published regions with mosaic and stats.</li>
+            <li><b>{tab_analytics}</b> — consolidated stats table with download.</li>
+            <li><b>{tab_coverage}</b> — coverage map: what's published vs pending.</li>
+            <li>Run <code>run_m6_publish()</code> in the notebook to process.</li>
+        </ol>
+    </div>"""
+    DOWNLOAD_TABLE = "Download Table"
+    ANALYTICS_FILTER_MODEL = "Model"
+    ANALYTICS_FILTER_REGION = "Region"
+    ANALYTICS_FILTER_PERIOD = "Period"
+    RUN_M6 = "Run M6 Publish"
+    REFRESH_M6 = "Refresh M6"
+
     GUIDE_M5_HTML = """<div style='padding:20px; font-family:sans-serif;'>
         <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Large Scale Regional Classification</h3>
         <p>Classifies multiple regions (cim-world-1-250000 grid cells) using M4 models.</p>
@@ -100,18 +122,13 @@ class L:
         <ol style='line-height:1.6;'>
             <li><b>{tab_register}</b> — select model + regions + periods.</li>
             <li><b>{tab_pending}</b> — follow classification tile by tile.</li>
-            <li><b>{tab_publish}</b> — COMPLETED jobs with tile management.</li>
-            <li><b>{tab_map}</b> — general progress overview.</li>
-            <li><b>{tab_done}</b> — FINISHED jobs with coverage timeline.</li>
+            <li><b>{tab_map}</b> — live processing overview.</li>
             <li>Run <code>run_m5_workplan()</code> in the notebook to process.</li>
         </ol>
-        <h4>Granular Deletion:</h4>
-        <ul>
-            <li><b>{tab_pending}</b> — delete individual jobs from the workplan.</li>
-            <li><b>{tab_publish}</b> — delete individual tiles or all from a job.</li>
-            <li><b>{tab_done}</b> — delete by region or complete model.</li>
-            <li>After deletion, re-register the job in <b>{tab_register}</b>.</li>
-        </ul>
+        <h4>After Classification (M6):</h4>
+        <p>Use <b>M6</b> to mosaic tiles, generate regional stats, and upload to GEE.
+        Open the M6 UI and run <code>run_m6_publish()</code> in a separate cell.</p>
+        <p>Classified jobs (COMPLETED) appear automatically in M6.</p>
     </div>"""
 
     # ── Map / Grid ───────────────────────────────────────

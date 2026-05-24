@@ -60,12 +60,6 @@ class M5WorkplanUI:
         self.f_pend_task = widgets.Dropdown(description=Lang.DROP_TASK, options=[Lang.ALL_F], layout=L(width='300px'))
         self.f_pend_task.observe(lambda _: self._render_pending(), names='value')
 
-        self.f_pub_task = widgets.Dropdown(description=Lang.DROP_TASK, options=[Lang.ALL_F], layout=L(width='300px'))
-        self.f_pub_task.observe(lambda _: self._render_publish(), names='value')
-
-        self.f_done_task = widgets.Dropdown(description=Lang.DROP_TASK, options=[Lang.ALL_F], layout=L(width='300px'))
-        self.f_done_task.observe(lambda _: self._render_done(), names='value')
-
         self.w_guide = widgets.HTML()
 
         self.w_pend_rows = widgets.VBox()
@@ -76,14 +70,6 @@ class M5WorkplanUI:
         for f in [self.f_pend_model, self.f_pend_region, self.f_pend_year]:
             f.observe(lambda _: self._render_pending(), names='value')
 
-        self.w_pub_rows = widgets.VBox()
-        self.tab_publish = widgets.VBox()
-        self.f_pub_model = widgets.Dropdown(description=Lang.DROP_MODEL, options=[Lang.ALL], layout=L(width='250px'))
-        self.f_pub_region = widgets.Dropdown(description=Lang.DROP_REGION, options=[Lang.ALL_F], layout=L(width='250px'))
-        self.f_pub_year = widgets.Dropdown(description=Lang.DROP_YEAR, options=[Lang.ALL], layout=L(width='200px'))
-        for f in [self.f_pub_model, self.f_pub_region, self.f_pub_year]:
-            f.observe(lambda _: self._render_publish(), names='value')
-
         self.w_mapa_rows = widgets.VBox()
         self.tab_mapa = widgets.VBox()
         self.f_mapa_model = widgets.Dropdown(description=Lang.DROP_MODEL, options=[Lang.ALL], layout=L(width='250px'))
@@ -93,14 +79,6 @@ class M5WorkplanUI:
         self.btn_mapa_refresh.on_click(lambda _: self._render_mapa())
         for f in [self.f_mapa_model, self.f_mapa_region, self.f_mapa_year]:
             f.observe(lambda _: self._render_mapa(), names='value')
-
-        self.w_done_rows = widgets.VBox()
-        self.tab_done = widgets.VBox()
-        self.f_done_model = widgets.Dropdown(description=Lang.DROP_MODEL, options=[Lang.ALL], layout=L(width='250px'))
-        self.f_done_region = widgets.Dropdown(description=Lang.DROP_REGION, options=[Lang.ALL_F], layout=L(width='250px'))
-        self.f_done_year = widgets.Dropdown(description=Lang.DROP_YEAR, options=[Lang.ALL], layout=L(width='200px'))
-        for f in [self.f_done_model, self.f_done_region, self.f_done_year]:
-            f.observe(lambda _: self._render_done(), names='value')
 
         self.out_msg = widgets.Output()
 
@@ -205,18 +183,13 @@ class M5WorkplanUI:
             <ol style='line-height:1.6;'>
                 <li><b>""" + Lang.TAB_REGISTER + """</b> — seleccione modelo + regiones + periodos.</li>
                 <li><b>""" + Lang.TAB_PENDING + """</b> — siga la clasificacion tile a tile.</li>
-                <li><b>""" + Lang.TAB_PUBLISH + """</b> — trabajos COMPLETED con gestion de tiles.</li>
-                <li><b>""" + Lang.TAB_MAP + """</b> — visibilidad general del progreso.</li>
-                <li><b>""" + Lang.TAB_DONE + """</b> — trabajos FINISHED con timeline de cobertura.</li>
+                <li><b>""" + Lang.TAB_MAP + """</b> — visibilidad del progreso en vivo.</li>
                 <li>Ejecute <code>run_m5_workplan()</code> en el notebook para procesar.</li>
             </ol>
-            <h4>Eliminacion granular:</h4>
-            <ul>
-                <li><b>""" + Lang.TAB_PENDING + """</b> — elimine trabajos individuales de la cola.</li>
-                <li><b>""" + Lang.TAB_PUBLISH + """</b> — elimine tiles individuales o todos de un trabajo.</li>
-                <li><b>""" + Lang.TAB_DONE + """</b> — elimine por region o modelo completo.</li>
-                <li>Despues de eliminar, registre nuevamente el trabajo en <b>""" + Lang.TAB_REGISTER + """</b>.</li>
-            </ul>
+            <h4>Publicacion (M6):</h4>
+            <p>Use <b>M6</b> para mosaicar tiles, generar estadisticas regionales y subir a GEE.
+            Abra la UI de M6 y ejecute <code>run_m6_publish()</code> en el notebook.</p>
+            <p>Los trabajos clasificados (COMPLETED) apareceran en la UI de M6.</p>
         </div>
         """
         self.w_guide = widgets.HTML(value=html)
@@ -1311,16 +1284,10 @@ class M5WorkplanUI:
                 f.value = new_ops[0]
 
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
-        for status, f_m, f_r, f_y, f_t in [
-            (['PENDING', 'RUNNING'], self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task),
-            (['COMPLETED'], self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task),
-            (['FINISHED'], self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task),
-        ]:
-            subset = [j for j in self.plan if j['status'] in status and (not campaign or j.get('campaign', '') == campaign)]
-            _safe_update(f_m, ['Todos'] + sorted(set(j['model'] for j in subset)))
-            _safe_update(f_r, ['Todas'] + sorted(set(j['region'] for j in subset)))
-            _safe_update(f_y, ['Todos'] + sorted(set(j['period'].split('_')[0] for j in subset), reverse=True))
-            _safe_update(f_t, ['Todas'] + sorted(set(j.get('task_name', '') for j in subset if j.get('task_name', ''))))
+        subset_pend = [j for j in self.plan if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)]
+        _safe_update(self.f_pend_model, ['Todos'] + sorted(set(j['model'] for j in subset_pend)))
+        _safe_update(self.f_pend_region, ['Todas'] + sorted(set(j['region'] for j in subset_pend)))
+        _safe_update(self.f_pend_year, ['Todos'] + sorted(set(j['period'].split('_')[0] for j in subset_pend), reverse=True))
 
         # Mapa filters
         filtered_plan = [j for j in self.plan if not campaign or j.get('campaign', '') == campaign]
@@ -1333,9 +1300,7 @@ class M5WorkplanUI:
             _safe_update(f_y, ['Todos'] + all_years)
 
         self._render_pending()
-        self._render_publish()
         self._render_mapa()
-        self._render_done()
 
     def display(self):
         # Sincroniza jobs do GCS pendente com a fila local
@@ -1354,17 +1319,13 @@ class M5WorkplanUI:
             self.out_msg
         ], layout=L(padding='20px'))
 
-        self.tabs.children = [self.w_guide, form, self.tab_pending, self.tab_publish, self.tab_mapa, self.tab_done]
+        self.tabs.children = [self.w_guide, form, self.tab_pending, self.tab_mapa]
         self.tabs.set_title(0, Lang.TAB_GUIDE)
         self.tabs.set_title(1, Lang.TAB_REGISTER)
 
         n_pend = len([j for j in self.plan if j['status'] in ('PENDING', 'RUNNING')])
         self.tabs.set_title(2, f"{Lang.TAB_PENDING} ({n_pend})")
-        self.tabs.set_title(3, Lang.TAB_PUBLISH)
-        self.tabs.set_title(4, Lang.TAB_MAP)
-
-        n_done = len([j for j in self.plan if j['status'] == 'FINISHED'])
-        self.tabs.set_title(5, f"{Lang.TAB_DONE} ({n_done})")
+        self.tabs.set_title(3, Lang.TAB_MAP)
 
         header_actions = widgets.HBox([
             widgets.HTML("<b style='color:#2c3e50; font-size:14px; margin-right:15px;'>Acciones Globales:</b>"),

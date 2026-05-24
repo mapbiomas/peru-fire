@@ -471,3 +471,43 @@ class CacheManager:
     @staticmethod
     def reset():
         CacheManager._state = None
+
+    @staticmethod
+    def build_cache_from_classifications(fs=None, logger=None):
+        """Scan GCS para descobrir grupos (modelo, regiao, periodo) classificados."""
+        from M5_workplan import gcs_full, classified_tiles_dir
+        if fs is None:
+            from M0_auth_config import _get_fs
+            fs = _get_fs()
+
+        base = gcs_full(classified_tiles_dir('', ''))
+        base = base.replace('/CLASSIFIED_TILES', '')
+        prefix = base.rsplit('/', 1)[0] if base.endswith('/') else base
+
+        groups = set()
+        try:
+            all_tiles = fs.glob(f"{prefix}/*/CLASSIFIED_TILES/tile_*.tif")
+        except Exception as e:
+            if logger:
+                logger(f"    [ERROR] scanning classifications: {e}")
+            return groups
+
+        for tp in all_tiles:
+            basename = os.path.basename(tp)
+            parts = basename.replace('tile_', '', 1).split('_')
+            if len(parts) < 3:
+                continue
+            region = parts[0]
+            period = parts[-1].replace('.tif', '')
+            model_dir = tp.split('/CLASSIFIED_TILES')[0]
+            model_id = os.path.basename(model_dir)
+            groups.add((model_id, region, period))
+
+        with CacheManager._lock:
+            state = CacheManager.get_state()
+            state['classified_groups'] = [{'model': m, 'region': r, 'period': p} for m, r, p in sorted(groups)]
+            CacheManager.save(state)
+
+        if logger:
+            logger(f"    Cache: {len(groups)} classified groups discovered")
+        return groups
