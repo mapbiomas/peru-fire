@@ -2,11 +2,9 @@ import os
 import math
 import numpy as np
 import rasterio
-from rasterio.windows import Window
-from rasterio.windows import transform as window_transform
-from rasterio.features import geometry_window
+from rasterio.windows import Window, from_bounds
+from affine import Affine
 from shapely.geometry import shape, mapping
-from shapely.ops import transform
 from pyproj import Transformer
 from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _gcs_download, _gcs_upload
 from M4_data_extractor import normalize
@@ -105,13 +103,22 @@ def build_band_paths(bands_config, year, month):
     return paths
 
 def _reproject_geometry(geom_coords, src_crs):
-    """Reprojecta geometria EPSG:4326 -> src_crs. Retorna lista [geojson] para mask()."""
-    if src_crs and str(src_crs).upper() != 'EPSG:4326':
-        geom_shape = shape(geom_coords)
-        transformer = Transformer.from_crs('EPSG:4326', src_crs, always_xy=True)
-        geom_proj = transform(transformer.transform, geom_shape)
-        return [mapping(geom_proj)]
-    return [geom_coords]
+    """Reprojecta geometria EPSG:4326 -> src_crs. Retorna (clip_geom, geom_bounds)."""
+    geom = shape(geom_coords)
+    if not (src_crs and str(src_crs).upper() != 'EPSG:4326'):
+        return [mapping(geom)], geom.bounds
+    transformer = Transformer.from_crs('EPSG:4326', src_crs, always_xy=True)
+    if hasattr(geom, 'geoms'):
+        xs, ys = [], []
+        for part in geom.geoms:
+            px, py = zip(*part.exterior.coords)
+            nx, ny = transformer.transform(list(px), list(py))
+            xs.extend(nx); ys.extend(ny)
+    else:
+        xs, ys = zip(*geom.exterior.coords)
+        nx, ny = transformer.transform(list(xs), list(ys))
+        xs, ys = nx, ny
+    return [mapping(geom)], (min(xs), min(ys), max(xs), max(ys))
 
 def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_gcs_path, band_paths, band_order, logger=None):
     """Clasifica un tile cim-world usando COGs via /vsigs/ streaming en bloques.
@@ -141,20 +148,22 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
         src_crs = sources[band_order[0]].crs
         src_transform = sources[band_order[0]].transform
         src_nodata = sources[band_order[0]].nodata or -9999
-        clip_geom = _reproject_geometry(geom_coords, src_crs)
+        src_width = sources[band_order[0]].width
+        src_height = sources[band_order[0]].height
+        clip_geom, geom_bounds = _reproject_geometry(geom_coords, src_crs)
 
-        window = geometry_window(sources[band_order[0]], clip_geom)
-        win_col = int(window.col_off)
-        win_row = int(window.row_off)
-        win_w = int(window.width)
-        win_h = int(window.height)
+        window = from_bounds(*geom_bounds, transform=src_transform)
+        win_col = max(0, int(math.floor(window.col_off)))
+        win_row = max(0, int(math.floor(window.row_off)))
+        win_w = min(int(math.ceil(window.width)), src_width - win_col)
+        win_h = min(int(math.ceil(window.height)), src_height - win_row)
 
         if win_w <= 0 or win_h <= 0:
             if logger:
                 logger(f"    [AVISO] Celula {cell_id} fora dos limites dos COGs")
             return None
 
-        out_transform = window_transform(src_transform, window)
+        out_transform = src_transform * Affine.translation(win_col, win_row)
         profile = sources[band_order[0]].profile.copy()
         profile.update({
             'height': win_h,
