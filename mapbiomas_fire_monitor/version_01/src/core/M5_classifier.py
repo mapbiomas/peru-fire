@@ -72,12 +72,14 @@ def _run_classification(plan, out, progress_callback=None, n_workers=None):
     for j in pending:
         groups[(j['model'], j['period'])].append(j)
 
-    for (model_id, period), group in groups.items():
+    total_groups = len(groups)
+    for g_idx, ((model_id, period), group) in enumerate(groups.items()):
         with out:
-            print(f"\nGroup: model '{model_id}' | period {period} | {len(group)} region(s)")
+            print(f"\nGroup {g_idx+1}/{total_groups}: model '{model_id}' | period {period} | {len(group)} region(s)")
 
         try:
-            _process_period(model_id, period, group, out, progress_callback, n_workers)
+            _process_period(model_id, period, group, out, progress_callback, n_workers,
+                           g_idx=g_idx, total_groups=total_groups)
         except Exception as e:
             import traceback
             with out:
@@ -257,7 +259,7 @@ def _classify_one_tile(cell, model_id, region_name, period, campaign,
         return ('warn', cell_id, region_name, None, worker_id)
 
 
-def _process_period(model_id, period, group_jobs, out, progress_callback=None, n_workers=None):
+def _process_period(model_id, period, group_jobs, out, progress_callback=None, n_workers=None, g_idx=0, total_groups=1):
     """Procesa todas las regiones de un (modelo, periodo) compartiendo COGs.
 
     Los COGs se descargan una unica vez y se reusan para todos los tiles
@@ -393,6 +395,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                     group_total = group_elapsed + group_remaining
                     _log(out, f"    [W{wid}] <<< {cell_id} done in {_fmt_time(tile_elapsed)} "
                           f"| tile {completed_in_region}/{total}"
+                          f" | period {g_idx+1}/{total_groups}"
                           f" | region {job_idx+1}/{_total_cards}"
                           f" | group {_done}/{total_cells_group}"
                           f" | elapsed group {_fmt_time(group_elapsed)}"
@@ -453,13 +456,15 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
         with out:
             total_elapsed = time.time() - _t0
             print(f"  OK: {region_name} completed"
+                  f" | period {g_idx+1}/{total_groups}"
                   f" | region {_completed_cards}/{_total_cards}"
                   f" | group {_done}/{total_cells_group} tiles"
                   f" | elapsed {_fmt_time(total_elapsed)}")
 
     total_time = time.time() - _t0
     with out:
-        print(f"  --- Group {model_id} | {period} done in {_fmt_time(total_time)} ---")
+        print(f"  --- Group {g_idx+1}/{total_groups} | {model_id} | {period} done in {_fmt_time(total_time)} ---"
+              f" | {_done}/{total_cells_group} tiles | {_completed_cards}/{_total_cards} regions")
 
 
 def _get_region_cells(region_name):
