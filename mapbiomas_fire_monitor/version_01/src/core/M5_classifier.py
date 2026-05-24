@@ -362,6 +362,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                 futures[future] = cell['name']
 
             completed_in_region = 0
+            _last_eta_log = time.time()
             for future in as_completed(futures):
                 status, cell_id, reg, stats, wid = future.result()
                 completed_in_region += 1
@@ -370,26 +371,32 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                     _done += 1
                     if progress_callback:
                         progress_callback(model_id, reg, cell_id, completed_in_region, total, 'skipped')
-                    continue
-
-                if status == 'error':
+                elif status == 'error':
                     _done += 1
                     if progress_callback:
                         progress_callback(model_id, reg, cell_id, completed_in_region, total, 'error')
-                    continue
-
-                if status == 'warn':
+                elif status == 'warn':
                     if progress_callback:
                         progress_callback(model_id, reg, cell_id, completed_in_region, total, 'error')
-                    continue
+                else:
+                    # status == 'done'
+                    _done += 1
+                    tile_results.append(stats)
+                    if progress_callback:
+                        progress_callback(model_id, reg, cell_id, completed_in_region, total, 'done')
 
-                # status == 'done'
-                _done += 1
-                tile_results.append(stats)
-                if progress_callback:
-                    progress_callback(model_id, reg, cell_id, completed_in_region, total, 'done')
+                # ETA log every 5 tiles or on the last one
+                now = time.time()
+                if completed_in_region == total or now - _last_eta_log >= 15 or completed_in_region % 5 == 0:
+                    _last_eta_log = now
+                    elapsed = now - _t0
+                    remaining = total_cells_group - (processed + completed_in_region)
+                    avg = elapsed / max(_done, 1)
+                    eta = avg * remaining
+                    with out:
+                        print(f"  > Progress: {_done}/{total_cells_group} tiles (elapsed {_fmt_time(elapsed)} | remaining ~{_fmt_time(eta)})")
 
-            # ETA log a cada regiao
+            # ETA final da regiao (garantido)
             elapsed = time.time() - _t0
             remaining = total_cells_group - (processed + completed_in_region)
             avg = elapsed / max(_done, 1)
