@@ -21,6 +21,7 @@ class M6WorkplanUI:
         self._groups = []
         self._mosaics = set()
         self._stats_data = []
+        self.lc_base = CONFIG['gcs_library_classifications']
 
         self.tabs = widgets.Tab()
         self.w_guide = widgets.HTML()
@@ -46,23 +47,30 @@ class M6WorkplanUI:
         raw = discover_classified_groups(fs=self.fs)
         self._groups = sorted(raw)
         self._mosaics = set()
-        for m, r, p in self._groups:
-            mg = gcs_full(region_path(m, r, p, ''))
+        for group in self._groups:
+            m, r, p, c = group
+            mg = gcs_full(region_path(m, r, p, c))
             if self.fs.exists(mg):
-                self._mosaics.add((m, r, p))
+                self._mosaics.add(group)
 
     def _load_stats(self):
-        try:
-            local_csv = os.path.join('/tmp', 'm6_consolidated.csv')
-            cpath = gcs_full(consolidated_stats_path())
-            from M0_auth_config import _gcs_download
-            _gcs_download(cpath, local_csv)
-            with open(local_csv, 'r') as f:
-                reader = csv.DictReader(f)
-                self._stats_data = list(reader)
-            os.remove(local_csv)
-        except Exception:
-            self._stats_data = []
+        self._stats_data = []
+        lib_class = gcs_full(self.lc_base)
+        patterns = [
+            f"{lib_class}/*/consolidated_stats.csv",
+            f"{lib_class}/consolidated_stats.csv",
+        ]
+        from M0_auth_config import _gcs_download
+        for pat in patterns:
+            for fp in sorted(self.fs.glob(pat)):
+                try:
+                    local_csv = os.path.join('/tmp', 'm6_consolidated.csv')
+                    _gcs_download(fp, local_csv)
+                    with open(local_csv, 'r') as f:
+                        self._stats_data.extend(list(csv.DictReader(f)))
+                    os.remove(local_csv)
+                except Exception:
+                    continue
 
     def _refresh_all(self):
         self._discover_all()
@@ -79,9 +87,10 @@ class M6WorkplanUI:
             return
 
         rows = []
-        for m, r, p in sorted(pending):
+        for m, r, p, c in sorted(pending):
+            c_label = f"<span style='color:#7f8c8d;'> [{c}]</span>" if c else ""
             rows.append(widgets.HBox([
-                widgets.HTML(f"<b>{m}</b>", layout=L(width='200px')),
+                widgets.HTML(f"<b>{m}</b>{c_label}", layout=L(width='220px')),
                 widgets.HTML(r, layout=L(width='150px')),
                 widgets.HTML(p, layout=L(width='120px')),
             ], layout=L(margin='2px 0', padding='4px', border='1px solid #eee')))
@@ -97,9 +106,10 @@ class M6WorkplanUI:
             return
 
         rows = []
-        for m, r, p in done:
+        for m, r, p, c in done:
+            c_label = f"<span style='color:#7f8c8d;'> [{c}]</span>" if c else ""
             rows.append(widgets.HBox([
-                widgets.HTML(f"<b>{m}</b>", layout=L(width='200px')),
+                widgets.HTML(f"<b>{m}</b>{c_label}", layout=L(width='220px')),
                 widgets.HTML(r, layout=L(width='150px')),
                 widgets.HTML(p, layout=L(width='120px')),
                 widgets.HTML("<span style='color:green;'> mosaic OK</span>"),
@@ -186,10 +196,10 @@ class M6WorkplanUI:
         self.tab_analytics.children = [filters, w_table, btn_download, w_download]
 
     def _render_coverage(self):
-        all_models = sorted(set(g[0] for g in self._groups))
+        all_rows = sorted(set((g[0], g[3]) for g in self._groups))
         all_regions = sorted(set(g[1] for g in self._groups))
 
-        if not all_models:
+        if not all_rows:
             self.tab_coverage.children = [make_empty_state("No classified groups found.")]
             return
 
@@ -200,11 +210,12 @@ class M6WorkplanUI:
         header += "</tr>"
         lines.append(header)
 
-        for m in all_models:
-            line = f"<tr style='border-bottom:1px solid #eee;'><td style='padding:4px 10px;'><b>{m}</b></td>"
+        for m, c in all_rows:
+            label = f"{m} [{c}]" if c else m
+            line = f"<tr style='border-bottom:1px solid #eee;'><td style='padding:4px 10px;'><b>{label}</b></td>"
             for r in all_regions:
-                periods = sorted([p for _m, _r, p in self._groups if _m == m and _r == r])
-                periods_done = sorted([p for _m, _r, p in self._mosaics if _m == m and _r == r])
+                periods = sorted([p for _m, _r, p, _c in self._groups if _m == m and _r == r and _c == c])
+                periods_done = sorted([p for _m, _r, p, _c in self._mosaics if _m == m and _r == r and _c == c])
                 if not periods:
                     cell = "<span style='color:#ccc;'>-</span>"
                 else:

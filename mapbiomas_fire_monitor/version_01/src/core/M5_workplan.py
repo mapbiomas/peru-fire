@@ -110,17 +110,14 @@ def region_path(model_id, region, period, campaign=None):
 def stats_dir(model_id, campaign=None):
     return f"{classifications_base(model_id, campaign)}/STATS"
 
-def geral_stats_dir():
-    return f"{CONFIG['gcs_library_classifications']}/GERAL_STATS"
-
 def tile_stats_path(model_id, campaign=None):
     return f"{stats_dir(model_id, campaign)}/stats_tile.csv"
 
 def region_stats_path(model_id, campaign=None):
     return f"{stats_dir(model_id, campaign)}/stats_region.csv"
 
-def consolidated_stats_path():
-    return f"{geral_stats_dir()}/consolidated_stats.csv"
+def consolidated_stats_path(campaign=None):
+    return f"{classifications_base('', campaign)}consolidated_stats.csv"
 
 def gcs_full(relative_path):
     """Path completo con bucket para operaciones GCSFS."""

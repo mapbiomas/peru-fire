@@ -1,13 +1,11 @@
 import os
-import csv
 import time
 import threading
-import numpy as np
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from M0_auth_config import CONFIG, _get_fs, _gcs_models_base, _gcs_download, _gcs_upload, get_temp_dir
 from M_cache import CacheManager
-from M5_workplan import load_workplan, save_workplan, make_job_id, tile_path, gcs_full, archive_job_on_gcs, delete_pending_job_gcs, tile_stats_path, region_stats_path, consolidated_stats_path
+from M5_workplan import load_workplan, save_workplan, make_job_id, tile_path, gcs_full, archive_job_on_gcs, delete_pending_job_gcs
 from M5_inference import load_model_from_gcs, classify_cell_with_cogs, build_band_paths
 from M_regions import REGION_NAME_PROPERTY
 
@@ -92,139 +90,6 @@ def _run_classification(plan, out, progress_callback=None, n_workers=None):
                         pj['status'] = 'FAILED'
             save_workplan(p)
             continue
-
-
-def generate_tile_stats(model_id, region, period, tile_results, fs=None, logger=None, campaign=None):
-    """Guarda estadisticas por tile en CSV (usado por M5 durante classificacao)."""
-    if fs is None:
-        fs = _get_fs()
-
-    if not tile_results:
-        if logger:
-            logger(f"    [WARN] No tile results to compute stats")
-        return
-
-    gcs_path = gcs_full(tile_stats_path(model_id, campaign))
-    local_tmp = os.path.join(get_temp_dir('stats'), "stats_tile.csv")
-
-    fieldnames = ['model_id', 'region', 'period', 'tile_id',
-                  'total_pixels', 'burned_pixels', 'mean_confidence']
-
-    rows = []
-    for tr in tile_results:
-        rows.append({
-            'model_id': model_id,
-            'region': region,
-            'period': period,
-            'tile_id': tr.get('tile_id', ''),
-            'total_pixels': tr.get('total_pixels', 0),
-            'burned_pixels': tr.get('burned_pixels', 0),
-            'mean_confidence': f"{tr.get('mean_confidence', 0):.4f}",
-        })
-
-    with open(local_tmp, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
-    _gcs_upload(local_tmp, gcs_path)
-    os.remove(local_tmp)
-
-    if logger:
-        logger(f"    Tile stats saved ({len(rows)} tiles)")
-
-
-def generate_region_stats(model_id, region, period, tile_results, fs=None, logger=None, campaign=None):
-    """Agrega estadisticas por region+periodo y alimenta consolidated (usado por M5 durante classificacao)."""
-    from M_gcs import mkdir
-
-    if fs is None:
-        fs = _get_fs()
-
-    if not tile_results:
-        return
-
-    total_pixels = sum(tr.get('total_pixels', 0) for tr in tile_results)
-    burned_pixels = sum(tr.get('burned_pixels', 0) for tr in tile_results)
-    confidences = [tr.get('mean_confidence', 0) for tr in tile_results if tr.get('burned_pixels', 0) > 0]
-
-    resolution_m = 10
-    pixel_area_m2 = resolution_m ** 2
-    burned_area_km2 = burned_pixels * pixel_area_m2 / 1_000_000
-    total_area_km2 = total_pixels * pixel_area_m2 / 1_000_000 if total_pixels else 0
-
-    row = {
-        'model_id': model_id,
-        'region': region,
-        'period': period,
-        'tiles_total': len(tile_results),
-        'tiles_processed': len([tr for tr in tile_results if tr.get('total_pixels', 0) > 0]),
-        'total_pixels': total_pixels,
-        'burned_pixels': burned_pixels,
-        'burned_area_km2': f"{burned_area_km2:.2f}",
-        'total_area_km2': f"{total_area_km2:.2f}",
-        'burned_percentage': f"{(burned_pixels / total_pixels * 100):.2f}" if total_pixels else "0.00",
-        'mean_confidence': f"{np.mean(confidences):.4f}" if confidences else "0.0000",
-    }
-
-    local_tmp = os.path.join(get_temp_dir('stats'), "stats_region.csv")
-    fieldnames = list(row.keys())
-
-    gcs_path = gcs_full(region_stats_path(model_id, campaign))
-    existing_rows = []
-    try:
-        local_existing = os.path.join(get_temp_dir('stats'), "existing.csv")
-        _gcs_download(gcs_path, local_existing)
-        with open(local_existing, 'r') as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                if r['region'] == region and r['period'] == period:
-                    continue
-                existing_rows.append(r)
-        os.remove(local_existing)
-    except Exception:
-        pass
-
-    with open(local_tmp, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for r in existing_rows:
-            writer.writerow(r)
-        writer.writerow(row)
-
-    _gcs_upload(local_tmp, gcs_path)
-    os.remove(local_tmp)
-
-    consolidated_path = gcs_full(consolidated_stats_path())
-    cons_rows = []
-    try:
-        local_cons = os.path.join(get_temp_dir('stats'), "consolidated.csv")
-        _gcs_download(consolidated_path, local_cons)
-        with open(local_cons, 'r') as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                if r['region'] == region and r['period'] == period and r['model_id'] == model_id:
-                    continue
-                cons_rows.append(r)
-        os.remove(local_cons)
-    except Exception:
-        pass
-
-    local_cons = os.path.join(get_temp_dir('stats'), "consolidated.csv")
-    with open(local_cons, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for r in cons_rows:
-            writer.writerow(r)
-        writer.writerow(row)
-
-    dir_path = consolidated_path.rsplit('/', 1)[0]
-    mkdir(dir_path)
-    _gcs_upload(local_cons, consolidated_path)
-    os.remove(local_cons)
-
-    if logger:
-        logger(f"    Region + consolidated stats updated")
 
 
 def _classify_one_tile(cell, model_id, region_name, period, campaign,
@@ -312,8 +177,6 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
 
     with out:
         print(f"  COGs opened via streaming ({len(band_paths)} bands)")
-
-    all_tile_results = []
 
     # 4. Pre-computar celdas de todas as regiões para progresso cumulativo
     region_cells_map = {}
@@ -434,11 +297,8 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
         processed += total
 
         if tile_results:
-            all_tile_results.extend(tile_results)
             with out:
-                print(f"  Computing stats for {len(tile_results)} tiles...")
-            generate_tile_stats(model_id, region_name, period, tile_results, fs=fs, campaign=campaign)
-            generate_region_stats(model_id, region_name, period, tile_results, fs=fs, campaign=campaign)
+                print(f"  Archiving job for {len(tile_results)} tiles...")
             archive_job_on_gcs(job, tile_results, fs=fs)
         else:
             with out:

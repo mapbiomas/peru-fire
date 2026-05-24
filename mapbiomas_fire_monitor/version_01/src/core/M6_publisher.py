@@ -9,7 +9,7 @@ from rasterio.merge import merge
 from M0_auth_config import CONFIG, _get_fs, _gcs_download, _gcs_upload, get_temp_dir
 from M5_workplan import (
     classified_tiles_dir, classified_region_dir, region_path,
-    tile_stats_path, region_stats_path, consolidated_stats_path,
+    consolidated_stats_path, classifications_base,
     tile_path, gcs_full
 )
 from M_cache import CacheManager
@@ -132,11 +132,11 @@ def compute_region_stats_from_mosaic(model_id, region, period, fs=None, logger=N
     return row
 
 
-def update_consolidated_stats(row, fs=None, logger=None):
-    """Adiciona/atualiza uma linha no consolidated_stats.csv."""
+def update_consolidated_stats(row, fs=None, logger=None, campaign=None):
+    """Adiciona/atualiza uma linha no consolidated_stats.csv da campanha."""
     from M_gcs import mkdir
 
-    consolidated_path = gcs_full(consolidated_stats_path())
+    consolidated_path = gcs_full(consolidated_stats_path(campaign))
     fieldnames = list(row.keys())
 
     cons_rows = []
@@ -213,34 +213,64 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
 
 
 def discover_classified_groups(fs=None, logger=None):
-    """Scan GCS e descobre grupos (modelo, regiao, periodo) com tiles classificados."""
+    """Scan GCS e descobre grupos (modelo, regiao, periodo, campaign) com tiles classificados."""
     if fs is None:
         fs = _get_fs()
 
-    base = gcs_full(classified_tiles_dir('', ''))
-    base = base.replace('/CLASSIFIED_TILES', '')
-    prefix = base.rsplit('/', 1)[0] if base.endswith('/') else base
+    base = gcs_full(classifications_base('', '')).rstrip('/')
+    patterns = [
+        f"{base}/*/*/CLASSIFIED_TILES/tile_*.tif",
+        f"{base}/*/CLASSIFIED_TILES/tile_*.tif",
+    ]
 
     groups = set()
-    try:
-        all_tiles = fs.glob(f"{prefix}/*/CLASSIFIED_TILES/tile_*.tif")
-    except Exception as e:
-        if logger:
-            logger(f"    [ERROR] scanning GCS: {e}")
-        return groups
-
-    for tp in all_tiles:
-        basename = os.path.basename(tp)
-        parts = basename.replace('tile_', '', 1).split('_')
-        if len(parts) < 3:
+    for pattern in patterns:
+        try:
+            all_tiles = fs.glob(pattern)
+        except Exception as e:
+            if logger:
+                logger(f"    [ERROR] scanning GCS: {e}")
             continue
-        region = parts[0]
-        period = parts[-1].replace('.tif', '')
-        model_dir = tp.split('/CLASSIFIED_TILES')[0]
-        model_id = os.path.basename(model_dir)
-        groups.add((model_id, region, period))
+
+        for tp in all_tiles:
+            basename = os.path.basename(tp)
+            parts = basename.replace('tile_', '', 1).split('_')
+            if len(parts) < 3:
+                continue
+            region = parts[0]
+            period = parts[-1].replace('.tif', '')
+            model_dir = tp.split('/CLASSIFIED_TILES')[0]
+            model_id = os.path.basename(model_dir)
+            parent = os.path.basename(os.path.dirname(model_dir))
+            campaign = '' if parent == 'LIBRARY_CLASSIFICATIONS' else parent
+            groups.add((model_id, region, period, campaign))
 
     return groups
+
+
+def cleanup_old_m5_stats(fs=None, logger=print):
+    """Remove stats antigos do M5 (STATS/ + GERAL_STATS/) do GCS."""
+    from M_gcs import rm as gcs_rm, exists as gcs_exists
+    if fs is None:
+        fs = _get_fs()
+    base = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}"
+
+    for model_dir in fs.glob(f"{base}/*/"):
+        stats_dir = f"{model_dir.rstrip('/')}/STATS"
+        if gcs_exists(stats_dir):
+            for f in fs.glob(f"{stats_dir}/*"):
+                gcs_rm(f)
+            gcs_rm(stats_dir)
+            logger(f"  Removed {stats_dir}")
+
+    geral = f"{base}/GERAL_STATS"
+    if gcs_exists(geral):
+        for f in fs.glob(f"{geral}/*"):
+            gcs_rm(f)
+        gcs_rm(geral)
+        logger(f"  Removed {geral}")
+
+    logger("  Cleanup done.")
 
 
 def run_m6_publish(upload_gee=True, logger=None):
@@ -259,9 +289,9 @@ def run_m6_publish(upload_gee=True, logger=None):
     groups = sorted(groups)
     _t0 = time.time()
 
-    for idx, (model_id, region, period) in enumerate(groups):
-        campaign = ''
-        logger(f"\n  [{idx+1}/{len(groups)}] {model_id} | {region} | {period}")
+    for idx, (model_id, region, period, campaign) in enumerate(groups):
+        campaign_str = f" [{campaign}]" if campaign else ""
+        logger(f"\n  [{idx+1}/{len(groups)}] {model_id} | {region} | {period}{campaign_str}")
 
         mosaic_exists = False
         mosaic_gcs = gcs_full(region_path(model_id, region, period, campaign))
@@ -277,7 +307,7 @@ def run_m6_publish(upload_gee=True, logger=None):
 
         row = compute_region_stats_from_mosaic(model_id, region, period, fs=fs, logger=logger, campaign=campaign)
         if row:
-            update_consolidated_stats(row, fs=fs, logger=logger)
+            update_consolidated_stats(row, fs=fs, logger=logger, campaign=campaign)
 
         if upload_gee:
             upload_to_gee(model_id, region, period, fs=fs, logger=logger, campaign=campaign)
