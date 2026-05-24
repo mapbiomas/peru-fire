@@ -22,6 +22,8 @@ class M6WorkplanUI:
         self._mosaics = set()
         self._stats_data = []
         self.lc_base = CONFIG['gcs_library_classifications']
+        self._thumbnails = {}
+        self._publish_checks = {}
 
         self.tabs = widgets.Tab()
         self.w_guide = widgets.HTML()
@@ -52,6 +54,7 @@ class M6WorkplanUI:
             mg = gcs_full(region_path(m, r, p, c))
             if self.fs.exists(mg):
                 self._mosaics.add(group)
+        self._load_thumbnails()
 
     def _load_stats(self):
         self._stats_data = []
@@ -72,6 +75,25 @@ class M6WorkplanUI:
                 except Exception:
                     continue
 
+    def _load_thumbnails(self):
+        from M0_auth_config import _gcs_download
+        from M6_publisher import generate_region_thumbnail
+        thumb_dir = gcs_full(f"{self.lc_base}/thumbnails")
+        regions = sorted(set(g[1] for g in self._groups))
+        for r in regions:
+            if r in self._thumbnails:
+                continue
+            thumb_gcs = f"{thumb_dir}/{r}.png"
+            if not self.fs.exists(thumb_gcs):
+                generate_region_thumbnail(r, fs=self.fs, logger=print)
+            if self.fs.exists(thumb_gcs):
+                local = os.path.join('/tmp', f"thumb_{r}.png")
+                _gcs_download(thumb_gcs, local)
+                with open(local, 'rb') as f:
+                    b64 = base64.b64encode(f.read()).decode('utf-8')
+                self._thumbnails[r] = b64
+                os.remove(local)
+
     def _refresh_all(self):
         self._discover_all()
         self._load_stats()
@@ -86,18 +108,83 @@ class M6WorkplanUI:
             self.tab_to_publish.children = [make_empty_state(Lang.NO_TASKS_PUBLISH)]
             return
 
+        cb_all = widgets.Checkbox(layout=L(width='40px'))
+        def _toggle_all(change):
+            for cb in self._publish_checks.values():
+                cb.value = change['new']
+        cb_all.observe(_toggle_all, names='value')
+
+        header = widgets.HBox([
+            cb_all,
+            widgets.HTML("<b>Model</b>", layout=L(width='180px')),
+            widgets.HTML("<b>Region</b>", layout=L(width='120px')),
+            widgets.HTML("<b>Period</b>", layout=L(width='100px')),
+            widgets.HTML("<b>Preview</b>", layout=L(width='90px')),
+        ], layout=L(margin='2px 0', padding='4px', border='1px solid #ccc', background='#f5f5f5'))
+
+        self._publish_checks.clear()
         rows = []
-        for m, r, p, c in sorted(pending):
+        for g in sorted(pending):
+            m, r, p, c = g
+            cb = widgets.Checkbox(layout=L(width='40px'))
+            self._publish_checks[g] = cb
             c_label = f"<span style='color:#7f8c8d;'> [{c}]</span>" if c else ""
+            thumb_html = ""
+            if r in self._thumbnails:
+                thumb_html = f'<img src="data:image/png;base64,{self._thumbnails[r]}" width="60" style="border-radius:4px;">'
             rows.append(widgets.HBox([
-                widgets.HTML(f"<b>{m}</b>{c_label}", layout=L(width='220px')),
-                widgets.HTML(r, layout=L(width='150px')),
-                widgets.HTML(p, layout=L(width='120px')),
+                cb,
+                widgets.HTML(f"<b>{m}</b>{c_label}", layout=L(width='180px')),
+                widgets.HTML(r, layout=L(width='120px')),
+                widgets.HTML(p, layout=L(width='100px')),
+                widgets.HTML(thumb_html, layout=L(width='90px')),
             ], layout=L(margin='2px 0', padding='4px', border='1px solid #eee')))
+
+        btn_publish = widgets.Button(
+            description=Lang.PUBLISH_SELECTED.format(n=0),
+            icon='check', layout=L(width='220px', margin='10px 0 0 0'))
+        self._btn_publish = btn_publish
+
+        def _on_check_change(_=None):
+            n = sum(1 for cb in self._publish_checks.values() if cb.value)
+            btn_publish.description = Lang.PUBLISH_SELECTED.format(n=n)
+
+        for g, cb in self._publish_checks.items():
+            cb.observe(_on_check_change, names='value')
+
+        btn_publish.on_click(self._publish_selected)
+
         self.tab_to_publish.children = [
             widgets.HTML(f"<b>{len(pending)} groups pending mosaic</b>"),
-            widgets.VBox(rows, layout=L(margin='10px 0'))
+            header,
+            widgets.VBox(rows, layout=L(margin='0 0 5px 0')),
+            btn_publish,
         ]
+
+    def _publish_selected(self, _=None):
+        from M6_publisher import merge_region_tiles, compute_region_stats_from_mosaic, update_consolidated_stats
+        checked = [g for g, cb in self._publish_checks.items() if cb.value]
+        if not checked:
+            return
+        out = widgets.Output()
+        display(out)
+        for g in checked:
+            m, r, p, c = g
+            with out:
+                print(f"  Publishing {m} | {r} | {p}...")
+            mosaic_path = merge_region_tiles(m, r, p, fs=self.fs, logger=lambda msg: print(f"    {msg}"), campaign=c)
+            if not mosaic_path:
+                with out:
+                    print(f"  [WARN] No tiles for {r}, skipping.")
+                continue
+            row = compute_region_stats_from_mosaic(m, r, p, fs=self.fs, logger=lambda msg: print(f"    {msg}"), campaign=c)
+            if row:
+                update_consolidated_stats(row, fs=self.fs, campaign=c)
+            self._mosaics.add(g)
+            with out:
+                print(f"  Done: {m} | {r} | {p}")
+        self._render_to_publish()
+        self._render_finished()
 
     def _render_finished(self):
         done = sorted([g for g in self._groups if g in self._mosaics])

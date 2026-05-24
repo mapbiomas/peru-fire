@@ -5,13 +5,14 @@ import time
 import shutil
 import numpy as np
 import rasterio
-from rasterio.merge import merge
+from osgeo import gdal
 from M0_auth_config import CONFIG, _get_fs, _gcs_download, _gcs_upload, get_temp_dir
 from M5_workplan import (
     classified_tiles_dir, classified_region_dir, region_path,
     consolidated_stats_path, classifications_base,
     tile_path, gcs_full
 )
+from M_regions import REGION_NAME_PROPERTY
 from M_cache import CacheManager
 
 
@@ -55,22 +56,14 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=
             _gcs_download(tp, local)
             local_tiles.append(local)
 
-        src_files = [rasterio.open(t) for t in local_tiles]
-        mosaic, out_transform = merge(src_files)
-        out_meta = src_files[0].meta.copy()
-        for src in src_files:
-            src.close()
-
-        out_meta.update({
-            "height": mosaic.shape[1],
-            "width": mosaic.shape[2],
-            "transform": out_transform,
-            "compress": 'lzw'
-        })
+        vrt_path = os.path.join(tmpdir, "mosaic.vrt")
+        gdal.BuildVRT(vrt_path, local_tiles,
+            options=gdal.BuildVRTOptions(resampleAlg='nearest'))
 
         mosaic_local = os.path.join(tmpdir, "mosaic.tif")
-        with rasterio.open(mosaic_local, 'w', **out_meta) as dest:
-            dest.write(mosaic)
+        gdal.Translate(mosaic_local, vrt_path,
+            options=gdal.TranslateOptions(
+                creationOptions=['COMPRESS=LZW', 'BIGTIFF=YES']))
 
         _gcs_upload(mosaic_local, out_gcs)
 
@@ -271,6 +264,43 @@ def cleanup_old_m5_stats(fs=None, logger=print):
         logger(f"  Removed {geral}")
 
     logger("  Cleanup done.")
+
+
+def generate_region_thumbnail(region_name, fs=None, logger=print):
+    """Gera PNG 200x200: Peru outline + regiao destacada, salva no GCS."""
+    import ee
+    import requests
+    from M0_auth_config import authenticate
+    from M_gcs import mkdir as gcs_mkdir
+
+    authenticate()
+    if fs is None:
+        fs = _get_fs()
+
+    thumb_dir = f"{CONFIG['gcs_library_classifications']}/thumbnails"
+    thumb_gcs = gcs_full(f"{thumb_dir}/{region_name}.png")
+    if fs.exists(thumb_gcs):
+        return thumb_gcs
+
+    peru = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(
+        ee.Filter.eq('ADM0_NAME', 'Peru'))
+    region_fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(
+        ee.Filter.eq(REGION_NAME_PROPERTY, region_name))
+
+    img = ee.Image(1).byte().paint(peru, 0).paint(region_fc, 1)
+    url = img.getThumbURL({
+        'min': 0, 'max': 1, 'dimensions': 200, 'format': 'png'})
+
+    local = os.path.join(get_temp_dir('tiles'), f"thumb_{region_name}.png")
+    with open(local, 'wb') as f:
+        f.write(requests.get(url).content)
+
+    gcs_mkdir(gcs_full(thumb_dir))
+    _gcs_upload(local, thumb_gcs)
+    os.remove(local)
+    if logger:
+        logger(f"    Thumbnail saved: {thumb_gcs}")
+    return thumb_gcs
 
 
 def run_m6_publish(upload_gee=True, logger=None):
