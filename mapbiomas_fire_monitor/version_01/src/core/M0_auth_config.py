@@ -338,17 +338,14 @@ def get_temp_dir(subdir=None):
     """Cria e retorna o caminho absoluto para a pasta temporária local.
 
     Args:
-        subdir: Subpasta opcional (cogs, tiles, mosaics, samples, weights, stats).
+        subdir: Subpasta opcional (tiles, mosaics, samples, weights, stats).
 
     No Colab usa /content/TEMPORARIO/, local usa ./TEMPORARIO/.
-    Subpastas conhecidas săo criadas automaticamente.
+    Subpastas só săo criadas sob demanda via subdir.
     """
     is_colab = 'COLAB_RELEASE_TAG' in os.environ
     base = '/content/TEMPORARIO' if is_colab else os.path.abspath('TEMPORARIO')
     os.makedirs(base, exist_ok=True)
-    # Garante subpastas conhecidas
-    for name in ('cogs', 'tiles', 'mosaics', 'samples', 'weights', 'stats'):
-        os.makedirs(os.path.join(base, name), exist_ok=True)
     if subdir:
         path = os.path.join(base, subdir)
         os.makedirs(path, exist_ok=True)
