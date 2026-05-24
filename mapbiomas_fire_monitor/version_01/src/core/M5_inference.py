@@ -9,7 +9,7 @@ from pyproj import Transformer
 from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _gcs_download, _gcs_upload
 from M4_data_extractor import normalize
 
-BLOCK_SIZE = 1024
+BLOCK_SIZE = 8192
 
 def load_model_from_gcs(model_dir, fs, logger=None):
     """Carga modelo Keras + metadatos desde GCS.
@@ -64,7 +64,7 @@ def load_model_from_gcs(model_dir, fs, logger=None):
     _gcs_download(f"{model_dir}/weights.npz", local_npz)
 
     if logger:
-        logger(f"    Modelo cargado: {meta.get('training_id')} | {num_input} bandas | orden {band_order}")
+        logger(f"    Model '{meta.get('training_id')}' loaded ({num_input} bands)")
 
     model = tf.keras.Sequential()
     model.add(tf.keras.layers.Input(shape=(num_input,)))
@@ -160,7 +160,7 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
 
         if win_w <= 0 or win_h <= 0:
             if logger:
-                logger(f"    [AVISO] Celula {cell_id} fora dos limites dos COGs")
+                logger(f"    [WARN] {cell_id} is outside the image extent")
             return None
 
         out_transform = src_transform * Affine.translation(win_col, win_row)
@@ -184,7 +184,10 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
         with rasterio.open(local_tmp, 'w', **profile) as dst:
             n_blocks_h = math.ceil(win_h / BLOCK_SIZE)
             n_blocks_w = math.ceil(win_w / BLOCK_SIZE)
+            n_blocks = n_blocks_h * n_blocks_w
             block_idx = 0
+            if logger:
+                logger(f"    {cell_id}: {win_w}x{win_h} px in {n_blocks} blocks of {BLOCK_SIZE}")
 
             for row in range(0, win_h, BLOCK_SIZE):
                 for col in range(0, win_w, BLOCK_SIZE):
@@ -231,12 +234,12 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                         conf_sum += float(probs[burned].sum())
                         conf_count += n_burned
 
-                    if logger and block_idx % max(1, n_blocks_h * n_blocks_w // 10) == 0:
-                        logger(f"    {cell_id}: bloco {block_idx}/{n_blocks_h * n_blocks_w}")
+                    if logger and block_idx % max(1, n_blocks // 10) == 0:
+                        logger(f"    {cell_id}: block {block_idx}/{n_blocks}")
 
         if total_valid == 0:
             if logger:
-                logger(f"    [AVISO] Ningun pixel valido en {cell_id}")
+                logger(f"    [WARN] {cell_id}: all pixels are nodata")
             os.remove(local_tmp)
             return None
 
@@ -253,7 +256,7 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
 
     except Exception as e:
         if logger:
-            logger(f"    [ERROR] Fallo al clasificar {cell_id}: {e}")
+            logger(f"    [ERROR] {cell_id}: {e}")
         raise
     finally:
         for s in sources.values():

@@ -27,11 +27,11 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=
 
     if not tile_paths:
         if logger:
-            logger(f"    Ningun tile encontrado para {region} en {tiles_dir}")
+            logger(f"    [WARN] No tiles found for {region}")
         return None
 
     if logger:
-        logger(f"    Merge: {len(tile_paths)} tiles para {region}")
+        logger(f"    Merging {len(tile_paths)} tiles for {region}...")
 
     out_gcs = gcs_full(region_path(model_id, region, period, campaign))
     tmpdir = os.path.join(get_temp_dir('mosaics'), f"merge_{model_id}_{region}_{period}_{int(time.time())}")
@@ -63,7 +63,7 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=
         _gcs_upload(mosaic_local, out_gcs)
 
         if logger:
-            logger(f"    Mosaico guardado: {out_gcs}")
+            logger(f"    Mosaic saved: {out_gcs}")
         return out_gcs
 
     finally:
@@ -77,7 +77,7 @@ def generate_tile_stats(model_id, region, period, tile_results, fs=None, logger=
 
     if not tile_results:
         if logger:
-            logger(f"    Sin resultados de tiles para generar stats.")
+            logger(f"    [WARN] No tile results to compute stats")
         return
 
     gcs_path = gcs_full(tile_stats_path(model_id, campaign))
@@ -107,7 +107,7 @@ def generate_tile_stats(model_id, region, period, tile_results, fs=None, logger=
     os.remove(local_tmp)
 
     if logger:
-        logger(f"    stats_tile.csv guardado ({len(rows)} lineas)")
+        logger(f"    Tile stats saved ({len(rows)} tiles)")
 
 
 def generate_region_stats(model_id, region, period, tile_results, fs=None, logger=None, campaign=None):
@@ -203,8 +203,8 @@ def generate_region_stats(model_id, region, period, tile_results, fs=None, logge
     os.remove(local_cons)
 
     if logger:
-        logger(f"    stats_region.csv actualizado | consolidated_stats.csv actualizado")
-        logger(f"    {region} {period}: {burned_area_km2:.2f} km2 quemados ({burned_pixels:,} px)")
+        logger(f"    Region + consolidated stats updated")
+        logger(f"    {region} {period}: {burned_area_km2:.2f} km2 ({burned_pixels:,} px burned)")
 
 
 def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None, scale=10):
@@ -219,11 +219,11 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
 
     if not fs.exists(mosaic_gcs):
         if logger:
-            logger(f"    Mosaico no encontrado: {mosaic_gcs}")
+            logger(f"    [WARN] Mosaic not found for GEE upload")
         return False
 
     if logger:
-        logger(f"    Lanzando task GEE para: {mosaic_gcs}")
+        logger(f"    Submitting GEE import task...")
 
     img = ee.Image.loadGeoTIFF(gcs_uri)
 
@@ -245,5 +245,5 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
     task.start()
 
     if logger:
-        logger(f"    Task GEE lanzada! Asset: {asset_id}")
+        logger(f"    GEE task submitted! Asset: {asset_id}")
     return True

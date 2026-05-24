@@ -33,7 +33,7 @@ def get_queue_file():
 def load_queue():
     q_file = get_queue_file()
     if not _acquire_lock():
-        print("[WARN] load_queue: Could not acquire lock within timeout")
+        print("[WARN] Queue busy, returning empty")
         return []
     try:
         if os.path.exists(q_file):
@@ -46,7 +46,7 @@ def load_queue():
 def save_queue(q):
     q_file = get_queue_file()
     if not _acquire_lock():
-        print("[WARN] save_queue: Could not acquire lock within timeout, skipping")
+        print("[WARN] Queue busy, save skipped")
         return
     try:
         with open(q_file, 'w') as f:

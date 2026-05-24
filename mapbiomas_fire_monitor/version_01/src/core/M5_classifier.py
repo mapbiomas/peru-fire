@@ -53,7 +53,7 @@ def _run_classification(queue, out, progress_callback=None):
         return
 
     with out:
-        print("--- PHASE 1: CLASSIFICATION ---")
+        print("--- Phase 1: Classification ---")
 
     groups = defaultdict(list)
     for j in pending:
@@ -61,14 +61,14 @@ def _run_classification(queue, out, progress_callback=None):
 
     for (model_id, period), group in groups.items():
         with out:
-            print(f"\nGroup: model={model_id} | period={period} | {len(group)} region(s)")
+            print(f"\nGroup: model '{model_id}' | period {period} | {len(group)} region(s)")
 
         try:
             _process_period(model_id, period, group, out, progress_callback)
         except Exception as e:
             import traceback
             with out:
-                print(f"[FATAL] Group {model_id} | {period} failed:")
+                print(f"[FATAL] Group '{model_id}' | {period} failed:")
                 traceback.print_exc()
             q = load_queue()
             for job in group:
@@ -85,11 +85,11 @@ def _run_publish(queue, out):
 
     if not to_publish:
         with out:
-            print("No COMPLETED jobs to publish.")
+            print("No COMPLETED jobs to publish")
         return
 
     with out:
-        print("--- PHASE 2: PUBLISH (mosaic + stats + GEE) ---")
+        print("--- Phase 2: Publish (mosaic + stats + GEE) ---")
 
     fs = _get_fs()
     for job in to_publish:
@@ -100,7 +100,7 @@ def _run_publish(queue, out):
 
         try:
             with out:
-                print(f"Publishing: [{job['id']}]")
+                print(f"Publishing: {job['id']}")
 
             mosaic_path = merge_region_tiles(model_id, region, period, fs=fs, campaign=campaign)
 
@@ -109,7 +109,7 @@ def _run_publish(queue, out):
                 job['progress'] = 'error: no mosaic generated'
                 save_queue(queue)
                 with out:
-                    print(f"  No tiles to mosaic for {job['id']}, marking FAILED.")
+                    print(f"  No tiles to mosaic for {job['id']}, marking FAILED")
                 continue
 
             job['progress'] = '50% (mosaic)'
@@ -125,11 +125,11 @@ def _run_publish(queue, out):
             save_queue(queue)
 
             with out:
-                print(f"OK: {job['id']} finished.")
+                print(f"OK: {job['id']} finished")
 
         except Exception as e:
             with out:
-                print(f"ERROR publishing {job['id']}: {e}")
+                print(f"[ERROR] Publishing {job['id']}: {e}")
 
 
 def _process_period(model_id, period, group_jobs, out, progress_callback=None):
@@ -156,8 +156,6 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
         print(f"  Loading model '{model_id}'...")
 
     model_dir = f"gs://{CONFIG['bucket']}/{_gcs_models_base()}/{model_id}"
-    with out:
-        print(f"    Model dir: {model_dir}/")
     model, meta, bands_config, norm_stats, band_order = load_model_from_gcs(
         model_dir, fs, logger=lambda m, l=None: out.append_display_data(m)
     )
@@ -171,14 +169,14 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
     known_cogs = set(state.get(f'cogs_{period_type}', []))
 
     with out:
-        print(f"  Verifying COG paths for period '{period}'...")
+        print(f"  Checking COGs for period '{period}'...")
     for b, p in band_paths.items():
         # Extrai o nome base (ex: image_peru_fire_sentinel2_minnbr_2025_08_blue)
         cog_basename = os.path.basename(p).lower().replace('_cog.tif', '')
         in_cache = cog_basename in known_cogs
         exists = "OK (cache)" if in_cache else ("OK" if fs.exists(f"gs://{p}") else "MISSING")
         with out:
-            print(f"    {b}: gs://{p}  [{exists}]")
+            print(f"    {b}: {exists}")
 
     first_full = f"gs://{band_paths[band_order[0]]}"
     first_basename = os.path.basename(first_full).lower().replace('_cog.tif', '')
@@ -186,7 +184,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
         raise FileNotFoundError(f"COG not found at: {first_full}")
 
     with out:
-        print(f"  COGs streaming via /vsigs/ ({len(band_paths)} bands).")
+        print(f"  COGs opened via streaming ({len(band_paths)} bands)")
 
     all_tile_results = []
 
@@ -209,12 +207,12 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
         save_queue(q)
 
         with out:
-            print(f"\n  Region [{job_idx+1}/{len(group_jobs)}]: {region_name}")
+            print(f"\n  Region {job_idx+1}/{len(group_jobs)}: {region_name}")
 
         cells = region_cells_map[region_name]
         if not cells:
             with out:
-                print(f"  [WARN] No cells found for {region_name}.")
+                print(f"  [WARN] No cells found for {region_name}")
             continue
 
         total = len(cells)
@@ -268,7 +266,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
                     progress_callback(model_id, region_name, cell_id, i, total, 'done')
             else:
                 with out:
-                    print(f"    [WARN] {cell_id} returned no stats")
+                print(f"  [WARN] {cell_id}: no stats returned")
                 if progress_callback:
                     progress_callback(model_id, region_name, cell_id, i, total, 'error')
 
@@ -277,13 +275,13 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
         if tile_results:
             all_tile_results.extend(tile_results)
             with out:
-                print(f"  Generating stats for {len(tile_results)} tiles...")
+                print(f"  Computing stats for {len(tile_results)} tiles...")
             generate_tile_stats(model_id, region_name, period, tile_results, fs=fs, campaign=campaign)
             generate_region_stats(model_id, region_name, period, tile_results, fs=fs, campaign=campaign)
             archive_job_on_gcs(job, tile_results, fs=fs)
         else:
             with out:
-                print(f"  No tiles classified for {region_name}.")
+                print(f"  No tiles classified for {region_name}")
             delete_pending_job_gcs(model_id, region_name, period, fs=fs)
 
         q = load_queue()
@@ -294,7 +292,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
         save_queue(q)
 
         with out:
-            print(f"  OK: {region_name} completed.")
+            print(f"  OK: {region_name} completed")
 
 
 
@@ -313,5 +311,5 @@ def _get_region_cells(region_name):
         names = intersected.aggregate_array('name').getInfo()
         return [{'name': str(n)} for n in names]
     except Exception as e:
-        print(f"Error searching grid in GEE: {e}")
+        print(f"[ERROR] Grid search failed: {e}")
         return []
