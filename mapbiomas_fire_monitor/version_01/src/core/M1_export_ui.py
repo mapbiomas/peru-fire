@@ -247,22 +247,29 @@ class ExportDispatcherUI(PipelineStepUI):
             period_tabs.observe(lambda change, si=i: self._on_period_change(change, si), names='selected_index')
             self.sensor_children.append(period_tabs)
         
-        self.sensor_tabs.children = self.sensor_children
+        # Add Guide tab at index 0
+        guide_widget = widgets.HTML(Lang.GUIDE_M1_HTML)
+        self.sensor_tabs.children = [guide_widget] + self.sensor_children
+        self.sensor_tabs.set_title(0, Lang.TAB_GUIDE)
         for i, s in enumerate(sensors):
-            self.sensor_tabs.set_title(i, s)
-            
+            self.sensor_tabs.set_title(i + 1, s)
+
         self.sensor_tabs.observe(self._on_sensor_change, names='selected_index')
 
         self._load_tab(0, 0, 0, active_tasks)
+        self.sensor_tabs.selected_index = 1  # show first sensor, not guide
 
         if hasattr(self, '_last_sensor_idx'):
             try:
-                self.sensor_tabs.selected_index = self._last_sensor_idx
-                s_tab = self.sensor_children[self._last_sensor_idx]
-                s_tab.selected_index = self._last_period_idx
-                m_tab = s_tab.children[self._last_period_idx]
-                m_tab.selected_index = self._last_method_idx
-                self._load_tab(self._last_sensor_idx, self._last_period_idx, self._last_method_idx, active_tasks)
+                vis_idx = self._last_sensor_idx
+                self.sensor_tabs.selected_index = vis_idx
+                if vis_idx > 0:
+                    real_idx = vis_idx - 1
+                    s_tab = self.sensor_children[real_idx]
+                    s_tab.selected_index = self._last_period_idx
+                    m_tab = s_tab.children[self._last_period_idx]
+                    m_tab.selected_index = self._last_method_idx
+                    self._load_tab(real_idx, self._last_period_idx, self._last_method_idx, active_tasks)
             except Exception:
                 pass
 
@@ -270,11 +277,14 @@ class ExportDispatcherUI(PipelineStepUI):
         self.main_area.children = [PipelineStepUI.get_status_css(), widgets.HTML(header_html), self.sensor_tabs, footer]
 
     def _on_sensor_change(self, change):
-        s_idx = change['new']
-        p_tabs = self.sensor_children[s_idx]
+        vis_idx = change['new']
+        if vis_idx == 0:  # Guide tab
+            return
+        real_idx = vis_idx - 1
+        p_tabs = self.sensor_children[real_idx]
         p_idx = p_tabs.selected_index
         m_idx = p_tabs.children[p_idx].selected_index
-        self._load_tab(s_idx, p_idx, m_idx)
+        self._load_tab(real_idx, p_idx, m_idx)
 
     def _on_period_change(self, change, s_idx):
         p_idx = change['new']
@@ -309,11 +319,13 @@ class ExportDispatcherUI(PipelineStepUI):
         try:
             self.is_refreshing = True
             if hasattr(self, 'sensor_tabs'):
-                self._last_sensor_idx = self.sensor_tabs.selected_index
-                s_tab = self.sensor_children[self._last_sensor_idx]
-                self._last_period_idx = s_tab.selected_index
-                m_tab = s_tab.children[self._last_period_idx]
-                self._last_method_idx = m_tab.selected_index
+                self._last_sensor_idx = self.sensor_tabs.selected_index  # visual index
+                if self._last_sensor_idx > 0:
+                    real_idx = self._last_sensor_idx - 1
+                    s_tab = self.sensor_children[real_idx]
+                    self._last_period_idx = s_tab.selected_index
+                    m_tab = s_tab.children[self._last_period_idx]
+                    self._last_method_idx = m_tab.selected_index
                 
             self.show_loader("Sincronizando...")
             self.state = CacheManager.build_full_cache(logger=self.update_status, years=self.years)

@@ -232,20 +232,26 @@ class MosaicAssemblerUI(PipelineStepUI):
             period_tabs.observe(lambda change, si=i: self._on_period_change(change, si), names='selected_index')
             self.sensor_children.append(period_tabs)
         
-        self.sensor_tabs.children = self.sensor_children
+        # Add Guide tab at index 0
+        guide_widget = widgets.HTML(Lang.GUIDE_M2_HTML)
+        self.sensor_tabs.children = [guide_widget] + self.sensor_children
+        self.sensor_tabs.set_title(0, Lang.TAB_GUIDE)
         for i, s in enumerate(sensors):
-            self.sensor_tabs.set_title(i, s)
-            
+            self.sensor_tabs.set_title(i + 1, s)
+
         self.sensor_tabs.observe(self._on_sensor_change, names='selected_index')
 
         # Restaurar abas anteriores
-        s_idx, p_idx, m_idx = self.last_tabs
+        s_idx, p_idx, m_idx = self.last_tabs  # s_idx is already visual (with guide)
+        if s_idx == 0:
+            s_idx = 1  # fallback to first sensor
         self.sensor_tabs.selected_index = s_idx
-        self.sensor_children[s_idx].selected_index = p_idx
-        self.sensor_children[s_idx].children[p_idx].selected_index = m_idx
+        real_idx = s_idx - 1
+        self.sensor_children[real_idx].selected_index = p_idx
+        self.sensor_children[real_idx].children[p_idx].selected_index = m_idx
         
         # Gatilho inicial
-        self._load_tab(s_idx, p_idx, m_idx)
+        self._load_tab(real_idx, p_idx, m_idx)
 
         self.clear_main()
         self.main_area.children = [
@@ -256,11 +262,14 @@ class MosaicAssemblerUI(PipelineStepUI):
         ]
 
     def _on_sensor_change(self, change):
-        s_idx = change['new']
-        p_tabs = self.sensor_children[s_idx]
+        vis_idx = change['new']
+        if vis_idx == 0:  # Guide tab
+            return
+        real_idx = vis_idx - 1
+        p_tabs = self.sensor_children[real_idx]
         p_idx = p_tabs.selected_index
         m_idx = p_tabs.children[p_idx].selected_index
-        self._load_tab(s_idx, p_idx, m_idx)
+        self._load_tab(real_idx, p_idx, m_idx)
 
     def _on_period_change(self, change, s_idx):
         p_idx = change['new']
@@ -289,25 +298,29 @@ class MosaicAssemblerUI(PipelineStepUI):
 
     def _on_search_change(self, change):
         self.search_query = change['new']
-        # Força recarregamento da aba atual com o filtro
-        s_idx = self.sensor_tabs.selected_index
-        p_idx = self.sensor_children[s_idx].selected_index
-        m_idx = self.sensor_children[s_idx].children[p_idx].selected_index
+        vis_idx = self.sensor_tabs.selected_index
+        if vis_idx == 0:  # Guide tab
+            return
+        real_idx = vis_idx - 1
+        p_idx = self.sensor_children[real_idx].selected_index
+        m_idx = self.sensor_children[real_idx].children[p_idx].selected_index
         
-        # Limpa o "cache" visual da aba para forçar rebuild
-        target_container = self.sensor_children[s_idx].children[p_idx].children[m_idx]
+        target_container = self.sensor_children[real_idx].children[p_idx].children[m_idx]
         target_container.children = [widgets.HTML("<i>Filtrando...</i>")]
-        self._load_tab(s_idx, p_idx, m_idx)
+        self._load_tab(real_idx, p_idx, m_idx)
 
     def _refresh_cache(self):
         if self.is_refreshing: return
         try:
             self.is_refreshing = True
-            # Salva abas atuais antes do rebuild
-            s_idx = self.sensor_tabs.selected_index
-            p_idx = self.sensor_children[s_idx].selected_index
-            m_idx = self.sensor_children[s_idx].children[p_idx].selected_index
-            self.last_tabs = (s_idx, p_idx, m_idx)
+            # Salva abas atuais antes do rebuild (visual index with guide)
+            vis_idx = self.sensor_tabs.selected_index
+            if vis_idx == 0:
+                vis_idx = 1  # fallback to first sensor
+            real_idx = vis_idx - 1
+            p_idx = self.sensor_children[real_idx].selected_index
+            m_idx = self.sensor_children[real_idx].children[p_idx].selected_index
+            self.last_tabs = (vis_idx, p_idx, m_idx)
             
             self.show_loader("Sincronizando...")
             self.state = CacheManager.build_full_cache(logger=self.update_status, years=self.years)

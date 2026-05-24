@@ -131,6 +131,75 @@ class L:
         <p>Classified jobs (COMPLETED) appear automatically in M6.</p>
     </div>"""
 
+    GUIDE_M1_HTML = """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Module 1 (M1) — Multi-Sensor GEE Export</h3>
+        <p>M1 exports seamless, cloud-free satellite mosaics from Google Earth Engine to Google Cloud Storage (GCS) or GEE Assets.
+        Supports LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS, and MODIS with sensor-specific radiometric corrections and cloud masking.</p>
+        <div style='display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px;'>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Sensors &amp; Sources</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li><b>LANDSAT 5/7</b> — historical archive (1984–)</li>
+                    <li><b>LANDSAT 8/9</b> — current OLI/TIRS thermal bands</li>
+                    <li><b>Sentinel-2</b> — 10m resolution, 5-day revisit</li>
+                    <li><b>HLS</b> — harmonized LANDSAT/Sentinel product</li>
+                    <li><b>MODIS</b> — daily global coverage (250m–1km)</li>
+                </ul>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Mosaic Methods</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li><b>minnbr</b> — least cloud from NBR ranking</li>
+                    <li><b>minndvi</b> — least cloud from NDVI ranking</li>
+                    <li><b>median</b> — per-pixel composite median</li>
+                    <li><b>minnbr_buffer</b> — minnbr with INPE fire buffer mask</li>
+                </ul>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Workflow</h4>
+                <ol style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li>Select sensor tab (LANDSAT, S2, HLS, MODIS)</li>
+                    <li>Pick period (monthly / annual)</li>
+                    <li>Choose mosaic method</li>
+                    <li>Check date &amp; band cells</li>
+                    <li>Click <b>Start Export</b></li>
+                </ol>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Technical Info</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li>Per-sensor radiometric correction</li>
+                    <li>Cloud masking via QA_PIXEL, Fmask, CS+</li>
+                    <li>INPE fire perimeter buffer mask</li>
+                    <li>Output: GeoTIFF chunks in GCS / ImageCollection in GEE</li>
+                </ul>
+            </div>
+        </div>
+        <div style='margin-top:15px;padding:10px;background:#fef3e2;border-left:4px solid #e67e22;border-radius:4px;font-size:13px;'>
+            <b>Tip:</b> Use <b>Sync Data</b> to refresh the cache. Use <b>Select Pending</b> to auto-check all available dates.
+        </div>
+    </div>"""
+
+    GUIDE_M2_HTML = """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>Module 2 (M2) — COG Mosaic Assembly</h3>
+        <p>M2 assembles the GeoTIFF chunks exported by M1 into full national Cloud-Optimized GeoTIFFs (COGs) using GDAL.</p>
+        <h4>Flow:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>Check status</b> — OK (COG exists), READY (chunks available), MISS (nothing available)</li>
+            <li><b>Select cells</b> — check the bands you want to assemble</li>
+            <li>Click <b>Start Assembly</b></li>
+            <li>GDAL downloads chunks → builds VRT → converts to COG (LZW) → uploads to GCS</li>
+        </ol>
+        <h4>Requirements:</h4>
+        <ul style='line-height:1.6;'>
+            <li>GDAL installed (<code>gdalbuildvrt</code>, <code>gdal_translate</code>)</li>
+            <li>M1 must have been run first to produce source chunks</li>
+        </ul>
+        <div style='margin-top:15px;padding:10px;background:#e8f8ed;border-left:4px solid #27ae60;border-radius:4px;font-size:13px;'>
+            <b>Tip:</b> COGs are stored in <code>.../COG/</code> and consumed by M4 (model training) and M5 (classification).
+        </div>
+    </div>"""
+
     # ── Map / Grid ───────────────────────────────────────
     LIVE_PROCESSING = "Live Processing"
     CURRENT_TILE = "Current tile"
@@ -486,6 +555,73 @@ STRINGS_ES = {
             <li>Despues de eliminar, registre nuevamente el trabajo en <b>{tab_register}</b>.</li>
         </ul>
     </div>""",
+    "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Modulo 1 (M1) — Exportacion GEE Multi-Sensor</h3>
+        <p>M1 exporta mosaicos satelitales sin nubes desde Google Earth Engine hacia Google Cloud Storage (GCS) o Assets GEE.
+        Soporta LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS y MODIS con correcciones radiometricas y mascaras de nubes especificas por sensor.</p>
+        <div style='display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px;'>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Sensores y Fuentes</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li><b>LANDSAT 5/7</b> — archivo historico (1984–)</li>
+                    <li><b>LANDSAT 8/9</b> — OLI/TIRS actual con bandas termales</li>
+                    <li><b>Sentinel-2</b> — 10m de resolucion, 5 dias de revista</li>
+                    <li><b>HLS</b> — producto armonizado LANDSAT/Sentinel</li>
+                    <li><b>MODIS</b> — cobertura global diaria (250m–1km)</li>
+                </ul>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Metodos de Mosaico</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li><b>minnbr</b> — menor nube segun ranking NBR</li>
+                    <li><b>minndvi</b> — menor nube segun ranking NDVI</li>
+                    <li><b>median</b> — composicion mediana pixel a pixel</li>
+                    <li><b>minnbr_buffer</b> — minnbr con mascara de buffer de fuego INPE</li>
+                </ul>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Flujo de Trabajo</h4>
+                <ol style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li>Seleccione la pestana del sensor (LANDSAT, S2, HLS, MODIS)</li>
+                    <li>Elija el periodo (mensual / anual)</li>
+                    <li>Escoja el metodo de mosaico</li>
+                    <li>Marque las celdas de fecha y banda</li>
+                    <li>Haga clic en <b>Iniciar Exportacion</b></li>
+                </ol>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Informacion Tecnica</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li>Correccion radiometrica por sensor</li>
+                    <li>Mascara de nubes via QA_PIXEL, Fmask, CS+</li>
+                    <li>Mascara de buffer de incendios INPE</li>
+                    <li>Salida: fragmentos GeoTIFF en GCS / ImageCollection en GEE</li>
+                </ul>
+            </div>
+        </div>
+        <div style='margin-top:15px;padding:10px;background:#fef3e2;border-left:4px solid #e67e22;border-radius:4px;font-size:13px;'>
+            <b>Consejo:</b> Use <b>Sincronizar Datos</b> para actualizar el cache. Use <b>Seleccionar Pendientes</b> para marcar automaticamente todas las fechas disponibles.
+        </div>
+    </div>""",
+    "GUIDE_M2_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>Modulo 2 (M2) — Montaje de Mosaicos COG</h3>
+        <p>M2 ensambla los fragmentos GeoTIFF exportados por M1 en COGs (Cloud-Optimized GeoTIFF) nacionales completos usando GDAL.</p>
+        <h4>Flujo:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>Verifique el estado</b> — OK (COG existe), READY (fragmentos disponibles), MISS (nada disponible)</li>
+            <li><b>Seleccione celdas</b> — marque las bandas que desea ensamblar</li>
+            <li>Haga clic en <b>Iniciar Montaje</b></li>
+            <li>GDAL descarga fragmentos → construye VRT → convierte a COG (LZW) → sube a GCS</li>
+        </ol>
+        <h4>Requisitos:</h4>
+        <ul style='line-height:1.6;'>
+            <li>GDAL instalado (<code>gdalbuildvrt</code>, <code>gdal_translate</code>)</li>
+            <li>M1 debe haberse ejecutado primero para producir los fragmentos fuente</li>
+        </ul>
+        <div style='margin-top:15px;padding:10px;background:#e8f8ed;border-left:4px solid #27ae60;border-radius:4px;font-size:13px;'>
+            <b>Consejo:</b> Los COGs se almacenan en <code>.../COG/</code> y son consumidos por M4 (entrenamiento) y M5 (clasificacion).
+        </div>
+    </div>""",
     # Map / Grid
     "LIVE_PROCESSING": "Procesando en vivo",
     "CURRENT_TILE": "Tile actual",
@@ -811,6 +947,73 @@ STRINGS_PT = {
             <li><b>{tab_done}</b> — exclua por regiao ou modelo completo.</li>
             <li>Apos excluir, registre novamente o trabalho em <b>{tab_register}</b>.</li>
         </ul>
+    </div>""",
+    "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Modulo 1 (M1) — Exportacao GEE Multi-Sensor</h3>
+        <p>M1 exporta mosaicos de satelite sem nuvens do Google Earth Engine para o Google Cloud Storage (GCS) ou Assets GEE.
+        Suporta LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS e MODIS com correcoes radiometricas e mascaras de nuvens especificas por sensor.</p>
+        <div style='display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px;'>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Sensores e Fontes</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li><b>LANDSAT 5/7</b> — arquivo historico (1984–)</li>
+                    <li><b>LANDSAT 8/9</b> — OLI/TIRS atual com bandas termais</li>
+                    <li><b>Sentinel-2</b> — 10m de resolucao, 5 dias de revisita</li>
+                    <li><b>HLS</b> — produto harmonizado LANDSAT/Sentinel</li>
+                    <li><b>MODIS</b> — cobertura global diaria (250m–1km)</li>
+                </ul>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Metodos de Mosaico</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li><b>minnbr</b> — menor nuvem segundo ranking NBR</li>
+                    <li><b>minndvi</b> — menor nuvem segundo ranking NDVI</li>
+                    <li><b>median</b> — composicao mediana pixel a pixel</li>
+                    <li><b>minnbr_buffer</b> — minnbr com mascara de buffer de fogo INPE</li>
+                </ul>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Fluxo de Trabalho</h4>
+                <ol style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li>Selecione a aba do sensor (LANDSAT, S2, HLS, MODIS)</li>
+                    <li>Escolha o periodo (mensal / anual)</li>
+                    <li>Selecione o metodo de mosaico</li>
+                    <li>Marque as celulas de data e banda</li>
+                    <li>Clique em <b>Iniciar Exportacao</b></li>
+                </ol>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Informacao Tecnica</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li>Correcao radiometrica por sensor</li>
+                    <li>Mascara de nuvens via QA_PIXEL, Fmask, CS+</li>
+                    <li>Mascara de buffer de incendios INPE</li>
+                    <li>Saida: fragmentos GeoTIFF no GCS / ImageCollection no GEE</li>
+                </ul>
+            </div>
+        </div>
+        <div style='margin-top:15px;padding:10px;background:#fef3e2;border-left:4px solid #e67e22;border-radius:4px;font-size:13px;'>
+            <b>Dica:</b> Use <b>Sincronizar Dados</b> para atualizar o cache. Use <b>Selecionar Pendentes</b> para marcar automaticamente todas as datas disponiveis.
+        </div>
+    </div>""",
+    "GUIDE_M2_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>Modulo 2 (M2) — Montagem de Mosaicos COG</h3>
+        <p>M2 monta os fragmentos GeoTIFF exportados pelo M1 em COGs (Cloud-Optimized GeoTIFF) nacionais completos usando GDAL.</p>
+        <h4>Fluxo:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>Verifique o status</b> — OK (COG existe), READY (fragmentos disponiveis), MISS (nada disponivel)</li>
+            <li><b>Selecione celulas</b> — marque as bandas que deseja montar</li>
+            <li>Clique em <b>Iniciar Montagem</b></li>
+            <li>GDAL baixa fragmentos → constroi VRT → converte para COG (LZW) → envia ao GCS</li>
+        </ol>
+        <h4>Requisitos:</h4>
+        <ul style='line-height:1.6;'>
+            <li>GDAL instalado (<code>gdalbuildvrt</code>, <code>gdal_translate</code>)</li>
+            <li>M1 deve ter sido executado primeiro para produzir os fragmentos fonte</li>
+        </ul>
+        <div style='margin-top:15px;padding:10px;background:#e8f8ed;border-left:4px solid #27ae60;border-radius:4px;font-size:13px;'>
+            <b>Dica:</b> Os COGs sao armazenados em <code>.../COG/</code> e consumidos pelo M4 (treinamento) e M5 (classificacao).
+        </div>
     </div>""",
     # Map / Grid
     "LIVE_PROCESSING": "Processando ao vivo",
@@ -1138,6 +1341,73 @@ STRINGS_FR = {
             <li>Apres suppression, reenregistrez le travail dans <b>{tab_register}</b>.</li>
         </ul>
     </div>""",
+    "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Module 1 (M1) — Exportation GEE Multi-Capteur</h3>
+        <p>M1 exporte des mosaiques satellitaires sans nuage depuis Google Earth Engine vers Google Cloud Storage (GCS) ou des Assets GEE.
+        Supporte LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS et MODIS avec corrections radiometriques et masquage des nuages specifiques par capteur.</p>
+        <div style='display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px;'>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Capteurs et Sources</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li><b>LANDSAT 5/7</b> — archive historique (1984–)</li>
+                    <li><b>LANDSAT 8/9</b> — OLI/TIRS actuel avec bandes thermales</li>
+                    <li><b>Sentinel-2</b> — 10m de resolution, revisite 5 jours</li>
+                    <li><b>HLS</b> — produit harmonise LANDSAT/Sentinel</li>
+                    <li><b>MODIS</b> — couverture globale quotidienne (250m–1km)</li>
+                </ul>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Methodes de Mosaique</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li><b>minnbr</b> — moins de nuages selon le classement NBR</li>
+                    <li><b>minndvi</b> — moins de nuages selon le classement NDVI</li>
+                    <li><b>median</b> — composition mediane pixel par pixel</li>
+                    <li><b>minnbr_buffer</b> — minnbr avec masque tampon de feu INPE</li>
+                </ul>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Flux de Travail</h4>
+                <ol style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li>Selectionnez l onglet du capteur (LANDSAT, S2, HLS, MODIS)</li>
+                    <li>Choisissez la periode (mensuelle / annuelle)</li>
+                    <li>Selectionnez la methode de mosaique</li>
+                    <li>Cochez les cellules de date et de bande</li>
+                    <li>Cliquez sur <b>Demarrer Exportation</b></li>
+                </ol>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Informations Techniques</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li>Correction radiometrique par capteur</li>
+                    <li>Masquage des nuages via QA_PIXEL, Fmask, CS+</li>
+                    <li>Masque tampon des incendies INPE</li>
+                    <li>Sortie: fragments GeoTIFF dans GCS / ImageCollection dans GEE</li>
+                </ul>
+            </div>
+        </div>
+        <div style='margin-top:15px;padding:10px;background:#fef3e2;border-left:4px solid #e67e22;border-radius:4px;font-size:13px;'>
+            <b>Conseil:</b> Utilisez <b>Synchroniser Donnees</b> pour actualiser le cache. Utilisez <b>Selectionner en Attente</b> pour cocher automatiquement toutes les dates disponibles.
+        </div>
+    </div>""",
+    "GUIDE_M2_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>Module 2 (M2) — Assemblage de Mosaiques COG</h3>
+        <p>M2 assemble les fragments GeoTIFF exportes par M1 en COGs (Cloud-Optimized GeoTIFF) nationaux complets en utilisant GDAL.</p>
+        <h4>Flux:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>Verifiez le statut</b> — OK (COG existe), READY (fragments disponibles), MISS (rien de disponible)</li>
+            <li><b>Selectionnez les cellules</b> — cochez les bandes a assembler</li>
+            <li>Cliquez sur <b>Demarrer Assemblage</b></li>
+            <li>GDAL telecharge les fragments → construit VRT → convertit en COG (LZW) → upload vers GCS</li>
+        </ol>
+        <h4>Exigences:</h4>
+        <ul style='line-height:1.6;'>
+            <li>GDAL installe (<code>gdalbuildvrt</code>, <code>gdal_translate</code>)</li>
+            <li>M1 doit avoir ete execute d abord pour produire les fragments source</li>
+        </ul>
+        <div style='margin-top:15px;padding:10px;background:#e8f8ed;border-left:4px solid #27ae60;border-radius:4px;font-size:13px;'>
+            <b>Conseil:</b> Les COGs sont stockes dans <code>.../COG/</code> et consommes par M4 (entrainement) et M5 (classification).
+        </div>
+    </div>""",
     # Map / Grid
     "LIVE_PROCESSING": "Traitement en direct",
     "CURRENT_TILE": "Tile actuel",
@@ -1463,6 +1733,73 @@ STRINGS_ID = {
             <li><b>{tab_done}</b> — hapus berdasarkan wilayah atau model lengkap.</li>
             <li>Setelah dihapus, daftarkan ulang tugas di <b>{tab_register}</b>.</li>
         </ul>
+    </div>""",
+    "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Modul 1 (M1) — Ekspor GEE Multi-Sensor</h3>
+        <p>M1 mengekspor mozaik satelit bebas awan dari Google Earth Engine ke Google Cloud Storage (GCS) atau Aset GEE.
+        Mendukung LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS, dan MODIS dengan koreksi radiometrik dan masking awan khusus per sensor.</p>
+        <div style='display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px;'>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Sensor dan Sumber</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li><b>LANDSAT 5/7</b> — arsip historis (1984–)</li>
+                    <li><b>LANDSAT 8/9</b> — OLI/TIRS terkini dengan pita termal</li>
+                    <li><b>Sentinel-2</b> — resolusi 10m, kunjungan ulang 5 hari</li>
+                    <li><b>HLS</b> — produk harmonisasi LANDSAT/Sentinel</li>
+                    <li><b>MODIS</b> — cakupan global harian (250m–1km)</li>
+                </ul>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Metode Mozaik</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li><b>minnbr</b> — awan paling sedikit berdasarkan peringkat NBR</li>
+                    <li><b>minndvi</b> — awan paling sedikit berdasarkan peringkat NDVI</li>
+                    <li><b>median</b> — komposit median per piksel</li>
+                    <li><b>minnbr_buffer</b> — minnbr dengan masker buffer api INPE</li>
+                </ul>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Alur Kerja</h4>
+                <ol style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li>Pilih tab sensor (LANDSAT, S2, HLS, MODIS)</li>
+                    <li>Pilih periode (bulanan / tahunan)</li>
+                    <li>Pilih metode mozaik</li>
+                    <li>Centang sel tanggal dan pita</li>
+                    <li>Klik <b>Mulai Ekspor</b></li>
+                </ol>
+            </div>
+            <div style='background:#fafafa;border:1px solid #eee;padding:15px;border-radius:6px;'>
+                <h4 style='color:#e67e22;margin-top:0;'>Informasi Teknis</h4>
+                <ul style='padding-left:18px;font-size:13px;line-height:1.6;'>
+                    <li>Koreksi radiometrik per sensor</li>
+                    <li>Masking awan via QA_PIXEL, Fmask, CS+</li>
+                    <li>Masker buffer kebakaran INPE</li>
+                    <li>Keluaran: fragmen GeoTIFF di GCS / ImageCollection di GEE</li>
+                </ul>
+            </div>
+        </div>
+        <div style='margin-top:15px;padding:10px;background:#fef3e2;border-left:4px solid #e67e22;border-radius:4px;font-size:13px;'>
+            <b>Tips:</b> Gunakan <b>Sinkron Data</b> untuk memperbarui cache. Gunakan <b>Pilih Tertunda</b> untuk mencentang otomatis semua tanggal yang tersedia.
+        </div>
+    </div>""",
+    "GUIDE_M2_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>Modul 2 (M2) — Perakitan Mozaik COG</h3>
+        <p>M2 merakit fragmen GeoTIFF yang diekspor oleh M1 menjadi COG (Cloud-Optimized GeoTIFF) nasional lengkap menggunakan GDAL.</p>
+        <h4>Alur:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>Periksa status</b> — OK (COG ada), READY (fragmen tersedia), MISS (tidak tersedia)</li>
+            <li><b>Pilih sel</b> — centang pita yang ingin dirakit</li>
+            <li>Klik <b>Mulai Perakitan</b></li>
+            <li>GDAL mengunduh fragmen → membangun VRT → konversi ke COG (LZW) → unggah ke GCS</li>
+        </ol>
+        <h4>Persyaratan:</h4>
+        <ul style='line-height:1.6;'>
+            <li>GDAL terinstal (<code>gdalbuildvrt</code>, <code>gdal_translate</code>)</li>
+            <li>M1 harus dijalankan terlebih dahulu untuk menghasilkan fragmen sumber</li>
+        </ul>
+        <div style='margin-top:15px;padding:10px;background:#e8f8ed;border-left:4px solid #27ae60;border-radius:4px;font-size:13px;'>
+            <b>Tips:</b> COG disimpan di <code>.../COG/</code> dan dikonsumsi oleh M4 (pelatihan) dan M5 (klasifikasi).
+        </div>
     </div>""",
     # Map / Grid
     "LIVE_PROCESSING": "Pemrosesan Langsung",
