@@ -193,7 +193,7 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
         conf_count = 0
 
         _tile_t0 = time.time()
-    with rasterio.open(local_tmp, 'w', **profile) as dst:
+        with rasterio.open(local_tmp, 'w', **profile) as dst:
             n_blocks_h = math.ceil(win_h / BLOCK_SIZE)
             n_blocks_w = math.ceil(win_w / BLOCK_SIZE)
             n_blocks = n_blocks_h * n_blocks_w
