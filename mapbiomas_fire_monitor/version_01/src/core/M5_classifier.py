@@ -71,13 +71,46 @@ def _run_classification(plan, out, progress_callback=None, n_workers=None):
         groups[(j['model'], j['period'])].append(j)
 
     total_groups = len(groups)
+    
+    # Calcula total de tiles em todos os grupos
+    import ee
+    authenticate = __import__('M0_auth_config', fromlist=['authenticate']).authenticate
+    authenticate()
+    
+    total_tiles_all_groups = 0
+    groups_cells_count = {}
+    for (model_id, period), group_jobs in groups.items():
+        region_cells_map = {}
+        for job in group_jobs:
+            region = job['region']
+            try:
+                cim = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
+                region_cells = (cim.filter(ee.Filter.eq('region', region))
+                               .aggregate_array('name').getInfo() or [])
+                region_cells_map[region] = [{'name': c} for c in region_cells]
+            except:
+                region_cells_map[region] = []
+        group_total = sum(len(cells) for cells in region_cells_map.values())
+        groups_cells_count[(model_id, period)] = group_total
+        total_tiles_all_groups += group_total
+    
+    global_start_time = time.time()
+    global_completed = 0
+    
     for g_idx, ((model_id, period), group) in enumerate(groups.items()):
         with out:
             print(f"\nGroup {g_idx+1}/{total_groups}: model '{model_id}' | period {period} | {len(group)} region(s)")
 
         try:
             _process_period(model_id, period, group, out, progress_callback, n_workers,
-                           g_idx=g_idx, total_groups=total_groups)
+                           g_idx=g_idx, total_groups=total_groups,
+                           global_start_time=global_start_time, 
+                           global_completed=global_completed,
+                           total_tiles_all_groups=total_tiles_all_groups,
+                           n_workers=n_workers)
+            
+            # Atualiza progresso global
+            global_completed += groups_cells_count.get((model_id, period), 0)
         except Exception as e:
             import traceback
             with out:
@@ -89,6 +122,7 @@ def _run_classification(plan, out, progress_callback=None, n_workers=None):
                     if pj['id'] == job['id']:
                         pj['status'] = 'FAILED'
             save_workplan(p)
+            global_completed += groups_cells_count.get((model_id, period), 0)
             continue
 
 
@@ -124,7 +158,8 @@ def _classify_one_tile(cell, model_id, region_name, period, campaign,
         return ('warn', cell_id, region_name, None, worker_id)
 
 
-def _process_period(model_id, period, group_jobs, out, progress_callback=None, n_workers=None, g_idx=0, total_groups=1):
+def _process_period(model_id, period, group_jobs, out, progress_callback=None, n_workers=None, g_idx=0, total_groups=1,
+                    global_start_time=None, global_completed=0, total_tiles_all_groups=0):
     """Procesa todas las regiones de un (modelo, periodo) compartiendo COGs.
 
     Los COGs se descargan una unica vez y se reusan para todos los tiles
@@ -254,15 +289,28 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                         progress_callback(model_id, reg, cell_id, completed_in_region, total, 'done')
                     group_elapsed = now - _t0
                     avg_tile = group_elapsed / max(_done, 1)
-                    group_remaining = avg_tile * (total_cells_group - _done)
+                    group_remaining = (avg_tile * (total_cells_group - _done)) / max(n_workers, 1)
                     group_total = group_elapsed + group_remaining
+                    
+                    # Calcula tempo global considerando TODOS os períodos
+                    if global_start_time is not None and total_tiles_all_groups > 0:
+                        global_elapsed = now - global_start_time
+                        global_processed = global_completed + _done
+                        global_avg = global_elapsed / max(global_processed, 1)
+                        global_remaining_tiles = total_tiles_all_groups - global_processed
+                        global_eta = (global_avg * global_remaining_tiles) / max(n_workers, 1)
+                        global_total = global_elapsed + global_eta
+                        eta_str = f" | TOTAL GLOBAL ~{_fmt_time(global_total)} | remaining ~{_fmt_time(global_eta)}"
+                    else:
+                        eta_str = f" | total ~{_fmt_time(group_total)} | remaining ~{_fmt_time(group_remaining)}"
+                    
                     _log(out, f"    [W{wid}] <<< {cell_id} done in {_fmt_time(tile_elapsed)} "
                           f"| tile {completed_in_region}/{total}"
                           f" | period {g_idx+1}/{total_groups}"
                           f" | region {job_idx+1}/{_total_cards}"
                           f" | group {_done}/{total_cells_group}"
                           f" | elapsed group {_fmt_time(group_elapsed)}"
-                          f" | total ~{_fmt_time(group_total)} | remaining ~{_fmt_time(group_remaining)}")
+                          + eta_str)
 
                 # ETA log every 5 tiles or on the last one
                 if completed_in_region == total or now - _last_eta_log >= 15 or completed_in_region % 5 == 0:
@@ -270,21 +318,51 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                     group_elapsed = now - _t0
                     remaining = total_cells_group - (processed + completed_in_region)
                     avg = group_elapsed / max(_done, 1)
-                    eta = avg * remaining
+                    eta = (avg * remaining) / max(n_workers, 1)
                     total_proj = group_elapsed + eta
-                    with out:
-                        print(f"  > Group progress: {_done}/{total_cells_group} tiles "
-                              f"| elapsed {_fmt_time(group_elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(eta)}")
+                    
+                    # Calcula tempo global
+                    if global_start_time is not None and total_tiles_all_groups > 0:
+                        global_elapsed = now - global_start_time
+                        global_processed = global_completed + _done
+                        global_avg = global_elapsed / max(global_processed, 1)
+                        global_remaining_tiles = total_tiles_all_groups - global_processed
+                        global_eta = (global_avg * global_remaining_tiles) / max(n_workers, 1)
+                        global_total = global_elapsed + global_eta
+                        with out:
+                            print(f"  > Group progress: {_done}/{total_cells_group} tiles "
+                                  f"| elapsed {_fmt_time(group_elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(eta)}")
+                            print(f"  > GLOBAL: {global_processed}/{total_tiles_all_groups} tiles "
+                                  f"| elapsed {_fmt_time(global_elapsed)} | total ~{_fmt_time(global_total)} | remaining ~{_fmt_time(global_eta)}")
+                    else:
+                        with out:
+                            print(f"  > Group progress: {_done}/{total_cells_group} tiles "
+                                  f"| elapsed {_fmt_time(group_elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(eta)}")
 
             # ETA final da regiao (garantido)
             elapsed = time.time() - _t0
             remaining = total_cells_group - (processed + completed_in_region)
             avg = elapsed / max(_done, 1)
-            eta = avg * remaining
+            eta = (avg * remaining) / max(n_workers, 1)
             total_proj = elapsed + eta
-            with out:
-                print(f"  > Group progress: {_done}/{total_cells_group} tiles "
-                      f"| elapsed {_fmt_time(elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(eta)}")
+            
+            # Calcula tempo global final
+            if global_start_time is not None and total_tiles_all_groups > 0:
+                global_elapsed = time.time() - global_start_time
+                global_processed = global_completed + _done
+                global_avg = global_elapsed / max(global_processed, 1)
+                global_remaining_tiles = total_tiles_all_groups - global_processed
+                global_eta = (global_avg * global_remaining_tiles) / max(n_workers, 1)
+                global_total = global_elapsed + global_eta
+                with out:
+                    print(f"  > Group progress: {_done}/{total_cells_group} tiles "
+                          f"| elapsed {_fmt_time(elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(eta)}")
+                    print(f"  > GLOBAL: {global_processed}/{total_tiles_all_groups} tiles "
+                          f"| elapsed {_fmt_time(global_elapsed)} | total ~{_fmt_time(global_total)} | remaining ~{_fmt_time(global_eta)}")
+            else:
+                with out:
+                    print(f"  > Group progress: {_done}/{total_cells_group} tiles "
+                          f"| elapsed {_fmt_time(elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(eta)}")
 
             # Salva progresso no workplan
             p = load_workplan()
