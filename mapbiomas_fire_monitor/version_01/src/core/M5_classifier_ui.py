@@ -286,6 +286,9 @@ class M5WorkplanUI:
         skipped = 0
         gcs_ok = 0
         gcs_fail = 0
+        with self.out_msg:
+            clear_output(wait=True)
+            display(HTML("<i>⏳ Salvando no GCS...</i>"))
         fs = _get_fs()
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
         for r in regions:
@@ -303,17 +306,26 @@ class M5WorkplanUI:
                     gcs_fail += 1
                 self.plan.append(job)
                 added += 1
-        save_workplan(self.plan)
+        saved_ok = save_workplan(self.plan)
         for c in self.chk_regions + self.chk_periods:
             c.value = False
         with self.out_msg:
             clear_output()
-            if added > 0:
+            if added == 0 and skipped == 0:
+                display(HTML("<b style='color:red;'>Nenhuma tarea foi adicionada.</b>"))
+            elif added > 0:
                 msg = f"<b style='color:green;'>Exito: {added} tareas agregadas.</b>"
+                failures = []
+                if not saved_ok:
+                    failures.append("falha ao salvar arquivo local (lock ocupado)")
                 if gcs_fail > 0:
-                    msg += f"<br><span style='color:orange;'>{gcs_ok} salvas no GCS, {gcs_fail} falharam.</span>"
+                    failures.append(f"{gcs_fail} falharam no GCS")
+                if failures:
+                    msg += f"<br><span style='color:red;'>⚠ {'; '.join(failures)}.</span>"
+                if gcs_ok > 0:
+                    msg += f"<br><span style='color:green;'>{gcs_ok} salvas no GCS.</span>"
                 if skipped > 0:
-                    msg += f"<br><span style='color:orange;'>Atencion: {skipped} omitidas (ya en la cola).</span>"
+                    msg += f"<br><span style='color:orange;'>{skipped} omitidas (ya en la cola).</span>"
                 display(HTML(msg))
             else:
                 display(HTML(f"<b style='color:orange;'>Atencion: {skipped} tareas ya estaban en la cola.</b>"))
@@ -452,6 +464,9 @@ class M5WorkplanUI:
                     skipped = 0
                     gcs_ok = 0
                     gcs_fail = 0
+                    with self.out_msg:
+                        clear_output(wait=True)
+                        display(HTML("<i>⏳ Salvando no GCS...</i>"))
                     fs = _get_fs()
                     for r in regs:
                         for p in pers:
@@ -468,12 +483,17 @@ class M5WorkplanUI:
                                 gcs_fail += 1
                             self.plan.append(job)
                             added += 1
-                    save_workplan(self.plan)
+                    saved_ok = save_workplan(self.plan)
                     with self.out_msg:
                         clear_output()
                         msg = f"<span style='color:green;'>{added} cargadas, {skipped} omitidas.</span>"
+                        failures = []
+                        if not saved_ok:
+                            failures.append("falha ao salvar arquivo local (lock ocupado)")
                         if gcs_fail > 0:
-                            msg += f"<br><span style='color:orange;'>{gcs_ok} salvas no GCS, {gcs_fail} falharam.</span>"
+                            failures.append(f"{gcs_fail} falharam no GCS")
+                        if failures:
+                            msg += f"<br><span style='color:red;'>⚠ {'; '.join(failures)}.</span>"
                         display(HTML(msg))
                     self._refresh_ui()
                 return _h

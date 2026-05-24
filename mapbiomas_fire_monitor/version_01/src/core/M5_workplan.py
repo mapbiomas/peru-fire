@@ -4,6 +4,18 @@ import time
 import datetime
 from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs
 
+# --- Stale lock cleanup on startup ---
+_lock_path_stale = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    'm5_workplan.json.lock'
+)
+if os.path.exists(_lock_path_stale):
+    try:
+        os.remove(_lock_path_stale)
+        print(f"[INFO] Removed stale lock: {_lock_path_stale}")
+    except OSError:
+        pass
+
 def _lock_path():
     return get_workplan_file() + '.lock'
 
@@ -47,10 +59,11 @@ def save_workplan(plan):
     plan_file = get_workplan_file()
     if not _acquire_lock():
         print("[WARN] Workplan busy, save skipped")
-        return
+        return False
     try:
         with open(plan_file, 'w') as f:
             json.dump(plan, f, indent=2)
+        return True
     finally:
         _release_lock()
 
