@@ -1,6 +1,6 @@
 import os
 from collections import defaultdict
-from M0_auth_config import CONFIG, _get_fs, _gcs_models_base, _gcs_download
+from M0_auth_config import CONFIG, _get_fs, _gcs_models_base
 from M_cache import CacheManager
 from M5_queue import load_queue, save_queue, make_job_id, tile_path, gcs_full, archive_job_on_gcs, delete_pending_job_gcs
 from M5_inference import load_model_from_gcs, classify_cell_with_cogs, build_band_paths
@@ -139,7 +139,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
     de todas las regiones del grupo.
     """
     import ee
-    from M0_auth_config import authenticate, _gcs_models_base, get_temp_dir
+    from M0_auth_config import authenticate, _gcs_models_base
 
     authenticate()
     fs = _get_fs()
@@ -185,148 +185,117 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
     if first_basename not in known_cogs and not fs.exists(first_full):
         raise FileNotFoundError(f"COG not found at: {first_full}")
 
-    # 3. Download de COGs (uma vez para o periodo inteiro)
-    cogs = {}
-    try:
-        for b in band_order:
-            cog_full = f"gs://{band_paths[b]}"
-            local_path = os.path.join(get_temp_dir('cogs'), os.path.basename(band_paths[b]))
-            if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
-                with out:
-                    print(f"    {b}: using cached {os.path.basename(band_paths[b])}")
-            else:
-                if os.path.exists(local_path):
-                    os.remove(local_path)
-                with out:
-                    print(f"  Downloading COG: {os.path.basename(band_paths[b])}...")
-                _gcs_download(cog_full, local_path)
-                sz = os.path.getsize(local_path)
-                if sz == 0:
-                    raise IOError(f"Downloaded COG is empty (0 bytes): {cog_full}")
-                with out:
-                    print(f"    {b}: OK ({sz} bytes)")
-            cogs[b] = local_path
+    with out:
+        print(f"  COGs streaming via /vsigs/ ({len(band_paths)} bands).")
+
+    all_tile_results = []
+
+    # 4. Pre-computar celdas de todas as regiões para progresso cumulativo
+    region_cells_map = {}
+    for job in group_jobs:
+        region_cells_map[job['region']] = _get_region_cells(job['region'])
+    total_cells_group = sum(len(cells) for cells in region_cells_map.values())
+    processed = 0
+
+    # 5. Procesar cada region del grupo
+    for job_idx, job in enumerate(group_jobs):
+        region_name = job['region']
+
+        job['status'] = 'RUNNING'
+        q = load_queue()
+        for qj in q:
+            if qj['id'] == job['id']:
+                qj['status'] = 'RUNNING'
+        save_queue(q)
 
         with out:
-            print(f"  COGs ready ({len(cogs)} bands).")
+            print(f"\n  Region [{job_idx+1}/{len(group_jobs)}]: {region_name}")
 
-        all_tile_results = []
-
-        # 4. Pre-computar celdas de todas as regiões para progresso cumulativo
-        region_cells_map = {}
-        for job in group_jobs:
-            region_cells_map[job['region']] = _get_region_cells(job['region'])
-        total_cells_group = sum(len(cells) for cells in region_cells_map.values())
-        processed = 0
-
-        # 5. Procesar cada region del grupo
-        for job_idx, job in enumerate(group_jobs):
-            region_name = job['region']
-
-            job['status'] = 'RUNNING'
-            q = load_queue()
-            for qj in q:
-                if qj['id'] == job['id']:
-                    qj['status'] = 'RUNNING'
-            save_queue(q)
-
+        cells = region_cells_map[region_name]
+        if not cells:
             with out:
-                print(f"\n  Region [{job_idx+1}/{len(group_jobs)}]: {region_name}")
+                print(f"  [WARN] No cells found for {region_name}.")
+            continue
 
-            cells = region_cells_map[region_name]
-            if not cells:
-                with out:
-                    print(f"  [WARN] No cells found for {region_name}.")
+        total = len(cells)
+        with out:
+            print(f"  {total} tiles to process.")
+
+        tile_results = []
+
+        for i, cell in enumerate(cells):
+            cell_id = cell['name']
+
+            if i % 5 == 0:
+                q = load_queue()
+                pct = (processed + i) / total_cells_group if total_cells_group else 0
+                for qj in q:
+                    if qj['id'] == job['id']:
+                        qj['progress'] = f"{processed + i}/{total_cells_group} ({pct:.1%})"
+                save_queue(q)
+
+            out_rel = tile_path(model_id, region_name, cell_id, period, campaign)
+            out_full = gcs_full(out_rel)
+
+            if fs.exists(out_full):
+                if progress_callback:
+                    progress_callback(model_id, region_name, cell_id, i, total, 'skipped')
                 continue
 
-            total = len(cells)
             with out:
-                print(f"  {total} tiles to process.")
+                print(f"  [{processed+i+1:03d}/{total_cells_group}] {cell_id} ...")
 
-            tile_results = []
+            if progress_callback:
+                progress_callback(model_id, region_name, cell_id, i, total, 'processing')
 
-            for i, cell in enumerate(cells):
-                cell_id = cell['name']
-
-                if i % 5 == 0:
-                    q = load_queue()
-                    pct = (processed + i) / total_cells_group if total_cells_group else 0
-                    for qj in q:
-                        if qj['id'] == job['id']:
-                            qj['progress'] = f"{processed + i}/{total_cells_group} ({pct:.1%})"
-                    save_queue(q)
-
-                out_rel = tile_path(model_id, region_name, cell_id, period, campaign)
-                out_full = gcs_full(out_rel)
-
-                if fs.exists(out_full):
-                    if progress_callback:
-                        progress_callback(model_id, region_name, cell_id, i, total, 'skipped')
-                    continue
-
+            try:
+                stats = classify_cell_with_cogs(
+                    cell_id, predict_fn, bands_config, norm_stats,
+                    out_full, band_paths, band_order,
+                    logger=lambda m, l=None: out.append_display_data(m)
+                )
+            except Exception as e:
                 with out:
-                    print(f"  [{processed+i+1:03d}/{total_cells_group}] {cell_id} ...")
+                    print(f"    [ERROR] {cell_id}: {e}")
+                stats = None
 
+            if stats:
+                stats['tile_id'] = cell_id
+                stats['region'] = region_name
+                stats['period'] = period
+                tile_results.append(stats)
                 if progress_callback:
-                    progress_callback(model_id, region_name, cell_id, i, total, 'processing')
-
-                try:
-                    stats = classify_cell_with_cogs(
-                        cell_id, predict_fn, bands_config, norm_stats,
-                        out_full, cogs, band_order,
-                        logger=lambda m, l=None: out.append_display_data(m)
-                    )
-                except Exception as e:
-                    with out:
-                        print(f"    [ERROR] {cell_id}: {e}")
-                    stats = None
-
-                if stats:
-                    stats['tile_id'] = cell_id
-                    stats['region'] = region_name
-                    stats['period'] = period
-                    tile_results.append(stats)
-                    if progress_callback:
-                        progress_callback(model_id, region_name, cell_id, i, total, 'done')
-                else:
-                    with out:
-                        print(f"    [WARN] {cell_id} returned no stats")
-                    if progress_callback:
-                        progress_callback(model_id, region_name, cell_id, i, total, 'error')
-
-            processed += total
-
-            if tile_results:
-                all_tile_results.extend(tile_results)
-                with out:
-                    print(f"  Generating stats for {len(tile_results)} tiles...")
-                generate_tile_stats(model_id, region_name, period, tile_results, fs=fs, campaign=campaign)
-                generate_region_stats(model_id, region_name, period, tile_results, fs=fs, campaign=campaign)
-                archive_job_on_gcs(job, tile_results, fs=fs)
+                    progress_callback(model_id, region_name, cell_id, i, total, 'done')
             else:
                 with out:
-                    print(f"  No tiles classified for {region_name}.")
-                delete_pending_job_gcs(model_id, region_name, period, fs=fs)
+                    print(f"    [WARN] {cell_id} returned no stats")
+                if progress_callback:
+                    progress_callback(model_id, region_name, cell_id, i, total, 'error')
 
-            q = load_queue()
-            for qj in q:
-                if qj['id'] == job['id']:
-                    qj['status'] = 'COMPLETED'
-                    qj['progress'] = '100%'
-            save_queue(q)
+        processed += total
 
+        if tile_results:
+            all_tile_results.extend(tile_results)
             with out:
-                print(f"  OK: {region_name} completed.")
+                print(f"  Generating stats for {len(tile_results)} tiles...")
+            generate_tile_stats(model_id, region_name, period, tile_results, fs=fs, campaign=campaign)
+            generate_region_stats(model_id, region_name, period, tile_results, fs=fs, campaign=campaign)
+            archive_job_on_gcs(job, tile_results, fs=fs)
+        else:
+            with out:
+                print(f"  No tiles classified for {region_name}.")
+            delete_pending_job_gcs(model_id, region_name, period, fs=fs)
 
-    finally:
-        # 5. Limpar COGs locais
-        removed = 0
-        for b, local_path in cogs.items():
-            if os.path.exists(local_path):
-                os.remove(local_path)
-                removed += 1
+        q = load_queue()
+        for qj in q:
+            if qj['id'] == job['id']:
+                qj['status'] = 'COMPLETED'
+                qj['progress'] = '100%'
+        save_queue(q)
+
         with out:
-            print(f"  Cleaned up {removed} local COG(s).")
+            print(f"  OK: {region_name} completed.")
+
 
 
 def _get_region_cells(region_name):

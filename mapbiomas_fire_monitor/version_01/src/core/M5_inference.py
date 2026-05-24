@@ -1,12 +1,17 @@
 import os
+import math
 import numpy as np
 import rasterio
-from rasterio.mask import mask
+from rasterio.windows import Window
+from rasterio.windows import transform as window_transform
+from rasterio.features import geometry_window
 from shapely.geometry import shape, mapping
 from shapely.ops import transform
 from pyproj import Transformer
-from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _gcs_download, _gcs_upload
+from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _gcs_upload
 from M4_data_extractor import normalize
+
+BLOCK_SIZE = 1024
 
 def load_model_from_gcs(model_dir, fs, logger=None):
     """Carga modelo Keras + metadatos desde GCS.
@@ -108,11 +113,15 @@ def _reproject_geometry(geom_coords, src_crs):
         return [mapping(geom_proj)]
     return [geom_coords]
 
-def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_gcs_path, cogs, band_order, logger=None):
-    """Clasifica un tile cim-world usando COGs ya descargados.
+def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_gcs_path, band_paths, band_order, logger=None):
+    """Clasifica un tile cim-world usando COGs via /vsigs/ streaming en bloques.
+
+    Lee los COGs directamente desde GCS (sin descargar) y procesa en
+    bloques de BLOCK_SIZE x BLOCK_SIZE para evitar OOM e o limite de
+    2 GB do TensorProto.
 
     Args:
-        cogs: dict {banda: ruta_local} con los COGs listos para abrir.
+        band_paths: dict {banda: 'bucket/.../cog.tif'} com paths GCS relativos.
         band_order: orden de las bandas (del modelo), ej: ['nir','red','swir1','swir2'].
     """
     import ee
@@ -126,64 +135,110 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
         geom_coords = cell_geom.getInfo()
 
         for b in band_order:
-            sources[b] = rasterio.open(cogs[b])
+            vsig = f"/vsigs/{band_paths[b]}"
+            sources[b] = rasterio.open(vsig)
 
         src_crs = sources[band_order[0]].crs
+        src_transform = sources[band_order[0]].transform
+        src_nodata = sources[band_order[0]].nodata or -9999
         clip_geom = _reproject_geometry(geom_coords, src_crs)
 
-        band_data = {}
-        profile = None
+        window = geometry_window(sources[band_order[0]], clip_geom)
+        win_col = int(window.col_off)
+        win_row = int(window.row_off)
+        win_w = int(window.width)
+        win_h = int(window.height)
 
-        for b in band_order:
-            out_image, out_transform = mask(
-                sources[b], clip_geom, crop=True, filled=True,
-                nodata=sources[b].nodata or -9999
-            )
-            out_image = np.ascontiguousarray(out_image)
-            band_data[b] = out_image[0]
-            if profile is None:
-                profile = sources[b].profile.copy()
+        if win_w <= 0 or win_h <= 0:
+            if logger:
+                logger(f"    [AVISO] Celula {cell_id} fora dos limites dos COGs")
+            return None
 
-        height, width = band_data[band_order[0]].shape
-        stack = np.stack([band_data[b] for b in band_order], axis=-1)
-        valid_mask = np.all(stack > -9999, axis=-1)
+        out_transform = window_transform(src_transform, window)
+        profile = sources[band_order[0]].profile.copy()
+        profile.update({
+            'height': win_h,
+            'width': win_w,
+            'transform': out_transform,
+            'dtype': rasterio.float32,
+            'count': 2,
+            'compress': 'lzw',
+            'nodata': -9999,
+        })
 
-        valid_pixels = stack[valid_mask]
-        total_valid = valid_pixels.shape[0]
+        local_tmp = os.path.join(get_temp_dir('tiles'), f"{cell_id}.tif")
+        total_valid = 0
+        total_burned = 0
+        conf_sum = 0.0
+        conf_count = 0
+
+        with rasterio.open(local_tmp, 'w', **profile) as dst:
+            n_blocks_h = math.ceil(win_h / BLOCK_SIZE)
+            n_blocks_w = math.ceil(win_w / BLOCK_SIZE)
+            block_idx = 0
+
+            for row in range(0, win_h, BLOCK_SIZE):
+                for col in range(0, win_w, BLOCK_SIZE):
+                    bh = min(BLOCK_SIZE, win_h - row)
+                    bw = min(BLOCK_SIZE, win_w - col)
+                    block_idx += 1
+
+                    src_win = Window(win_col + col, win_row + row, bw, bh)
+                    dst_win = Window(col, row, bw, bh)
+
+                    bands_block = {}
+                    for b in band_order:
+                        arr = sources[b].read(1, window=src_win)
+                        bands_block[b] = np.ascontiguousarray(arr)
+
+                    hb, wb = bands_block[band_order[0]].shape
+                    stack = np.stack([bands_block[b] for b in band_order], axis=-1)
+                    valid_mask = np.all(stack > src_nodata, axis=-1)
+                    n_valid = int(valid_mask.sum())
+
+                    if n_valid == 0:
+                        dst.write(np.zeros((1, hb, wb), dtype=np.float32), 1, window=dst_win)
+                        dst.write(np.full((1, hb, wb), -9999, dtype=np.float32), 2, window=dst_win)
+                        continue
+
+                    X_norm = normalize(stack[valid_mask], norm_stats)
+                    probs = predict_fn(X_norm)
+                    if probs.ndim > 1 and probs.shape[1] == 1:
+                        probs = probs.flatten()
+
+                    output_class = np.zeros((hb, wb), dtype=np.float32)
+                    output_prob = np.full((hb, wb), -9999, dtype=np.float32)
+                    output_class[valid_mask] = (probs > 0.5).astype(np.float32)
+                    output_prob[valid_mask] = probs.astype(np.float32)
+
+                    dst.write(output_class[np.newaxis, :, :], 1, window=dst_win)
+                    dst.write(output_prob[np.newaxis, :, :], 2, window=dst_win)
+
+                    total_valid += n_valid
+                    burned = probs > 0.5
+                    n_burned = int(burned.sum())
+                    total_burned += n_burned
+                    if n_burned > 0:
+                        conf_sum += float(probs[burned].sum())
+                        conf_count += n_burned
+
+                    if logger and block_idx % max(1, n_blocks_h * n_blocks_w // 10) == 0:
+                        logger(f"    {cell_id}: bloco {block_idx}/{n_blocks_h * n_blocks_w}")
 
         if total_valid == 0:
             if logger:
-                logger(f"    [AVISO] Ningun pixel valido en {cell_id} (CRS COG: {src_crs})")
+                logger(f"    [AVISO] Ningun pixel valido en {cell_id}")
+            os.remove(local_tmp)
             return None
-
-        X_norm = normalize(valid_pixels, norm_stats)
-        probs = predict_fn(X_norm)
-
-        if probs.ndim > 1 and probs.shape[1] == 1:
-            probs = probs.flatten()
-
-        output_class = np.zeros((height, width), dtype=np.uint8)
-        output_prob = np.zeros((height, width), dtype=np.float32)
-        output_class[valid_mask] = (probs > 0.5).astype(np.uint8)
-        output_prob[valid_mask] = probs.astype(np.float32)
-
-        profile.update(dtype=rasterio.float32, count=2, compress='lzw', nodata=-9999)
-
-        local_tmp = os.path.join(get_temp_dir('tiles'), f"{cell_id}.tif")
-        with rasterio.open(local_tmp, 'w', **profile) as dst:
-            dst.write(output_class, 1)
-            dst.write(output_prob, 2)
 
         _gcs_upload(local_tmp, out_gcs_path)
         os.remove(local_tmp)
 
-        burned_mask = probs > 0.5
-        n_burned = burned_mask.sum()
-        mean_conf = float(probs[burned_mask].mean()) if n_burned > 0 else 0.0
+        mean_conf = float(conf_sum / conf_count) if conf_count > 0 else 0.0
 
         return {
             'total_pixels': total_valid,
-            'burned_pixels': int(n_burned),
+            'burned_pixels': total_burned,
             'mean_confidence': mean_conf,
         }
 
