@@ -1,6 +1,8 @@
 import os
 import time
+import threading
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from M0_auth_config import CONFIG, _get_fs, _gcs_models_base
 from M_cache import CacheManager
 from M5_workplan import load_workplan, save_workplan, make_job_id, tile_path, gcs_full, archive_job_on_gcs, delete_pending_job_gcs
@@ -8,6 +10,7 @@ from M5_inference import load_model_from_gcs, classify_cell_with_cogs, build_ban
 from M5_publisher import merge_region_tiles, generate_tile_stats, generate_region_stats, upload_to_gee
 from M_regions import REGION_NAME_PROPERTY
 
+_log_lock = threading.Lock()
 VALID_PHASES = ['classification', 'publish']
 
 def _fmt_time(s):
@@ -20,10 +23,13 @@ def _fmt_time(s):
     return f"{s}s"
 
 def _log(out, msg):
-    with out:
+    with _log_lock, out:
         print(msg)
 
-def run_m5_workplan(phases=None, progress_callback=None):
+def _auto_workers():
+    return max(1, os.cpu_count() or 1)
+
+def run_m5_workplan(phases=None, progress_callback=None, n_workers=None):
     """Motor de procesamiento M5.
 
     Args:
@@ -32,6 +38,7 @@ def run_m5_workplan(phases=None, progress_callback=None):
             'publish'        — mosaicado + stats + upload GEE
         progress_callback: opcional, llamado tras cada tile.
             firma: progress_callback(model, region, cell_id, i, total, status)
+        n_workers: cantidad de workers paralelos (default: auto detecta via os.cpu_count())
     """
     if phases is None:
         phases = ['classification', 'publish']
@@ -43,20 +50,25 @@ def run_m5_workplan(phases=None, progress_callback=None):
     from IPython.display import display, HTML, clear_output
     import ipywidgets as widgets
 
+    if n_workers is None:
+        n_workers = _auto_workers()
+    n_workers = max(1, n_workers)
+
     out = widgets.Output()
     display(out)
+    print(f"Workers: {n_workers}")
 
     plan = load_workplan()
 
     if 'classification' in phases:
-        _run_classification(plan, out, progress_callback)
+        _run_classification(plan, out, progress_callback, n_workers)
         plan = load_workplan()
 
     if 'publish' in phases:
         _run_publish(plan, out)
 
 
-def _run_classification(plan, out, progress_callback=None):
+def _run_classification(plan, out, progress_callback=None, n_workers=None):
     """Fase 1: agrupa jobs por (modelo, periodo) y clasifica compartiendo COGs."""
     pending = [j for j in plan if j['status'] == 'PENDING' and j.get('enabled', True)]
 
@@ -78,7 +90,7 @@ def _run_classification(plan, out, progress_callback=None):
             print(f"\nGroup: model '{model_id}' | period {period} | {len(group)} region(s)")
 
         try:
-            _process_period(model_id, period, group, out, progress_callback)
+            _process_period(model_id, period, group, out, progress_callback, n_workers)
         except Exception as e:
             import traceback
             with out:
@@ -146,7 +158,40 @@ def _run_publish(plan, out):
                 print(f"[ERROR] Publishing {job['id']}: {e}")
 
 
-def _process_period(model_id, period, group_jobs, out, progress_callback=None):
+def _classify_one_tile(cell, model_id, region_name, period, campaign,
+                        predict_fn, bands_config, norm_stats, band_paths, band_order,
+                        out, worker_id, fs):
+    cell_id = cell['name']
+    out_rel = tile_path(model_id, region_name, cell_id, period, campaign)
+    out_full = gcs_full(out_rel)
+
+    if fs.exists(out_full):
+        _log(out, f"    [W{worker_id}] {cell_id}: already exists, skipped")
+        return ('skipped', cell_id, region_name, None, worker_id)
+
+    _log(out, f"    [W{worker_id}] >>> {cell_id}")
+    try:
+        stats = classify_cell_with_cogs(
+            cell_id, predict_fn, bands_config, norm_stats,
+            out_full, band_paths, band_order,
+            logger=lambda m: _log(out, m), worker_id=worker_id
+        )
+    except Exception as e:
+        _log(out, f"    [W{worker_id}] {cell_id}: [ERROR] {e}")
+        return ('error', cell_id, region_name, None, worker_id)
+
+    if stats:
+        stats['tile_id'] = cell_id
+        stats['region'] = region_name
+        stats['period'] = period
+        _log(out, f"    [W{worker_id}] <<< {cell_id} done")
+        return ('done', cell_id, region_name, stats, worker_id)
+    else:
+        _log(out, f"    [W{worker_id}] <<< {cell_id} warn: no stats")
+        return ('warn', cell_id, region_name, None, worker_id)
+
+
+def _process_period(model_id, period, group_jobs, out, progress_callback=None, n_workers=None):
     """Procesa todas las regiones de un (modelo, periodo) compartiendo COGs.
 
     Los COGs se descargan una unica vez y se reusan para todos los tiles
@@ -237,60 +282,61 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
 
         tile_results = []
 
-        for i, cell in enumerate(cells):
-            cell_id = cell['name']
-
-            if i % 5 == 0:
-                p = load_workplan()
-                pct = (processed + i) / total_cells_group if total_cells_group else 0
-                for pj in p:
-                    if pj['id'] == job['id']:
-                        pj['progress'] = f"{processed + i}/{total_cells_group} ({pct:.1%})"
-                save_workplan(p)
-
-            out_rel = tile_path(model_id, region_name, cell_id, period, campaign)
-            out_full = gcs_full(out_rel)
-
-            if fs.exists(out_full):
-                _done += 1
-                if progress_callback:
-                    progress_callback(model_id, region_name, cell_id, i, total, 'skipped')
-                continue
-
-            elapsed = time.time() - _t0
-            avg = elapsed / max(_done, 1)
-            remaining_cells = total_cells_group - (processed + i + 1)
-            eta = avg * remaining_cells
-            with out:
-                print(f"  [{processed+i+1:03d}/{total_cells_group}] {cell_id}  (elapsed {_fmt_time(elapsed)} | total ~{_fmt_time(elapsed + eta)} | remaining {_fmt_time(eta)})")
-
-            if progress_callback:
-                progress_callback(model_id, region_name, cell_id, i, total, 'processing')
-
-            try:
-                stats = classify_cell_with_cogs(
-                    cell_id, predict_fn, bands_config, norm_stats,
-                    out_full, band_paths, band_order,
-                    logger=lambda m: _log(out, m)
+        with ThreadPoolExecutor(max_workers=n_workers) as executor:
+            futures = {}
+            for i, cell in enumerate(cells):
+                worker_id = (i % n_workers) + 1
+                future = executor.submit(
+                    _classify_one_tile,
+                    cell, model_id, region_name, period, campaign,
+                    predict_fn, bands_config, norm_stats, band_paths, band_order,
+                    out, worker_id, fs
                 )
-            except Exception as e:
-                with out:
-                    print(f"    [ERROR] {cell_id}: {e}")
-                stats = None
+                futures[future] = cell['name']
 
-            if stats:
+            completed_in_region = 0
+            for future in as_completed(futures):
+                status, cell_id, reg, stats, wid = future.result()
+                completed_in_region += 1
+
+                if status == 'skipped':
+                    _done += 1
+                    if progress_callback:
+                        progress_callback(model_id, reg, cell_id, completed_in_region, total, 'skipped')
+                    continue
+
+                if status == 'error':
+                    _done += 1
+                    if progress_callback:
+                        progress_callback(model_id, reg, cell_id, completed_in_region, total, 'error')
+                    continue
+
+                if status == 'warn':
+                    if progress_callback:
+                        progress_callback(model_id, reg, cell_id, completed_in_region, total, 'error')
+                    continue
+
+                # status == 'done'
                 _done += 1
-                stats['tile_id'] = cell_id
-                stats['region'] = region_name
-                stats['period'] = period
                 tile_results.append(stats)
                 if progress_callback:
-                    progress_callback(model_id, region_name, cell_id, i, total, 'done')
-            else:
-                with out:
-                    print(f"  [WARN] {cell_id}: no stats returned")
-                if progress_callback:
-                    progress_callback(model_id, region_name, cell_id, i, total, 'error')
+                    progress_callback(model_id, reg, cell_id, completed_in_region, total, 'done')
+
+            # ETA log a cada regiao
+            elapsed = time.time() - _t0
+            remaining = total_cells_group - (processed + completed_in_region)
+            avg = elapsed / max(_done, 1)
+            eta = avg * remaining
+            with out:
+                print(f"  > Progress: {_done}/{total_cells_group} tiles (elapsed {_fmt_time(elapsed)} | remaining ~{_fmt_time(eta)})")
+
+            # Salva progresso no workplan
+            p = load_workplan()
+            pct = (processed + completed_in_region) / total_cells_group if total_cells_group else 0
+            for pj in p:
+                if pj['id'] == job['id']:
+                    pj['progress'] = f"{_done}/{total_cells_group} ({pct:.1%})"
+            save_workplan(p)
 
         processed += total
 

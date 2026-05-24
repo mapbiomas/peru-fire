@@ -69,9 +69,9 @@ class L:
     NO_COGS = "No COGs found in the GCS repository."
 
     # ── Widgets / Buttons M5 ─────────────────────────────
-    ADD_BATCH = "Add Batch to Queue"
+    ADD_BATCH = "Add Batch to Workplan"
     REFRESH_VIEW = "Refresh View"
-    LOAD_TO_QUEUE = "Load to Queue"
+    LOAD_TO_QUEUE = "Load to Workplan"
     CLEAR_TEMP_TASKS = "Clear Temporary Tasks"
     SAVE_TASK_GCS = "Save Task GCS"
     EXCLUDE_TASK_GCS = "Exclude Task GCS"
@@ -93,6 +93,27 @@ class L:
     TAB_MAP = "Map"
     TAB_DONE = "Finished"
 
+    GUIDE_M5_HTML = """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Large Scale Regional Classification</h3>
+        <p>Classifies multiple regions (cim-world-1-250000 grid cells) using M4 models.</p>
+        <h4>Flow:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_register}</b> — select model + regions + periods.</li>
+            <li><b>{tab_pending}</b> — follow classification tile by tile.</li>
+            <li><b>{tab_publish}</b> — COMPLETED jobs with tile management.</li>
+            <li><b>{tab_map}</b> — general progress overview.</li>
+            <li><b>{tab_done}</b> — FINISHED jobs with coverage timeline.</li>
+            <li>Run <code>run_m5_workplan()</code> in the notebook to process.</li>
+        </ol>
+        <h4>Granular Deletion:</h4>
+        <ul>
+            <li><b>{tab_pending}</b> — delete individual jobs from the workplan.</li>
+            <li><b>{tab_publish}</b> — delete individual tiles or all from a job.</li>
+            <li><b>{tab_done}</b> — delete by region or complete model.</li>
+            <li>After deletion, re-register the job in <b>{tab_register}</b>.</li>
+        </ul>
+    </div>"""
+
     # ── Map / Grid ───────────────────────────────────────
     LIVE_PROCESSING = "Live Processing"
     CURRENT_TILE = "Current tile"
@@ -108,7 +129,7 @@ class L:
     TILES_REMOVED = "tiles removed."
 
     # ── Task status ──────────────────────────────────────
-    STATUS_QUEUED = "Queued"
+    STATUS_QUEUED = "In Workplan"
     STATUS_RUNNING = "Running"
     STATUS_COMPLETED = "Completed"
     STATUS_FINISHED = "Finished"
@@ -133,6 +154,52 @@ class L:
     MODEL_CONFIG = "Model Configuration"
     GCS_DEST = "GCS Destination"
     USAGE_GUIDE = "Usage Guide"
+
+    GUIDE_M4_HTML = """<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #fdfdfd; color: #2c3e50; line-height: 1.6;">
+        <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">M4 Model Trainer - Usage Guide</h1>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px;">
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #3498db; margin-top:0;">Platform Structure</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>{usage_guide}:</b> This orientation and documentation screen.</li>
+                    <li><b>{new_training}:</b> Configuration of new experiments, sample and band selection.</li>
+                    <li><b>{trainings}:</b> Historical ranking with detailed metrics and model management.</li>
+                    <li><b>Canvas:</b> Parallel audit desk to compare multiple models in depth.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #9b59b6; margin-top:0;">Technical Concepts</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>TensorFlow:</b> Google's AI engine for massive mathematical computations.</li>
+                    <li><b>DNN (Deep Neural Network):</b> Deep network that mimics human learning.</li>
+                    <li><b>Neurons:</b> Units that process signals and activate learning patterns.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #e67e22; margin-top:0;">Hyperparameters (DNN)</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>Layers:</b> Network architecture. More layers capture finer details.</li>
+                    <li><b>Learning Rate (LR):</b> Controls how fast the model adjusts.</li>
+                    <li><b>Epochs:</b> Complete training cycles over the sample set.</li>
+                    <li><b>Batch Size:</b> Data blocks processed before each update.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #27ae60; margin-top:0;">Quality Dictionary</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>Accuracy:</b> Total percentage of global hits.</li>
+                    <li><b>Precision:</b> Fidelity: How much of the marked fire is real? (Avoids false positives).</li>
+                    <li><b>Recall:</b> Coverage: How much of the real fire was found? (Avoids omissions).</li>
+                    <li><b>F1-Score:</b> Harmonic mean. The best balance between Precision and Recall.</li>
+                    <li><b>AI Note:</b> Automatic audit that severely penalizes omissions.</li>
+                    <li><b>Human Note:</b> Subjective evaluation (1-5) on the Latent Space.</li>
+                </ul>
+            </div>
+        </div>
+        <div style="margin-top: 30px; padding: 15px; background: #e8f4fd; border-left: 5px solid #3498db; border-radius: 4px; font-size:14px;">
+            <b>[Tip] Auditor's Pro-Tip:</b> Use the <b>Canvas</b> to load an old model (benchmark) and your new model. Compare if the t-SNE 3D class separation has improved or if there are new confusion zones.
+        </div>
+    </div>"""
 
     # ── M4 - Canvas ──────────────────────────────────────
     METADATA = "Metadata"
@@ -360,9 +427,9 @@ STRINGS_ES = {
     "NO_SAMPLES": "No se encontraron muestras con este filtro.",
     "NO_COGS": "No se encontraron COGs en el repositorio GCS.",
     # M5 Widgets
-    "ADD_BATCH": "Agregar Lote a la Cola",
+    "ADD_BATCH": "Agregar Lote al Plan",
     "REFRESH_VIEW": "Actualizar Vista",
-    "LOAD_TO_QUEUE": "Cargar a la Cola",
+    "LOAD_TO_QUEUE": "Cargar al Plan",
     "CLEAR_TEMP_TASKS": "Limpiar Tareas Temporales",
     "SAVE_TASK_GCS": "Guardar Tarea GCS",
     "EXCLUDE_TASK_GCS": "Excluir Tarea GCS",
@@ -382,6 +449,26 @@ STRINGS_ES = {
     "TAB_PUBLISH": "Para Publicar",
     "TAB_MAP": "Mapa",
     "TAB_DONE": "Finalizadas",
+    "GUIDE_M5_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Clasificacion Regional de Gran Escala</h3>
+        <p>Clasifica multiples regiones (cartas cim-world-1-250000) usando modelos del M4.</p>
+        <h4>Flujo:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_register}</b> — seleccione modelo + regiones + periodos.</li>
+            <li><b>{tab_pending}</b> — siga la clasificacion tile a tile.</li>
+            <li><b>{tab_publish}</b> — trabajos COMPLETED con gestion de tiles.</li>
+            <li><b>{tab_map}</b> — visibilidad general del progreso.</li>
+            <li><b>{tab_done}</b> — trabajos FINISHED con timeline de cobertura.</li>
+            <li>Ejecute <code>run_m5_workplan()</code> en el notebook para procesar.</li>
+        </ol>
+        <h4>Eliminacion granular:</h4>
+        <ul>
+            <li><b>{tab_pending}</b> — elimine trabajos individuales del plan.</li>
+            <li><b>{tab_publish}</b> — elimine tiles individuales o todos de un trabajo.</li>
+            <li><b>{tab_done}</b> — elimine por region o modelo completo.</li>
+            <li>Despues de eliminar, registre nuevamente el trabajo en <b>{tab_register}</b>.</li>
+        </ul>
+    </div>""",
     # Map / Grid
     "LIVE_PROCESSING": "Procesando en vivo",
     "CURRENT_TILE": "Tile actual",
@@ -395,7 +482,7 @@ STRINGS_ES = {
     "SELECT_TILES_DELETE": "Seleccione tiles para eliminar.",
     "TILES_REMOVED": "tiles eliminados.",
     # Task status
-    "STATUS_QUEUED": "En cola",
+    "STATUS_QUEUED": "En el plan",
     "STATUS_RUNNING": "Ejecutando",
     "STATUS_COMPLETED": "Completado",
     "STATUS_FINISHED": "Finalizado",
@@ -419,6 +506,51 @@ STRINGS_ES = {
     "MODEL_CONFIG": "Configuracion del Modelo",
     "GCS_DEST": "Destino GCS",
     "USAGE_GUIDE": "Guia de Uso",
+    "GUIDE_M4_HTML": """<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #fdfdfd; color: #2c3e50; line-height: 1.6;">
+        <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">M4 Model Trainer - Guia de Uso</h1>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px;">
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #3498db; margin-top:0;">Estructura de la Plataforma</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>{usage_guide}:</b> Pantalla de orientacion y documentacion.</li>
+                    <li><b>{new_training}:</b> Configuracion de nuevos experimentos, seleccion de muestras y bandas.</li>
+                    <li><b>{trainings}:</b> Ranking historico con metricas detalladas y gestion de modelos.</li>
+                    <li><b>Canvas:</b> Mesa de auditoria paralela para comparar multiples modelos en profundidad.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #9b59b6; margin-top:0;">Conceptos Tecnicos</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>TensorFlow:</b> Motor de IA de Google para calculos matematicos masivos.</li>
+                    <li><b>DNN (Deep Neural Network):</b> Red profunda que imita el aprendizaje humano.</li>
+                    <li><b>Neuronas:</b> Unidades que procesan senales y activan patrones de aprendizaje.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #e67e22; margin-top:0;">Hiperparametros (DNN)</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>Layers:</b> Arquitectura de la red. Mas capas captan detalles mas finos.</li>
+                    <li><b>Learning Rate (LR):</b> Controla que tan rapido se ajusta el modelo.</li>
+                    <li><b>Epochs:</b> Ciclos de entrenamiento completos sobre el set de muestras.</li>
+                    <li><b>Batch Size:</b> Bloques de datos procesados antes de cada actualizacion.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #27ae60; margin-top:0;">Diccionario de Calidad</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>Accuracy:</b> Porcentaje total de aciertos globales.</li>
+                    <li><b>Precision:</b> Fidelidad: Cuanto del fuego marcado es real? (Evita falsos positivos).</li>
+                    <li><b>Recall:</b> Cobertura: Cuanto del fuego real se encontro? (Evita omisiones).</li>
+                    <li><b>F1-Score:</b> Media armonica. El mejor balance entre Precision y Recall.</li>
+                    <li><b>Nota IA:</b> Auditoria automatica que castiga severamente las omisiones.</li>
+                    <li><b>Nota Humana:</b> Evaluacion subjetiva (1-5) sobre el Espacio Latente.</li>
+                </ul>
+            </div>
+        </div>
+        <div style="margin-top: 30px; padding: 15px; background: #e8f4fd; border-left: 5px solid #3498db; border-radius: 4px; font-size:14px;">
+            <b>[Consejo] Pro-Tip del Auditor:</b> Use el <b>Canvas</b> para cargar un modelo antiguo (benchmark) y su modelo nuevo. Compare si la separacion de clases en t-SNE 3D ha mejorado o si hay nuevas zonas de confusion.
+        </div>
+    </div>""",
     # M4 - Canvas
     "METADATA": "Metadatos",
     "KPIS": "KPIs",
@@ -621,9 +753,9 @@ STRINGS_PT = {
     "NO_SAMPLES": "Nenhuma amostra encontrada com este filtro.",
     "NO_COGS": "Nenhum COG encontrado no repositorio GCS.",
     # M5 Widgets
-    "ADD_BATCH": "Adicionar Lote a Fila",
+    "ADD_BATCH": "Adicionar Lote ao Plano",
     "REFRESH_VIEW": "Atualizar Vista",
-    "LOAD_TO_QUEUE": "Carregar na Fila",
+    "LOAD_TO_QUEUE": "Carregar no Plano",
     "CLEAR_TEMP_TASKS": "Limpar Tarefas Temporarias",
     "SAVE_TASK_GCS": "Salvar Tarefa GCS",
     "EXCLUDE_TASK_GCS": "Excluir Tarefa GCS",
@@ -643,6 +775,26 @@ STRINGS_PT = {
     "TAB_PUBLISH": "Para Publicar",
     "TAB_MAP": "Mapa",
     "TAB_DONE": "Finalizadas",
+    "GUIDE_M5_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Classificacao Regional de Grande Escala</h3>
+        <p>Classifica multiplas regioes (cartas cim-world-1-250000) usando modelos do M4.</p>
+        <h4>Fluxo:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_register}</b> — selecione modelo + regioes + periodos.</li>
+            <li><b>{tab_pending}</b> — acompanhe a classificacao tile a tile.</li>
+            <li><b>{tab_publish}</b> — trabalhos COMPLETED com gestao de tiles.</li>
+            <li><b>{tab_map}</b> — visibilidade geral do progresso.</li>
+            <li><b>{tab_done}</b> — trabalhos FINISHED com timeline de cobertura.</li>
+            <li>Execute <code>run_m5_workplan()</code> no notebook para processar.</li>
+        </ol>
+        <h4>Exclusao granular:</h4>
+        <ul>
+            <li><b>{tab_pending}</b> — exclua trabalhos individuais do plano.</li>
+            <li><b>{tab_publish}</b> — exclua tiles individuais ou todos de um trabalho.</li>
+            <li><b>{tab_done}</b> — exclua por regiao ou modelo completo.</li>
+            <li>Apos excluir, registre novamente o trabalho em <b>{tab_register}</b>.</li>
+        </ul>
+    </div>""",
     # Map / Grid
     "LIVE_PROCESSING": "Processando ao vivo",
     "CURRENT_TILE": "Tile atual",
@@ -656,7 +808,7 @@ STRINGS_PT = {
     "SELECT_TILES_DELETE": "Selecione tiles para excluir.",
     "TILES_REMOVED": "tiles excluidos.",
     # Task status
-    "STATUS_QUEUED": "Na fila",
+    "STATUS_QUEUED": "No plano",
     "STATUS_RUNNING": "Executando",
     "STATUS_COMPLETED": "Completado",
     "STATUS_FINISHED": "Finalizado",
@@ -680,6 +832,51 @@ STRINGS_PT = {
     "MODEL_CONFIG": "Configuracao do Modelo",
     "GCS_DEST": "Destino GCS",
     "USAGE_GUIDE": "Guia de Uso",
+    "GUIDE_M4_HTML": """<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #fdfdfd; color: #2c3e50; line-height: 1.6;">
+        <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">M4 Model Trainer - Guia de Uso</h1>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px;">
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #3498db; margin-top:0;">Estrutura da Plataforma</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>{usage_guide}:</b> Tela de orientacao e documentacao.</li>
+                    <li><b>{new_training}:</b> Configuracao de novos experimentos, selecao de amostras e bandas.</li>
+                    <li><b>{trainings}:</b> Ranking historico com metricas detalhadas e gestao de modelos.</li>
+                    <li><b>Canvas:</b> Mesa de auditoria paralela para comparar multiplos modelos em profundidade.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #9b59b6; margin-top:0;">Conceitos Tecnicos</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>TensorFlow:</b> Motor de IA do Google para calculos matematicos massivos.</li>
+                    <li><b>DNN (Deep Neural Network):</b> Rede profunda que imita o aprendizado humano.</li>
+                    <li><b>Neuronios:</b> Unidades que processam sinais e ativam padroes de aprendizado.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #e67e22; margin-top:0;">Hiperparametros (DNN)</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>Layers:</b> Arquitetura da rede. Mais camadas captam detalhes mais finos.</li>
+                    <li><b>Learning Rate (LR):</b> Controla a velocidade de ajuste do modelo.</li>
+                    <li><b>Epochs:</b> Ciclos completos de treinamento sobre o conjunto de amostras.</li>
+                    <li><b>Batch Size:</b> Blocos de dados processados antes de cada atualizacao.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #27ae60; margin-top:0;">Dicionario de Qualidade</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>Accuracy:</b> Porcentagem total de acertos globais.</li>
+                    <li><b>Precision:</b> Fidelidade: Quanto do fogo marcado e real? (Evita falsos positivos).</li>
+                    <li><b>Recall:</b> Cobertura: Quanto do fogo real foi encontrado? (Evita omissoes).</li>
+                    <li><b>F1-Score:</b> Media harmonica. O melhor equilibrio entre Precision e Recall.</li>
+                    <li><b>Nota IA:</b> Auditoria automatica que pune severamente as omissoes.</li>
+                    <li><b>Nota Humana:</b> Avaliacao subjetiva (1-5) sobre o Espaco Latente.</li>
+                </ul>
+            </div>
+        </div>
+        <div style="margin-top: 30px; padding: 15px; background: #e8f4fd; border-left: 5px solid #3498db; border-radius: 4px; font-size:14px;">
+            <b>[Dica] Pro-Tip do Auditor:</b> Use o <b>Canvas</b> para carregar um modelo antigo (benchmark) e seu modelo novo. Compare se a separacao de classes em t-SNE 3D melhorou ou se ha novas zonas de confusao.
+        </div>
+    </div>""",
     # M4 - Canvas
     "METADATA": "Metadados",
     "KPIS": "KPIs",
@@ -882,9 +1079,9 @@ STRINGS_FR = {
     "NO_SAMPLES": "Aucun echantillon trouve avec ce filtre.",
     "NO_COGS": "Aucun COG trouve dans le depot GCS.",
     # M5 Widgets
-    "ADD_BATCH": "Ajouter un lot a la file",
+    "ADD_BATCH": "Ajouter un lot au plan",
     "REFRESH_VIEW": "Actualiser la vue",
-    "LOAD_TO_QUEUE": "Charger dans la file",
+    "LOAD_TO_QUEUE": "Charger dans le plan",
     "CLEAR_TEMP_TASKS": "Effacer les taches temporaires",
     "SAVE_TASK_GCS": "Enregistrer tache GCS",
     "EXCLUDE_TASK_GCS": "Exclure tache GCS",
@@ -904,6 +1101,26 @@ STRINGS_FR = {
     "TAB_PUBLISH": "A publier",
     "TAB_MAP": "Carte",
     "TAB_DONE": "Terminees",
+    "GUIDE_M5_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Classification Regionale a Grande Echelle</h3>
+        <p>Classifie plusieurs regions (grille cim-world-1-250000) en utilisant les modeles M4.</p>
+        <h4>Flux:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_register}</b> — selectionnez modele + regions + periodes.</li>
+            <li><b>{tab_pending}</b> — suivez la classification tile par tile.</li>
+            <li><b>{tab_publish}</b> — travaux COMPLETED avec gestion des tiles.</li>
+            <li><b>{tab_map}</b> — apercu general de l avancement.</li>
+            <li><b>{tab_done}</b> — travaux FINISHED avec chronologie de couverture.</li>
+            <li>Executez <code>run_m5_workplan()</code> dans le notebook pour traiter.</li>
+        </ol>
+        <h4>Suppression granulaire:</h4>
+        <ul>
+            <li><b>{tab_pending}</b> — supprimez des travaux individuels du plan.</li>
+            <li><b>{tab_publish}</b> — supprimez des tiles individuelles ou toutes d un travail.</li>
+            <li><b>{tab_done}</b> — supprimez par region ou modele complet.</li>
+            <li>Apres suppression, reenregistrez le travail dans <b>{tab_register}</b>.</li>
+        </ul>
+    </div>""",
     # Map / Grid
     "LIVE_PROCESSING": "Traitement en direct",
     "CURRENT_TILE": "Tile actuel",
@@ -917,7 +1134,7 @@ STRINGS_FR = {
     "SELECT_TILES_DELETE": "Selectionnez les tiles a supprimer.",
     "TILES_REMOVED": "tiles supprimes.",
     # Task status
-    "STATUS_QUEUED": "En file",
+    "STATUS_QUEUED": "Dans le plan",
     "STATUS_RUNNING": "En cours",
     "STATUS_COMPLETED": "Complete",
     "STATUS_FINISHED": "Termine",
@@ -941,6 +1158,51 @@ STRINGS_FR = {
     "MODEL_CONFIG": "Configuration du modele",
     "GCS_DEST": "Destination GCS",
     "USAGE_GUIDE": "Guide d utilisation",
+    "GUIDE_M4_HTML": """<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #fdfdfd; color: #2c3e50; line-height: 1.6;">
+        <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">M4 Model Trainer - Guide d Utilisation</h1>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px;">
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #3498db; margin-top:0;">Structure de la Plateforme</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>{usage_guide}:</b> Ecran d orientation et de documentation.</li>
+                    <li><b>{new_training}:</b> Configuration de nouvelles experiences, selection d echantillons et de bandes.</li>
+                    <li><b>{trainings}:</b> Classement historique avec metriques detaillees et gestion des modeles.</li>
+                    <li><b>Canvas:</b> Bureau d audit parallele pour comparer plusieurs modeles en profondeur.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #9b59b6; margin-top:0;">Concepts Techniques</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>TensorFlow:</b> Moteur IA de Google pour les calculs mathematiques massifs.</li>
+                    <li><b>DNN (Deep Neural Network):</b> Reseau profond qui imite l apprentissage humain.</li>
+                    <li><b>Neurones:</b> Unites qui traitent les signaux et activent les modeles d apprentissage.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #e67e22; margin-top:0;">Hyperparametres (DNN)</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>Layers:</b> Architecture du reseau. Plus de couches capturent des details plus fins.</li>
+                    <li><b>Learning Rate (LR):</b> Controle la vitesse d ajustement du modele.</li>
+                    <li><b>Epochs:</b> Cycles d entrainement complets sur l ensemble d echantillons.</li>
+                    <li><b>Batch Size:</b> Blocs de donnees traites avant chaque mise a jour.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #27ae60; margin-top:0;">Dictionnaire de Qualite</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>Accuracy:</b> Pourcentage total de reussites globales.</li>
+                    <li><b>Precision:</b> Fidelite: Quelle part du feu marque est reelle? (Evite les faux positifs).</li>
+                    <li><b>Recall:</b> Couverture: Quelle part du feu reel a ete trouvee? (Evite les omissions).</li>
+                    <li><b>F1-Score:</b> Moyenne harmonique. Le meilleur equilibre entre Precision et Recall.</li>
+                    <li><b>Note IA:</b> Audit automatique qui penalise severement les omissions.</li>
+                    <li><b>Note Humaine:</b> Evaluation subjective (1-5) sur l Espace Latent.</li>
+                </ul>
+            </div>
+        </div>
+        <div style="margin-top: 30px; padding: 15px; background: #e8f4fd; border-left: 5px solid #3498db; border-radius: 4px; font-size:14px;">
+            <b>[Conseil] Pro-Tip de l Auditeur:</b> Utilisez le <b>Canvas</b> pour charger un ancien modele (benchmark) et votre nouveau modele. Comparez si la separation des classes en t-SNE 3D s est amelioree ou s il y a de nouvelles zones de confusion.
+        </div>
+    </div>""",
     # M4 - Canvas
     "METADATA": "Metadonnees",
     "KPIS": "KPIs",
@@ -1143,9 +1405,9 @@ STRINGS_ID = {
     "NO_SAMPLES": "Tidak ada sampel ditemukan dengan filter ini.",
     "NO_COGS": "Tidak ada COG ditemukan di repositori GCS.",
     # M5 Widgets
-    "ADD_BATCH": "Tambah Batch ke Antrean",
+    "ADD_BATCH": "Tambah Batch ke Rencana",
     "REFRESH_VIEW": "Muat Ulang Tampilan",
-    "LOAD_TO_QUEUE": "Muat ke Antrean",
+    "LOAD_TO_QUEUE": "Muat ke Rencana",
     "CLEAR_TEMP_TASKS": "Bersihkan Tugas Sementara",
     "SAVE_TASK_GCS": "Simpan Tugas GCS",
     "EXCLUDE_TASK_GCS": "Keluarkan Tugas GCS",
@@ -1165,6 +1427,26 @@ STRINGS_ID = {
     "TAB_PUBLISH": "Untuk Publikasi",
     "TAB_MAP": "Peta",
     "TAB_DONE": "Selesai",
+    "GUIDE_M5_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Klasifikasi Regional Skala Besar</h3>
+        <p>Mengklasifikasikan beberapa wilayah (grid cim-world-1-250000) menggunakan model M4.</p>
+        <h4>Alur:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_register}</b> — pilih model + wilayah + periode.</li>
+            <li><b>{tab_pending}</b> — pantau klasifikasi tile per tile.</li>
+            <li><b>{tab_publish}</b> — tugas COMPLETED dengan pengelolaan tile.</li>
+            <li><b>{tab_map}</b> — gambaran umum kemajuan.</li>
+            <li><b>{tab_done}</b> — tugas FINISHED dengan kronologi cakupan.</li>
+            <li>Jalankan <code>run_m5_workplan()</code> di notebook untuk memproses.</li>
+        </ol>
+        <h4>Penghapusan granular:</h4>
+        <ul>
+            <li><b>{tab_pending}</b> — hapus tugas individu dari rencana.</li>
+            <li><b>{tab_publish}</b> — hapus tile individu atau semua tile dari tugas.</li>
+            <li><b>{tab_done}</b> — hapus berdasarkan wilayah atau model lengkap.</li>
+            <li>Setelah dihapus, daftarkan ulang tugas di <b>{tab_register}</b>.</li>
+        </ul>
+    </div>""",
     # Map / Grid
     "LIVE_PROCESSING": "Pemrosesan Langsung",
     "CURRENT_TILE": "Tile saat ini",
@@ -1178,7 +1460,7 @@ STRINGS_ID = {
     "SELECT_TILES_DELETE": "Pilih tile untuk dihapus.",
     "TILES_REMOVED": "tile dihapus.",
     # Task status
-    "STATUS_QUEUED": "Dalam antrean",
+    "STATUS_QUEUED": "Dalam rencana",
     "STATUS_RUNNING": "Berjalan",
     "STATUS_COMPLETED": "Selesai",
     "STATUS_FINISHED": "Terselesaikan",
@@ -1202,6 +1484,51 @@ STRINGS_ID = {
     "MODEL_CONFIG": "Konfigurasi Model",
     "GCS_DEST": "Tujuan GCS",
     "USAGE_GUIDE": "Panduan Penggunaan",
+    "GUIDE_M4_HTML": """<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #fdfdfd; color: #2c3e50; line-height: 1.6;">
+        <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">M4 Model Trainer - Panduan Penggunaan</h1>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px;">
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #3498db; margin-top:0;">Struktur Platform</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>{usage_guide}:</b> Layar orientasi dan dokumentasi.</li>
+                    <li><b>{new_training}:</b> Konfigurasi eksperimen baru, pemilihan sampel dan pita.</li>
+                    <li><b>{trainings}:</b> Peringkat historis dengan metrik terperinci dan manajemen model.</li>
+                    <li><b>Canvas:</b> Meja audit paralel untuk membandingkan beberapa model secara mendalam.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #9b59b6; margin-top:0;">Konsep Teknis</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>TensorFlow:</b> Mesin AI Google untuk perhitungan matematis masif.</li>
+                    <li><b>DNN (Deep Neural Network):</b> Jaringan dalam yang meniru pembelajaran manusia.</li>
+                    <li><b>Neuron:</b> Unit yang memproses sinyal dan mengaktifkan pola pembelajaran.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #e67e22; margin-top:0;">Hiperparameter (DNN)</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>Layers:</b> Arsitektur jaringan. Lebih banyak lapisan menangkap detail lebih halus.</li>
+                    <li><b>Learning Rate (LR):</b> Mengontrol seberapa cepat model menyesuaikan.</li>
+                    <li><b>Epochs:</b> Siklus pelatihan lengkap pada kumpulan sampel.</li>
+                    <li><b>Batch Size:</b> Blok data yang diproses sebelum setiap pembaruan.</li>
+                </ul>
+            </div>
+            <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <h3 style="color: #27ae60; margin-top:0;">Kamus Kualitas</h3>
+                <ul style="padding-left: 20px; font-size:13px;">
+                    <li><b>Accuracy:</b> Persentase total kebenaran global.</li>
+                    <li><b>Precision:</b> Ketepatan: Seberapa banyak api yang ditandai itu nyata? (Menghindari positif palsu).</li>
+                    <li><b>Recall:</b> Cakupan: Seberapa banyak api nyata yang ditemukan? (Menghindari kelalaian).</li>
+                    <li><b>F1-Score:</b> Rata-rata harmonis. Keseimbangan terbaik antara Precision dan Recall.</li>
+                    <li><b>Nilai AI:</b> Audit otomatis yang menghukum keras kelalaian.</li>
+                    <li><b>Nilai Manusia:</b> Evaluasi subjektif (1-5) pada Ruang Laten.</li>
+                </ul>
+            </div>
+        </div>
+        <div style="margin-top: 30px; padding: 15px; background: #e8f4fd; border-left: 5px solid #3498db; border-radius: 4px; font-size:14px;">
+            <b>[Tips] Pro-Tip Auditor:</b> Gunakan <b>Canvas</b> untuk memuat model lama (benchmark) dan model baru Anda. Bandingkan apakah pemisahan kelas dalam t-SNE 3D telah membaik atau ada zona kebingungan baru.
+        </div>
+    </div>""",
     # M4 - Canvas
     "METADATA": "Metadata",
     "KPIS": "KPI",

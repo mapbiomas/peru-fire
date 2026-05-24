@@ -130,7 +130,7 @@ def _reproject_geometry(geom_coords, src_crs):
         xs, ys = nx, ny
     return [mapping(geom)], (min(xs), min(ys), max(xs), max(ys))
 
-def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_gcs_path, band_paths, band_order, logger=None):
+def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_gcs_path, band_paths, band_order, logger=None, worker_id=None):
     """Clasifica un tile cim-world usando COGs via /vsigs/ streaming en bloques.
 
     Lee los COGs directamente desde GCS (sin descargar) y procesa en
@@ -140,6 +140,7 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
     Args:
         band_paths: dict {banda: 'bucket/.../cog.tif'} com paths GCS relativos.
         band_order: orden de las bandas (del modelo), ej: ['nir','red','swir1','swir2'].
+        worker_id: opcional, prefixo [W1] nos logs.
     """
     import ee
 
@@ -226,10 +227,10 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                     X_norm = normalize(stack[valid_mask], norm_stats)
                     if logger and n_valid > 0:
                         t0 = time.time()
-                        logger(f"    {cell_id}: block {block_idx}/{n_blocks} ({hb}x{wb}, {n_valid} px) predicting...")
                     probs = predict_fn(X_norm)
                     if logger and n_valid > 0:
-                        logger(f"    {cell_id}: block {block_idx}/{n_blocks} predicted in {_fmt_time(time.time() - t0)}")
+                        wid = f"[W{worker_id}] " if worker_id else ""
+                        logger(f"    {wid}{cell_id}: block {block_idx}/{n_blocks} ({hb}x{wb}, {n_valid} px) predicted in {_fmt_time(time.time() - t0)}")
                     if probs.ndim > 1 and probs.shape[1] == 1:
                         probs = probs.flatten()
 
