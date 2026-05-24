@@ -8,7 +8,7 @@ from rasterio.features import geometry_window
 from shapely.geometry import shape, mapping
 from shapely.ops import transform
 from pyproj import Transformer
-from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _gcs_upload
+from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _gcs_download, _gcs_upload
 from M4_data_extractor import normalize
 
 BLOCK_SIZE = 1024
