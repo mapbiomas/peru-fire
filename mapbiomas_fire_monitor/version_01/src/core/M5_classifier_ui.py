@@ -57,18 +57,15 @@ class M5WorkplanUI:
         )
         self.w_campaign.observe(self._on_campaign_change, names='value')
 
-        self.f_pend_task = widgets.Dropdown(description=Lang.DROP_TASK, options=[Lang.ALL_F], layout=L(width='300px'))
-        self.f_pend_task.observe(lambda _: self._render_pending(), names='value')
+        self.f_pend_search = widgets.Text(
+            description='Filtrar:', placeholder='buscar por modelo, regiao, periodo...',
+            layout=L(width='100%'))
+        self.f_pend_search.observe(lambda _: self._render_pending(), names='value')
 
         self.w_guide = widgets.HTML()
 
         self.w_pend_rows = widgets.VBox()
         self.tab_pending = widgets.VBox()
-        self.f_pend_model = widgets.Dropdown(description=Lang.DROP_MODEL, options=[Lang.ALL], layout=L(width='250px'))
-        self.f_pend_region = widgets.Dropdown(description=Lang.DROP_REGION, options=[Lang.ALL_F], layout=L(width='250px'))
-        self.f_pend_year = widgets.Dropdown(description=Lang.DROP_YEAR, options=[Lang.ALL], layout=L(width='200px'))
-        for f in [self.f_pend_model, self.f_pend_region, self.f_pend_year]:
-            f.observe(lambda _: self._render_pending(), names='value')
 
         self.w_mapa_rows = widgets.VBox()
         self.tab_mapa = widgets.VBox()
@@ -561,201 +558,159 @@ class M5WorkplanUI:
     # --- RENDER PENDIENTES ---
 
     def _render_pending(self):
-        self.plan = load_workplan()
-        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
-        jobs = [j for j in self.plan if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)]
+        try:
+            self.plan = load_workplan()
+            campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+            all_jobs = [j for j in self.plan if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)]
+            filtered = self._apply_search_filter(all_jobs, self.f_pend_search)
 
-        filter_box = widgets.HBox([self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task], layout=L(margin='0 0 10px 0'))
-        filtered = self._apply_filters(jobs, self.f_pend_model, self.f_pend_region, self.f_pend_year, self.f_pend_task)
+            btn_clear = widgets.Button(description=Lang.CLEAR_TEMP_TASKS, button_style='warning', icon='trash', layout=L(width='200px'))
+            btn_clear.on_click(lambda _: self._on_clear_click())
 
-        btn_clear = widgets.Button(description=Lang.CLEAR_TEMP_TASKS, button_style='warning', icon='trash', layout=L(width='200px'))
-        btn_clear.on_click(lambda _: self._on_clear_click())
+            tarea_section = self._tarea_section()
+            search_box = widgets.HBox([self.f_pend_search, btn_clear], layout=L(margin='0 0 8px 0'))
 
-        tarea_section = self._tarea_section()
+            debug_info = (f'<div style="font-size:11px;color:#94a3b8;margin:0 0 6px 0;">'
+                          f'{len(all_jobs)} pendentes | {len(filtered)} apos filtro</div>')
+            debug_html = widgets.HTML(debug_info)
 
-        if not filtered:
-            pend_vbox = widgets.VBox([tarea_section, filter_box, btn_clear,
-                make_empty_state(Lang.NO_TASKS)])
-        else:
-            grouped = {}
-            for j in filtered:
-                grouped.setdefault(j['model'], []).append(j)
-            cards = []
-            for model_name, jobs_list in grouped.items():
-                total_cells = {}
-                done_cells = {}
-                region_jobs = {}
-                card_regions = []
-                for j in jobs_list:
-                    r = j['region']
-                    if r not in card_regions:
-                        card_regions.append(r)
-                    region_jobs.setdefault(r, []).append(j)
-                    if r not in total_cells:
-                        total_cells[r] = 0
-                        done_cells[r] = 0
+            if not filtered:
+                pend_vbox = widgets.VBox([tarea_section, search_box, debug_html,
+                    make_empty_state(Lang.NO_TASKS)])
+            else:
+                grouped = {}
+                for j in filtered:
+                    grouped.setdefault(j['model'], []).append(j)
+                cards = []
+                for model_name, jobs_list in grouped.items():
+                    total_cells = {}
+                    done_cells = {}
+                    region_jobs = {}
+                    card_regions = []
+                    for j in jobs_list:
+                        r = j['region']
+                        if r not in card_regions:
+                            card_regions.append(r)
+                        region_jobs.setdefault(r, []).append(j)
+                        if r not in total_cells:
+                            total_cells[r] = 0
+                            done_cells[r] = 0
 
-                # contar tiles processados
-                fs = _get_fs()
-                for j in jobs_list:
-                    if j['status'] == 'RUNNING' and j.get('progress', '0%') != '0%':
-                        try:
-                            prog = j['progress']
-                            if '/' in prog:
-                                parts = prog.split('/')
-                                done_cells[j['region']] = int(parts[0])
-                                total_cells[j['region']] = int(parts[1].split(' ')[0])
-                        except Exception:
-                            pass
+                    fs = _get_fs()
+                    for j in jobs_list:
+                        if j['status'] == 'RUNNING' and j.get('progress', '0%') != '0%':
+                            try:
+                                prog = j['progress']
+                                if '/' in prog:
+                                    parts = prog.split('/')
+                                    done_cells[j['region']] = int(parts[0])
+                                    total_cells[j['region']] = int(parts[1].split(' ')[0])
+                            except Exception:
+                                pass
 
-                # -- thumb (128px, lado esquerdo) --
-                thumb_b64 = self._generate_thumb(model_name, size=128, regions=card_regions)
-                left_col = build_thumbnail_column(thumb_b64)
+                    thumb_b64 = self._generate_thumb(model_name, size=128, regions=card_regions)
+                    left_col = build_thumbnail_column(thumb_b64)
 
-                # -- checkbox de habilitacion --
-                chk = widgets.Checkbox(
-                    value=self._card_checkboxes.get(model_name, False).value if isinstance(self._card_checkboxes.get(model_name, False), widgets.Checkbox) else self._card_checkboxes.get(model_name, False),
-                    description='',
-                    indent=False,
-                    layout=L(width='24px', margin='2px 6px 0 0')
-                )
-                chk.observe(lambda change, m=model_name: self._sync_card_enabled(m, change['new']), names='value')
-                self._card_checkboxes[model_name] = chk
+                    chk = widgets.Checkbox(
+                        value=self._card_checkboxes.get(model_name, False).value if isinstance(self._card_checkboxes.get(model_name, False), widgets.Checkbox) else self._card_checkboxes.get(model_name, False),
+                        description='', indent=False, layout=L(width='24px', margin='2px 6px 0 0'))
+                    chk.observe(lambda change, m=model_name: self._sync_card_enabled(m, change['new']), names='value')
+                    self._card_checkboxes[model_name] = chk
 
-                # -- estado de salvamento no GCS --
-                saved_count = sum(1 for j in jobs_list if j.get('_saved'))
-                total_count = len(jobs_list)
-                if saved_count == total_count and total_count > 0:
-                    card_badge = "Salvo ✓"
-                    badge_color = "#2563eb"
-                elif saved_count > 0:
-                    card_badge = f"{saved_count}/{total_count} Salvos"
-                    badge_color = "#ca8a04"
-                else:
-                    card_badge = "Temporário"
-                    badge_color = "#64748b"
-
-                # -- botoes do card --
-                if saved_count == 0:
-                    btn_save = widgets.Button(
-                        description='Salvar no GCS', button_style='primary',
-                        layout=L(width='160px', height='28px', font_size='12px'))
-                    btn_save.on_click(lambda _, m=model_name: self._on_save_gcs_click(m))
-                    btn_secondary = widgets.Button(
-                        description='Dispensar', button_style='warning',
-                        layout=L(width='120px', height='28px', font_size='12px'))
-                    btn_secondary.on_click(lambda _, m=model_name: self._on_dismiss_click(m))
-                else:
-                    remaining = total_count - saved_count
-                    if remaining > 0:
-                        btn_save = widgets.Button(
-                            description=f'Salvar ({remaining})', button_style='primary',
-                            layout=L(width='160px', height='28px', font_size='12px'))
+                    saved_count = sum(1 for j in jobs_list if j.get('_saved'))
+                    total_count = len(jobs_list)
+                    if saved_count == total_count and total_count > 0:
+                        card_badge, badge_color = "Salvo ✓", "#2563eb"
+                    elif saved_count > 0:
+                        card_badge, badge_color = f"{saved_count}/{total_count} Salvos", "#ca8a04"
                     else:
-                        btn_save = widgets.Button(
-                            description='Salvo ✓ no GCS', button_style='success',
-                            layout=L(width='160px', height='28px', font_size='12px'), disabled=True)
-                    btn_save.on_click(lambda _, m=model_name: self._on_save_gcs_click(m))
-                    btn_secondary = widgets.Button(
-                        description='Excluir do GCS', button_style='danger',
-                        layout=L(width='130px', height='28px', font_size='12px'))
-                    btn_secondary.on_click(lambda _, m=model_name: self._on_delete_gcs_click(m))
-                btn_del_model = widgets.Button(
-                    description=Lang.DELETE_MODEL, button_style='danger',
-                    layout=L(width='140px', height='28px', font_size='12px'))
-                hbox_actions = widgets.HBox(
-                    [btn_save, btn_secondary, btn_del_model],
-                    layout=L(align_items='center', gap='6px', margin='0 0 6px 28px'))
-                btn_del_model.on_click(lambda b, m=model_name, c=hbox_actions: inline_confirm(
-                    b, lambda: (self._delete_model_all(m), self._refresh_ui()), container=c))
+                        card_badge, badge_color = "Temporário", "#64748b"
 
-                # -- tarefas (nomes) em badges --
-                tarefas_assinadas = sorted(set(j.get('task_name', '') for j in jobs_list if j.get('task_name', '')))
-                task_badges = make_task_badges(tarefas_assinadas)
-
-                # -- cabecalho direito --
-                header = widgets.VBox([
-                    widgets.HBox([
-                        chk,
-                        widgets.HTML(f"<b style='font-size:15px;color:#0f172a;'>{model_name}</b>",
-                                     layout=L(margin='0 10px 0 0')),
-                        widgets.HTML(
-                            f"<span style='display:inline-block;padding:2px 8px;"
-                            f"border-radius:10px;font-size:11px;font-weight:600;"
-                            f"color:white;background:{badge_color};'>{card_badge}</span>",
-                            layout=L(margin='0 0 0 auto')),
-                    ], layout=L(align_items='center', margin='0 0 4px 0')),
-                    widgets.HTML(f"<div style='margin:2px 0 6px 28px;'>{task_badges}</div>" if task_badges else ''),
-                    hbox_actions,
-                ], layout=L(width='auto'))
-
-                # -- linhas de regiao --
-                region_lines = []
-                for r, jbs in sorted(region_jobs.items()):
-                    running = any(j['status'] == 'RUNNING' for j in jbs)
-                    dot_color = '#f59e0b' if running else '#3b82f6'
-                    tc = total_cells.get(r, 0)
-                    dc = done_cells.get(r, 0)
-                    if tc:
-                        pct = min(dc / tc * 100, 100)
-                        prog_str = f"{dc}/{tc}"
+                    if saved_count == 0:
+                        btn_save = widgets.Button(description='Salvar no GCS', button_style='primary', layout=L(width='160px', height='28px', font_size='12px'))
+                        btn_save.on_click(lambda _, m=model_name: self._on_save_gcs_click(m))
+                        btn_secondary = widgets.Button(description='Dispensar', button_style='warning', layout=L(width='120px', height='28px', font_size='12px'))
+                        btn_secondary.on_click(lambda _, m=model_name: self._on_dismiss_click(m))
                     else:
-                        pct = 0
-                        prog_str = jbs[0].get('progress', '0%')
-                    grid_n = self._get_grid_count(r)
-                    grid_str = f"({grid_n} celdas)" if grid_n else ""
+                        remaining = total_count - saved_count
+                        if remaining > 0:
+                            btn_save = widgets.Button(description=f'Salvar ({remaining})', button_style='primary', layout=L(width='160px', height='28px', font_size='12px'))
+                        else:
+                            btn_save = widgets.Button(description='Salvo ✓ no GCS', button_style='success', layout=L(width='160px', height='28px', font_size='12px'), disabled=True)
+                        btn_save.on_click(lambda _, m=model_name: self._on_save_gcs_click(m))
+                        btn_secondary = widgets.Button(description='Excluir do GCS', button_style='danger', layout=L(width='130px', height='28px', font_size='12px'))
+                        btn_secondary.on_click(lambda _, m=model_name: self._on_delete_gcs_click(m))
+                    btn_del_model = widgets.Button(description=Lang.DELETE_MODEL, button_style='danger', layout=L(width='140px', height='28px', font_size='12px'))
+                    hbox_actions = widgets.HBox([btn_save, btn_secondary, btn_del_model], layout=L(align_items='center', gap='6px', margin='0 0 6px 28px'))
+                    btn_del_model.on_click(lambda b, m=model_name, c=hbox_actions: inline_confirm(b, lambda: (self._delete_model_all(m), self._refresh_ui()), container=c))
 
-                    bar_color = '#22c55e' if running else '#3b82f6'
-                    bar = (f'<div style="width:100px;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">'
-                           f'<div style="width:{pct:.0f}%;height:100%;background:{bar_color};border-radius:4px;"></div>'
-                           f'</div>')
+                    tarefas_assinadas = sorted(set(j.get('task_name', '') for j in jobs_list if j.get('task_name', '')))
+                    task_badges = make_task_badges(tarefas_assinadas)
 
-                    btn_del = widgets.Button(description='', icon='trash', button_style='danger',
-                                             layout=L(width='32px', height='26px', padding='0'))
+                    header = widgets.VBox([
+                        widgets.HBox([
+                            chk,
+                            widgets.HTML(f"<b style='font-size:15px;color:#0f172a;'>{model_name}</b>", layout=L(margin='0 10px 0 0')),
+                            widgets.HTML(f"<span style='display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:white;background:{badge_color};'>{card_badge}</span>", layout=L(margin='0 0 0 auto')),
+                        ], layout=L(align_items='center', margin='0 0 4px 0')),
+                        widgets.HTML(f"<div style='margin:2px 0 6px 28px;'>{task_badges}</div>" if task_badges else ''),
+                        hbox_actions,
+                    ], layout=L(width='auto'))
 
-                    row = widgets.HBox([
-                        widgets.HTML(f'<span style="display:inline-block;width:10px;height:10px;'
-                                     f'background:{dot_color};border-radius:50%;margin:0 6px 0 0;"></span>'),
-                        widgets.HTML(f"<span style='font-weight:600;color:#334155;width:140px;display:inline-block;'>{r}</span>"),
-                        widgets.HTML(f"<span style='color:#64748b;font-size:12px;width:55px;'>{prog_str}</span>"),
-                        widgets.HTML(bar, layout=L(margin='0 6px')),
-                        widgets.HTML(f"<span style='color:#94a3b8;font-size:11px;'>{grid_str}</span>",
-                                     layout=L(width='110px')),
-                        btn_del
-                    ], layout=L(align_items='center', padding='5px 8px', margin='2px 0',
-                                border_bottom='1px solid #f1f5f9'))
-                    btn_del.on_click(lambda b, m=model_name, rg=r, c=row: inline_confirm(b, lambda: (self._delete_model_region(m, rg), self._refresh_ui()), container=c))
-                    region_lines.append(row)
+                    region_lines = []
+                    for r, jbs in sorted(region_jobs.items()):
+                        running = any(j['status'] == 'RUNNING' for j in jbs)
+                        dot_color = '#f59e0b' if running else '#3b82f6'
+                        tc = total_cells.get(r, 0)
+                        dc = done_cells.get(r, 0)
+                        if tc:
+                            pct = min(dc / tc * 100, 100)
+                            prog_str = f"{dc}/{tc}"
+                        else:
+                            pct = 0
+                            prog_str = jbs[0].get('progress', '0%')
+                        grid_n = self._get_grid_count(r)
+                        grid_str = f"({grid_n} celdas)" if grid_n else ""
+                        bar_color = '#22c55e' if running else '#3b82f6'
+                        bar = (f'<div style="width:100px;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">'
+                               f'<div style="width:{pct:.0f}%;height:100%;background:{bar_color};border-radius:4px;"></div></div>')
+                        btn_del = widgets.Button(description='', icon='trash', button_style='danger', layout=L(width='32px', height='26px', padding='0'))
+                        row = widgets.HBox([
+                            widgets.HTML(f'<span style="display:inline-block;width:10px;height:10px;background:{dot_color};border-radius:50%;margin:0 6px 0 0;"></span>'),
+                            widgets.HTML(f"<span style='font-weight:600;color:#334155;width:140px;display:inline-block;'>{r}</span>"),
+                            widgets.HTML(f"<span style='color:#64748b;font-size:12px;width:55px;'>{prog_str}</span>"),
+                            widgets.HTML(bar, layout=L(margin='0 6px')),
+                            widgets.HTML(f"<span style='color:#94a3b8;font-size:11px;'>{grid_str}</span>", layout=L(width='110px')),
+                            btn_del
+                        ], layout=L(align_items='center', padding='5px 8px', margin='2px 0', border_bottom='1px solid #f1f5f9'))
+                        btn_del.on_click(lambda b, m=model_name, rg=r, c=row: inline_confirm(b, lambda: (self._delete_model_region(m, rg), self._refresh_ui()), container=c))
+                        region_lines.append(row)
 
-                # -- botao detalhes (gaveta) --
-                btn_detalhes = widgets.Button(
-                    description='Detalhes \u25bc',
-                    button_style='', layout=L(
-                        width='120px', height='26px', font_size='12px',
-                        padding='0 4px', margin='2px 0 2px 28px'))
-                details_panel = self._build_details_panel(model_name, jobs_list)
-                details_panel.layout.display = 'none'
+                    btn_detalhes = widgets.Button(description='Detalhes \u25bc', button_style='', layout=L(width='120px', height='26px', font_size='12px', padding='0 4px', margin='2px 0 2px 28px'))
+                    details_panel = self._build_details_panel(model_name, jobs_list)
+                    details_panel.layout.display = 'none'
+                    def toggle_details(b, panel=details_panel, btn=btn_detalhes):
+                        if panel.layout.display == 'none':
+                            panel.layout.display = 'block'
+                            btn.description = 'Detalhes \u25b2'
+                        else:
+                            panel.layout.display = 'none'
+                            btn.description = 'Detalhes \u25bc'
+                    btn_detalhes.on_click(toggle_details)
 
-                def toggle_details(b, panel=details_panel, btn=btn_detalhes):
-                    if panel.layout.display == 'none':
-                        panel.layout.display = 'block'
-                        btn.description = 'Detalhes \u25b2'
-                    else:
-                        panel.layout.display = 'none'
-                        btn.description = 'Detalhes \u25bc'
+                    right_col = widgets.VBox([header, btn_detalhes, details_panel] + region_lines, layout=L(flex='1', margin='0 0 0 12px'))
+                    body = make_card_body(left_col, right_col)
+                    cards.append(body)
 
-                btn_detalhes.on_click(toggle_details)
+                pend_vbox = widgets.VBox([tarea_section, search_box, debug_html] + cards)
 
-                right_col = widgets.VBox(
-                    [header, btn_detalhes, details_panel] + region_lines,
-                    layout=L(flex='1', margin='0 0 0 12px'))
-
-                body = make_card_body(left_col, right_col)
-                cards.append(body)
-
-            pend_vbox = widgets.VBox([tarea_section, filter_box, btn_clear] + cards)
-
-        self.tab_pending.children = [pend_vbox]
+            self.tab_pending.children = [pend_vbox]
+        except Exception as e:
+            import traceback
+            err_html = widgets.HTML(f'<div style="color:red;padding:20px;">'
+                                    f'<b>Erro ao renderizar pending:</b><br>'
+                                    f'<pre style="font-size:11px;">{traceback.format_exc()}</pre></div>')
+            self.tab_pending.children = [err_html]
 
     def _get_model_meta(self, model_name):
         """Retorna metadata.json do modelo no GCS, com cache."""
@@ -1320,6 +1275,14 @@ class M5WorkplanUI:
             jobs = [j for j in jobs if j.get('task_name', '') == f_task.value]
         return jobs
 
+    def _apply_search_filter(self, jobs, search):
+        q = search.value.strip().lower()
+        if not q:
+            return jobs
+        return [j for j in jobs if q in j['id'].lower() or q in j['model'].lower()
+                or q in j['region'].lower() or q in j['period'].lower()
+                or q in j.get('task_name', '').lower()]
+
     # --- REFRESH ---
 
     def _refresh_ui(self):
@@ -1336,11 +1299,6 @@ class M5WorkplanUI:
                 f.value = new_ops[0]
 
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
-        subset_pend = [j for j in self.plan if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)]
-        _safe_update(self.f_pend_model, ['Todos'] + sorted(set(j['model'] for j in subset_pend)))
-        _safe_update(self.f_pend_region, ['Todas'] + sorted(set(j['region'] for j in subset_pend)))
-        _safe_update(self.f_pend_year, ['Todos'] + sorted(set(j['period'].split('_')[0] for j in subset_pend), reverse=True))
-
         # Mapa filters
         filtered_plan = [j for j in self.plan if not campaign or j.get('campaign', '') == campaign]
         all_models = sorted(set(j['model'] for j in filtered_plan))
@@ -1353,6 +1311,11 @@ class M5WorkplanUI:
 
         self._render_pending()
         self._render_mapa()
+
+        # Update tab title counter
+        n_pend = len([j for j in self.plan if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)])
+        if hasattr(self, 'tabs'):
+            self.tabs.set_title(2, f"{Lang.TAB_PENDING} ({n_pend})")
 
     def display(self):
         # Sincroniza jobs do GCS pendente com a fila local
@@ -1375,7 +1338,8 @@ class M5WorkplanUI:
         self.tabs.set_title(0, Lang.TAB_GUIDE)
         self.tabs.set_title(1, Lang.TAB_REGISTER)
 
-        n_pend = len([j for j in self.plan if j['status'] in ('PENDING', 'RUNNING')])
+        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+        n_pend = len([j for j in self.plan if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)])
         self.tabs.set_title(2, f"{Lang.TAB_PENDING} ({n_pend})")
         self.tabs.set_title(3, Lang.TAB_MAP)
 
