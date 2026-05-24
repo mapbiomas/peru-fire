@@ -206,8 +206,8 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                     n_valid = int(valid_mask.sum())
 
                     if n_valid == 0:
-                        dst.write(np.zeros((1, hb, wb), dtype=np.float32), 1, window=dst_win)
-                        dst.write(np.full((1, hb, wb), -9999, dtype=np.float32), 2, window=dst_win)
+                        dst.write(np.zeros((hb, wb), dtype=np.float32), 1, window=dst_win)
+                        dst.write(np.full((hb, wb), -9999, dtype=np.float32), 2, window=dst_win)
                         continue
 
                     X_norm = normalize(stack[valid_mask], norm_stats)
@@ -220,8 +220,8 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                     output_class[valid_mask] = (probs > 0.5).astype(np.float32)
                     output_prob[valid_mask] = probs.astype(np.float32)
 
-                    dst.write(output_class[np.newaxis, :, :], 1, window=dst_win)
-                    dst.write(output_prob[np.newaxis, :, :], 2, window=dst_win)
+                    dst.write(output_class, 1, window=dst_win)
+                    dst.write(output_prob, 2, window=dst_win)
 
                     total_valid += n_valid
                     burned = probs > 0.5
