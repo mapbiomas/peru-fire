@@ -266,7 +266,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
                     progress_callback(model_id, region_name, cell_id, i, total, 'done')
             else:
                 with out:
-                print(f"  [WARN] {cell_id}: no stats returned")
+                    print(f"  [WARN] {cell_id}: no stats returned")
                 if progress_callback:
                     progress_callback(model_id, region_name, cell_id, i, total, 'error')
 
