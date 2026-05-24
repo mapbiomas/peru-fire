@@ -340,11 +340,11 @@ def get_temp_dir(subdir=None):
     Args:
         subdir: Subpasta opcional (tiles, mosaics, samples, weights, stats).
 
-    No Colab usa /content/TEMPORARIO/, local usa ./TEMPORARIO/.
+    No Colab usa /content/TEMPORARY/, local usa ./TEMPORARY/.
     Subpastas só săo criadas sob demanda via subdir.
     """
     is_colab = 'COLAB_RELEASE_TAG' in os.environ
-    base = '/content/TEMPORARIO' if is_colab else os.path.abspath('TEMPORARIO')
+    base = '/content/TEMPORARY' if is_colab else os.path.abspath('TEMPORARY')
     os.makedirs(base, exist_ok=True)
     if subdir:
         path = os.path.join(base, subdir)
