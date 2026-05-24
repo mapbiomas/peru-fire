@@ -9,6 +9,10 @@ from M_regions import REGION_NAME_PROPERTY
 
 VALID_PHASES = ['classification', 'publish']
 
+def _log(out, msg):
+    with out:
+        print(msg)
+
 def run_m5_queue(phases=None, progress_callback=None):
     """Motor de procesamiento M5.
 
@@ -157,7 +161,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
 
     model_dir = f"gs://{CONFIG['bucket']}/{_gcs_models_base()}/{model_id}"
     model, meta, bands_config, norm_stats, band_order = load_model_from_gcs(
-        model_dir, fs, logger=lambda m, l=None: out.append_display_data(m)
+        model_dir, fs, logger=lambda m: _log(out, m)
     )
     predict_fn = lambda x: model.predict(x, verbose=0)
 
@@ -250,7 +254,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None):
                 stats = classify_cell_with_cogs(
                     cell_id, predict_fn, bands_config, norm_stats,
                     out_full, band_paths, band_order,
-                    logger=lambda m, l=None: out.append_display_data(m)
+                    logger=lambda m: _log(out, m)
                 )
             except Exception as e:
                 with out:
