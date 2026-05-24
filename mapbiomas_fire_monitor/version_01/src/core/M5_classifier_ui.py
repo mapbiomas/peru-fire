@@ -284,6 +284,9 @@ class M5WorkplanUI:
             return
         added = 0
         skipped = 0
+        gcs_ok = 0
+        gcs_fail = 0
+        fs = _get_fs()
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
         for r in regions:
             for period in periods:
@@ -291,7 +294,14 @@ class M5WorkplanUI:
                 if any(job['id'] == job_id for job in self.plan):
                     skipped += 1
                     continue
-                self.plan.append(new_job(model, r, period, task_name=task_name))
+                job = new_job(model, r, period, task_name=task_name)
+                ok = save_pending_job_to_gcs(job, fs=fs)
+                if ok:
+                    job['_saved'] = True
+                    gcs_ok += 1
+                else:
+                    gcs_fail += 1
+                self.plan.append(job)
                 added += 1
         save_workplan(self.plan)
         for c in self.chk_regions + self.chk_periods:
@@ -299,7 +309,9 @@ class M5WorkplanUI:
         with self.out_msg:
             clear_output()
             if added > 0:
-                msg = f"<b style='color:green;'>Exito: {added} tareas agregadas a la cola.</b>"
+                msg = f"<b style='color:green;'>Exito: {added} tareas agregadas.</b>"
+                if gcs_fail > 0:
+                    msg += f"<br><span style='color:orange;'>{gcs_ok} salvas no GCS, {gcs_fail} falharam.</span>"
                 if skipped > 0:
                     msg += f"<br><span style='color:orange;'>Atencion: {skipped} omitidas (ya en la cola).</span>"
                 display(HTML(msg))
@@ -403,8 +415,10 @@ class M5WorkplanUI:
             total_jobs += n_jobs
         return total, total_jobs
 
-    def _remove_from_plan(self, job_id):
+    def _remove_from_plan(self, job_id, job=None):
         self.plan = load_workplan()
+        if job and job.get('_saved'):
+            delete_pending_job_gcs(job['model'], job['region'], job['period'])
         self.plan = [j for j in self.plan if j['id'] != job_id]
         save_workplan(self.plan)
         self._refresh_ui()
@@ -436,18 +450,31 @@ class M5WorkplanUI:
                     self.plan = load_workplan()
                     added = 0
                     skipped = 0
+                    gcs_ok = 0
+                    gcs_fail = 0
+                    fs = _get_fs()
                     for r in regs:
                         for p in pers:
                             jid = make_job_id(m, r, p, campaign)
                             if any(job['id'] == jid for job in self.plan):
                                 skipped += 1
                                 continue
-                            self.plan.append(new_job(m, r, p))
+                            job = new_job(m, r, p)
+                            ok = save_pending_job_to_gcs(job, fs=fs)
+                            if ok:
+                                job['_saved'] = True
+                                gcs_ok += 1
+                            else:
+                                gcs_fail += 1
+                            self.plan.append(job)
                             added += 1
                     save_workplan(self.plan)
                     with self.out_msg:
                         clear_output()
-                        display(HTML(f"<span style='color:green;'>{added} cargadas, {skipped} omitidas.</span>"))
+                        msg = f"<span style='color:green;'>{added} cargadas, {skipped} omitidas.</span>"
+                        if gcs_fail > 0:
+                            msg += f"<br><span style='color:orange;'>{gcs_ok} salvas no GCS, {gcs_fail} falharam.</span>"
+                        display(HTML(msg))
                     self._refresh_ui()
                 return _h
             btn_cargar.on_click(_make_cargar(model, regions, periods))
@@ -831,11 +858,16 @@ class M5WorkplanUI:
         self._refresh_ui()
 
     def _on_clear_click(self):
+        self.plan = load_workplan()
+        fs = _get_fs()
+        for j in self.plan:
+            if j.get('_saved'):
+                delete_pending_job_gcs(j['model'], j['region'], j['period'], fs=fs)
         self.plan = []
         save_workplan(self.plan)
         with self.out_msg:
             clear_output()
-            display(HTML("<b style='color:red;'>Cola vaciada.</b>"))
+            display(HTML("<b style='color:red;'>Cola vaciada (GCS removido).</b>"))
         self._refresh_ui()
 
     def _on_save_gcs_click(self, model_name):
@@ -1011,7 +1043,7 @@ class M5WorkplanUI:
                     top = widgets.HBox([chk_gee, lbl_status, btn_tiles, btn_del_all],
                                        layout=L(align_items='center', padding='5px 8px', margin='2px 0',
                                                 border_bottom='1px solid #f1f5f9'))
-                    btn_del_all.on_click(lambda b, jb=job, c=top: inline_confirm(b, lambda: (self._delete_job_tiles_region(jb), self._remove_from_plan(jb['id']), self._refresh_ui()), container=c))
+                    btn_del_all.on_click(lambda b, jb=job, c=top: inline_confirm(b, lambda: (self._delete_job_tiles_region(jb), self._remove_from_plan(jb['id'], job=jb), self._refresh_ui()), container=c))
                     rows.append(widgets.VBox([top, tile_out]))
 
                 right_col = widgets.VBox([header] + rows, layout=L(flex='1', margin='0 0 0 12px'))
