@@ -132,6 +132,9 @@ class L:
     </div>"""
 
     GUIDE_M1_HTML = """<div style='padding:20px; font-family:sans-serif;'>
+        <div style='margin-bottom:15px;padding:10px;background:#fff3cd;border-left:4px solid #ffc107;border-radius:4px;font-size:13px;'>
+            <b>Note:</b> Currently only monthly composites for <b>Sentinel-2</b> with <b>minnbr</b> and <b>minnbr_buffer</b> are fully released. Other sensor/period/mosaic combinations may be experimental.
+        </div>
         <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Module 1 (M1) — Multi-Sensor GEE Export</h3>
         <p>M1 exports seamless, cloud-free satellite mosaics from Google Earth Engine to Google Cloud Storage (GCS) or GEE Assets.
         Supports LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS, and MODIS with sensor-specific radiometric corrections and cloud masking.</p>
@@ -608,6 +611,9 @@ STRINGS_ES = {
         </ul>
     </div>""",
     "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <div style='margin-bottom:15px;padding:10px;background:#fff3cd;border-left:4px solid #ffc107;border-radius:4px;font-size:13px;'>
+            <b>Nota:</b> Actualmente solo los compuestos mensuales para <b>Sentinel-2</b> con <b>minnbr</b> y <b>minnbr_buffer</b> están liberados. Otras combinaciones de sensor/período/mosaico pueden ser experimentales.
+        </div>
         <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Modulo 1 (M1) — Exportación GEE Multi-Sensor</h3>
         <p>M1 exporta mosaicos satelitales sin nubes desde Google Earth Engine hacia Google Cloud Storage (GCS) o Assets GEE.
         Soporta LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS y MODIS con correcciones radiométricas y máscaras de nubes específicas por sensor.</p>
@@ -1049,6 +1055,9 @@ STRINGS_PT = {
         </ul>
     </div>""",
     "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <div style='margin-bottom:15px;padding:10px;background:#fff3cd;border-left:4px solid #ffc107;border-radius:4px;font-size:13px;'>
+            <b>Nota:</b> Atualmente apenas os compostos mensais para <b>Sentinel-2</b> com <b>minnbr</b> e <b>minnbr_buffer</b> estão liberados. Outras combinações de sensor/período/mosaico podem ser experimentais.
+        </div>
         <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Modulo 1 (M1) — Exportação GEE Multi-Sensor</h3>
         <p>M1 exporta mosaicos de satelite sem nuvens do Google Earth Engine para o Google Cloud Storage (GCS) ou Assets GEE.
         Suporta LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS e MODIS com correções radiométricas e máscaras de nuvens específicas por sensor.</p>
@@ -1490,6 +1499,9 @@ STRINGS_FR = {
         </ul>
     </div>""",
     "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <div style='margin-bottom:15px;padding:10px;background:#fff3cd;border-left:4px solid #ffc107;border-radius:4px;font-size:13px;'>
+            <b>Remarque :</b> Actuellement, seules les compositions mensuelles pour <b>Sentinel-2</b> avec <b>minnbr</b> et <b>minnbr_buffer</b> sont publiées. D'autres combinaisons capteur/période/mosaïque peuvent être expérimentales.
+        </div>
         <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Module 1 (M1) — Exportation GEE Multi-Capteur</h3>
         <p>M1 exporte des mosaïques satellitaires sans nuage depuis Google Earth Engine vers Google Cloud Storage (GCS) ou des Assets GEE.
         Supporte LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS et MODIS avec corrections radiometriques et masquage des nuages specifiques par capteur.</p>
@@ -1931,6 +1943,9 @@ STRINGS_ID = {
         </ul>
     </div>""",
     "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <div style='margin-bottom:15px;padding:10px;background:#fff3cd;border-left:4px solid #ffc107;border-radius:4px;font-size:13px;'>
+            <b>Catatan:</b> Saat ini hanya komposit bulanan untuk <b>Sentinel-2</b> dengan <b>minnbr</b> dan <b>minnbr_buffer</b> yang dirilis. Kombinasi sensor/periode/mozaik lainnya mungkin eksperimental.
+        </div>
         <h3 style='color:#2c3e50; border-bottom:2px solid #e67e22; padding-bottom:5px;'>Modul 1 (M1) — Ekspor GEE Multi-Sensor</h3>
         <p>M1 mengekspor mozaik satelit bebas awan dari Google Earth Engine ke Google Cloud Storage (GCS) atau Aset GEE.
         Mendukung LANDSAT 5/7, LANDSAT 8/9, Sentinel-2, HLS, dan MODIS dengan koreksi radiometrik dan masking awan khusus per sensor.</p>

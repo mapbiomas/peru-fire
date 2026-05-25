@@ -234,6 +234,9 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                     for b in band_order:
                         arr = sources[b].read(1, window=src_win)
                         bands_block[b] = np.ascontiguousarray(arr)
+                    if 'dayOfYear' in sources:
+                        doy_arr = sources['dayOfYear'].read(1, window=src_win)
+                        bands_block['dayOfYear'] = np.ascontiguousarray(doy_arr)
 
                     hb, wb = bands_block[band_order[0]].shape
                     stack = np.stack([bands_block[b] for b in band_order], axis=-1)
