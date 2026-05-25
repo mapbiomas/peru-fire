@@ -238,22 +238,28 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
         m_path = urllib.parse.unquote(m_path)
         clean_path = m_path.replace('gs://', '').replace(f"{CONFIG['bucket']}/", '').lstrip('/')
         if 'b/' in clean_path and '/o/' in clean_path: clean_path = clean_path.split('/o/')[-1]
-        
+
+        # clean_path pode ser o dir do modelo ou ja apontar para metadata.json
+        meta_suffix = '/metadata.json'
+        has_meta = clean_path.endswith(meta_suffix)
+        base_dir = clean_path[:-len(meta_suffix)] if has_meta else clean_path
+
         if hp_override:
             hp = hp_override
             metrics = hp.get('metrics', {})
         else:
             # 1. Carrega Metadados e Métricas Base
-            with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f: hp = json.load(f)
+            meta_path = clean_path if has_meta else f"{clean_path}/metadata.json"
+            with fs.open(f"{CONFIG['bucket']}/{meta_path}", 'r') as f: hp = json.load(f)
             try:
-                with fs.open(f"{CONFIG['bucket']}/{clean_path}/metrics.json", 'r') as f: metrics = json.load(f)
+                with fs.open(f"{CONFIG['bucket']}/{base_dir}/metrics.json", 'r') as f: metrics = json.load(f)
             except Exception:
                 metrics = {}
         # 2. Carrega Dados de Snapshots para o Time Machine se solicitado
         snap_data = None
         if epoch_index is not None:
             try:
-                with fs.open(f"{CONFIG['bucket']}/{clean_path}/history/snapshots_data.npz", 'rb') as f:
+                with fs.open(f"{CONFIG['bucket']}/{base_dir}/history/snapshots_data.npz", 'rb') as f:
                     snap_data = dict(np.load(f, allow_pickle=True))
             except Exception:
                 pass # Se não existir, usa os dados finais das métricas
