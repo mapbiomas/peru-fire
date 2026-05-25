@@ -719,56 +719,41 @@ function user_interface() {
         var selectedNames = getSelectedRegionNames();
         if (selectedNames.length === 0) return;
 
-        var labelVacio = ui.Label('(cargando...)', { fontSize: '10px', color: '#888' });
-        drawerClassModels.panel.add(labelVacio);
-
         var collections = ee.data.listAssets({ parent: REGIONAL_FOLDER });
         var modelAssets = collections ? collections.assets : [];
 
         if (!modelAssets || modelAssets.length === 0) {
-            labelVacio.setValue('(sin modelos)');
+            drawerClassModels.panel.add(ui.Label('(sin modelos)', { fontSize: '10px', color: '#888' }));
             return;
         }
 
-        var modelIds = modelAssets.map(function (c) { return c.id.split('/').pop(); });
-        var pendentes = modelIds.length;
-
-        modelIds.forEach(function (modelId, idx) {
+        var totalAdded = 0;
+        modelAssets.forEach(function (c, idx) {
+            var modelId = c.id.split('/').pop();
             var colPath = REGIONAL_FOLDER + '/' + modelId;
-            try {
-                ee.data.listAssets({ parent: colPath }, function (images, err) {
-                    pendentes--;
-                    if (err || !images || !images.assets) {
-                        if (pendentes === 0) verifyEmpty();
-                        return;
-                    }
-                    var imageNames = images.assets.map(function (i) { return i.id.split('/').pop(); });
-                    var hasData = selectedNames.some(function (r) {
-                        return imageNames.some(function (img) { return img.indexOf(r) !== -1; });
-                    });
-                    if (hasData) {
-                        if (labelVacio.parent()) labelVacio.parent().remove(labelVacio);
-                        var chk = ui.Checkbox({
-                            label: modelId,
-                            value: false,
-                            onChange: function () { debouncedUpdateMosaic(); },
-                            style: { margin: '1px 3px', padding: '0px', fontSize: '10px', color: CLASS_PALETTE[idx % 50] }
-                        });
-                        classCheckboxes[modelId] = chk;
-                        drawerClassModels.panel.add(chk);
-                    }
-                    if (pendentes === 0) verifyEmpty();
+            var images = ee.data.listAssets({ parent: colPath });
+            if (!images || !images.assets) return;
+
+            var imageNames = images.assets.map(function (i) { return i.id.split('/').pop(); });
+            var hasData = selectedNames.some(function (r) {
+                return imageNames.some(function (img) { return img.indexOf(r) !== -1; });
+            });
+
+            if (hasData) {
+                totalAdded++;
+                var chk = ui.Checkbox({
+                    label: modelId,
+                    value: false,
+                    onChange: function () { debouncedUpdateMosaic(); },
+                    style: { margin: '1px 3px', padding: '0px', fontSize: '10px', color: CLASS_PALETTE[idx % 50] }
                 });
-            } catch (e) {
-                pendentes--;
-                if (pendentes === 0) verifyEmpty();
+                classCheckboxes[modelId] = chk;
+                drawerClassModels.panel.add(chk);
             }
         });
 
-        function verifyEmpty() {
-            if (Object.keys(classCheckboxes).length === 0 && labelVacio.parent()) {
-                labelVacio.setValue('(sem modelos para esta regiao)');
-            }
+        if (totalAdded === 0) {
+            drawerClassModels.panel.add(ui.Label('(sem modelos para esta regiao)', { fontSize: '10px', color: '#888' }));
         }
     }
 
