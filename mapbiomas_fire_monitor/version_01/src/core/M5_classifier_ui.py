@@ -8,7 +8,7 @@ from M5_workplan import load_workplan, save_workplan, make_job_id, new_job, gcs_
     save_pending_job_to_gcs, delete_pending_job_gcs, \
     load_pending_from_gcs, sync_gcs_to_local_workplan
 from M4_data_extractor import list_campaigns_gcs
-from M_ui_components import inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output
+from M_ui_components import inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output, make_select_all_none
 from M_lang import L as Lang
 from M_regions import REGION_NAME_PROPERTY
 
@@ -248,7 +248,10 @@ class M5WorkplanUI:
                     periods.append(f"{y}_{m:02d}")
         periods.sort(reverse=True)
         box, self.chk_periods = self._create_checkbox_grid(periods, "3. Seleccione Periodos (Anio / Anio_Mes):", bg_color='#ebf5eb', columns=4)
-        self.w_period_box.children = box.children
+        btn_all_per, btn_none_per, hbox_per = make_select_all_none(
+            on_all=lambda _: self._toggle_periods(True),
+            on_none=lambda _: self._toggle_periods(False))
+        self.w_period_box.children = (*box.children, hbox_per)
 
         # Campaign dropdown
         try:
@@ -262,6 +265,10 @@ class M5WorkplanUI:
             self.w_campaign.value = 'monitor_01'
 
     # --- REGISTRAR ---
+
+    def _toggle_periods(self, value):
+        for c in self.chk_periods:
+            c.value = value
 
     def _on_add_click(self, b):
         self.plan = load_workplan()
@@ -702,7 +709,10 @@ class M5WorkplanUI:
                     body = make_card_body(left_col, right_col)
                     cards.append(body)
 
-                pend_vbox = widgets.VBox([tarea_section, search_box, debug_html] + cards)
+                btn_all_card, btn_none_card, hbox_card = make_select_all_none(
+                    on_all=lambda _: self._toggle_all_cards(True),
+                    on_none=lambda _: self._toggle_all_cards(False))
+                pend_vbox = widgets.VBox([tarea_section, search_box, debug_html, hbox_card] + cards)
 
             self.tab_pending.children = [pend_vbox]
         except Exception as e:
@@ -914,6 +924,11 @@ class M5WorkplanUI:
                 j['enabled'] = checked
         save_workplan(self.plan)
         self._card_checkboxes[model_name].value = checked
+
+    def _toggle_all_cards(self, value):
+        for model_name in list(self._card_checkboxes.keys()):
+            self._card_checkboxes[model_name].value = value
+            self._sync_card_enabled(model_name, value)
 
     # --- LIVE MAPA (PROCESSING CALLBACK) ---
 

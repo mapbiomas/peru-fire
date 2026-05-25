@@ -9,7 +9,7 @@ from M0_auth_config import CONFIG, _get_fs
 from M5_workplan import gcs_full, consolidated_stats_path, region_path
 from M6_publisher import discover_classified_groups
 from M_cache import CacheManager
-from M_ui_components import make_empty_state, flash_output
+from M_ui_components import make_empty_state, flash_output, make_select_all_none
 from M_lang import L as Lang
 
 L = widgets.Layout
@@ -122,10 +122,18 @@ class M6WorkplanUI:
 
             cards.append(make_card_body(left_col, right_col))
 
+        btn_all_pub, btn_none_pub, hbox_pub = make_select_all_none(
+            on_all=lambda _: self._toggle_publish(True),
+            on_none=lambda _: self._toggle_publish(False))
         self.tab_to_publish.children = [
             widgets.HTML(f"<b>{len(pending)} groups pending mosaic</b>"),
+            hbox_pub,
             widgets.VBox(cards),
         ]
+
+    def _toggle_publish(self, value):
+        for cb in self._publish_checks.values():
+            cb.value = value
 
     def _render_finished(self):
         done = sorted([g for g in self._groups if g in self._mosaics])
