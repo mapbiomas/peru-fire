@@ -683,11 +683,13 @@ function user_interface() {
                         var filtered = col.filter(ee.Filter.stringContains('system:index', regionName))
                             .filter(ee.Filter.stringContains('system:index', dateStr));
                         var img = filtered.mosaic();
+                        var clsImg = img.select([0], ['classification']).byte().selfMask().updateMask(spatialMask);
+                        var prbImg = img.select([1], ['probability']).multiply(255).byte().selfMask().updateMask(spatialMask);
                         if (classBandCls) {
                             var lId = 'class_' + modelId + '_' + assetName + '_cls';
                             desiredLayerIds.push(lId);
                             updateManagedLayer(lId,
-                                img.select('classification').selfMask().updateMask(spatialMask),
+                                clsImg,
                                 { min: 0, max: 1, palette: ['00000000', color] },
                                 modelId + ' ' + assetName);
                         }
@@ -695,8 +697,8 @@ function user_interface() {
                             var lId = 'class_' + modelId + '_' + assetName + '_prb';
                             desiredLayerIds.push(lId);
                             updateManagedLayer(lId,
-                                img.select('probability').selfMask().updateMask(spatialMask),
-                                { min: 0.5, max: 1, palette: PROB_PALETTE },
+                                prbImg,
+                                { min: 0, max: 255, palette: PROB_PALETTE },
                                 modelId + ' prob ' + assetName);
                         }
                     });
@@ -719,42 +721,50 @@ function user_interface() {
         var selectedNames = getSelectedRegionNames();
         if (selectedNames.length === 0) return;
 
-        var collections = ee.data.listAssets(REGIONAL_FOLDER);
-        var modelAssets = collections ? collections.assets : [];
+        var labelLoading = ui.Label('(carregando...)', { fontSize: '10px', color: '#888' });
+        drawerClassModels.panel.add(labelLoading);
 
-        if (!modelAssets || modelAssets.length === 0) {
-            drawerClassModels.panel.add(ui.Label('(sin modelos)', { fontSize: '10px', color: '#888' }));
-            return;
-        }
+        // Deffere listAssets para nao travar a UI antes do label renderizar
+        ee.Number(0).evaluate(function () {
+            var collections = ee.data.listAssets(REGIONAL_FOLDER);
+            var modelAssets = collections ? collections.assets : [];
 
-        var totalAdded = 0;
-        modelAssets.forEach(function (c, idx) {
-            var modelId = c.id.split('/').pop();
-            var colPath = REGIONAL_FOLDER + '/' + modelId;
-            var images = ee.data.listAssets(colPath);
-            if (!images || !images.assets) return;
+            if (!modelAssets || modelAssets.length === 0) {
+                labelLoading.setValue('(sin modelos)');
+                return;
+            }
 
-            var imageNames = images.assets.map(function (i) { return i.id.split('/').pop(); });
-            var hasData = selectedNames.some(function (r) {
-                return imageNames.some(function (img) { return img.indexOf(r) !== -1; });
+            var totalAdded = 0;
+            modelAssets.forEach(function (c, idx) {
+                var modelId = c.id.split('/').pop();
+                var colPath = REGIONAL_FOLDER + '/' + modelId;
+                var images = ee.data.listAssets(colPath);
+                if (!images || !images.assets) return;
+
+                var imageNames = images.assets.map(function (i) { return i.id.split('/').pop(); });
+                var hasData = selectedNames.some(function (r) {
+                    return imageNames.some(function (img) { return img.indexOf(r) !== -1; });
+                });
+
+                if (hasData) {
+                    totalAdded++;
+                    var chk = ui.Checkbox({
+                        label: modelId,
+                        value: false,
+                        onChange: function () { debouncedUpdateMosaic(); },
+                        style: { margin: '1px 3px', padding: '0px', fontSize: '10px', color: CLASS_PALETTE[idx % 50] }
+                    });
+                    classCheckboxes[modelId] = chk;
+                    drawerClassModels.panel.add(chk);
+                }
             });
 
-            if (hasData) {
-                totalAdded++;
-                var chk = ui.Checkbox({
-                    label: modelId,
-                    value: false,
-                    onChange: function () { debouncedUpdateMosaic(); },
-                    style: { margin: '1px 3px', padding: '0px', fontSize: '10px', color: CLASS_PALETTE[idx % 50] }
-                });
-                classCheckboxes[modelId] = chk;
-                drawerClassModels.panel.add(chk);
+            if (totalAdded === 0) {
+                labelLoading.setValue('(sem modelos para esta regiao)');
+            } else {
+                labelLoading.parent().remove(labelLoading);
             }
         });
-
-        if (totalAdded === 0) {
-            drawerClassModels.panel.add(ui.Label('(sem modelos para esta regiao)', { fontSize: '10px', color: '#888' }));
-        }
     }
 
     function updateManagedLayer(id, eeObject, vis, name) {
