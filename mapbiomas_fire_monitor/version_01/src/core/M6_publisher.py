@@ -29,7 +29,7 @@ def _fmt_time(s):
 
 
 def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=None):
-    """Junta todos los tiles de una region en un mosaico regional."""
+    """Streaming mosaic via GDAL /vsigs/ — sem download local dos tiles."""
     if fs is None:
         fs = _get_fs()
 
@@ -55,20 +55,23 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=
     tmpdir = os.path.join(get_temp_dir('mosaics'), f"merge_{model_id}_{region}_{period}_{int(time.time())}")
 
     try:
-        local_tiles = []
-        for i, tp in enumerate(tile_paths):
-            local = os.path.join(tmpdir, f"tile_{i:04d}.tif")
-            _gcs_download(tp, local)
-            local_tiles.append(local)
+        # /vsigs/ paths — GDAL le direto do GCS, sem download
+        vsigs_paths = [tp.replace('gs://', '/vsigs/') for tp in tile_paths]
 
         vrt_path = os.path.join(tmpdir, "mosaic.vrt")
-        gdal.BuildVRT(vrt_path, local_tiles,
+        gdal.BuildVRT(vrt_path, vsigs_paths,
             options=gdal.BuildVRTOptions(resampleAlg='nearest'))
 
         mosaic_local = os.path.join(tmpdir, "mosaic.tif")
         gdal.Translate(mosaic_local, vrt_path,
             options=gdal.TranslateOptions(
                 creationOptions=['COMPRESS=LZW', 'BIGTIFF=YES']))
+
+        # Nomeia as bandas no GeoTIFF — GEE respeita BandDescription
+        ds = gdal.Open(mosaic_local, gdal.GA_Update)
+        ds.GetRasterBand(1).SetDescription('classification')
+        ds.GetRasterBand(2).SetDescription('probability')
+        ds = None
 
         _gcs_upload(mosaic_local, out_gcs)
 
@@ -228,7 +231,6 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
         f'earthengine --project {ee_project} upload image '
         f'--asset_id={asset_id} '
         f'--pyramiding_policy=mode '
-        f'--band_names classification,probability '
         f'--time_start {ts_start} '
         f'--time_end {ts_end} '
         f'--property source=mapbiomas-fire '
