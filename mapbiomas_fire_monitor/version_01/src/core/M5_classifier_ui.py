@@ -268,7 +268,7 @@ class M5WorkplanUI:
         for c in self.chk_periods:
             c.value = value
 
-    def _on_add_click(self, b):
+    def _on_add_click(self):
         self.plan = load_workplan()
         model = next((c.description for c in self.chk_models if c.value), None)
         regions = [c.description for c in self.chk_regions if c.value]

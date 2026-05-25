@@ -8,6 +8,7 @@ import time
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
 from M4_algorithms_dnn import ModelTrainer
+from M_lang import L as Lang
 
 def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=None, save_path=None, viz_config=None):
     """
