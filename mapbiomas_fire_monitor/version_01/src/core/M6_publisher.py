@@ -503,6 +503,28 @@ def cleanup_old_m5_stats(fs=None, logger=print):
     logger("  Cleanup done.")
 
 
+def purge_gee_classifications(logger=print):
+    """Remove assets GEE regionais de todos os modelos. Idempotente."""
+    import ee
+    base = f"{CONFIG['asset_monitor_base']}/LIBRARY_CLASSIFICATIONS/REGIONAL"
+    try:
+        result = ee.data.listAssets({'parent': base})
+    except Exception:
+        logger("  No GEE regional folder or already clean.")
+        return
+    total = 0
+    for folder in result.get('assets', []):
+        model_id = folder['name'].split('/')[-1]
+        assets = ee.data.listAssets({'parent': folder['name']}).get('assets', [])
+        for a in assets:
+            ee.data.deleteAsset(a['name'])
+            total += 1
+            logger(f"  Deleted {a['name']}")
+        ee.data.deleteAsset(folder['name'])
+        logger(f"  Removed folder {model_id} ({len(assets)} assets)")
+    logger(f"  Done. {total} assets deleted.")
+
+
 def purge_all_classifications(logger=print, dry_run=False):
     """Remove todos os tiles, mosaicos, stats e assets GEE de CLASSIFICACOES.
 
