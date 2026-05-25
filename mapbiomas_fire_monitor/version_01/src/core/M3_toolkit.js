@@ -80,6 +80,7 @@ var L = (function () {
             opt_rgb_swir_alt: '[SWIR2/SWIR1/NIR]',
             cab_satellites: 'Satelite',
             cab_reference: 'Referencia',
+            cab_classifications: 'Clasificaciones Regionales',
             short_guide: 'Guia',
             short_import: 'Importar',
             short_export: 'Exportar',
@@ -149,6 +150,7 @@ var L = (function () {
             opt_rgb_swir_alt: '[SWIR2/SWIR1/NIR]',
             cab_satellites: 'Satelite',
             cab_reference: 'Referencia',
+            cab_classifications: 'Classificacoes Regionais',
             short_guide: 'Guia',
             short_import: 'Importar',
             short_export: 'Exportar',
@@ -218,6 +220,7 @@ var L = (function () {
             opt_rgb_swir_alt: '[SWIR2/SWIR1/NIR]',
             cab_satellites: 'Satellite',
             cab_reference: 'Reference',
+            cab_classifications: 'Regional Classifications',
             short_guide: 'Guide',
             short_import: 'Import',
             short_export: 'Export',
@@ -374,6 +377,27 @@ var extraDatasets = {
     }
 };
 
+// ─── CLASSIFICAÇÕES REGIONAIS ─────────────────────────────────────────────────
+var REGIONAL_FOLDER = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01/LIBRARY_CLASSIFICATIONS/REGIONAL';
+
+var CLASS_PALETTE = [
+    '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+    '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
+    '#469990', '#dcbeff', '#9A6324', '#fffAC8', '#800000',
+    '#aaffc3', '#808000', '#ffd8b1', '#000075', '#a9a9a9',
+    '#e6beff', '#d2f53c', '#ff46b7', '#008080', '#e6beff',
+    '#aa6e28', '#ffcce0', '#808080', '#ffe119', '#911eb4',
+    '#46f0f0', '#f032e6', '#d2f53c', '#fabebe', '#008080',
+    '#e6beff', '#aa6e28', '#fffAC8', '#800000', '#aaffc3',
+    '#808000', '#ffd8b1', '#000075', '#a9a9a9', '#e6194b',
+    '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4'
+];
+
+var PROB_PALETTE = ['#ffcccc', '#ff6666', '#cc0000', '#660000'];
+
+var classCheckboxes = {};
+var classBandCheckboxes = {};
+
 var regionCheckboxes = {};
 var layerAllRegions = ui.Map.Layer(ee.Image(), {}, 'All Regions');
 var layerSelectedRegion = ui.Map.Layer(ee.Image(), {}, 'Selected Region');
@@ -492,6 +516,15 @@ function user_interface() {
         return selected;
     }
 
+    function getSelectedRegionNames() {
+        var selected = [];
+        if (typeof regionCheckboxes === 'undefined') return [];
+        Object.keys(regionCheckboxes).forEach(function (k) {
+            if (regionCheckboxes[k].getValue()) selected.push(k);
+        });
+        return selected;
+    }
+
     function updateMosaic() {
         var checkedPeriods = getSelectedPeriods();
         var checkedVisKeys = getSelectedVis();
@@ -501,10 +534,7 @@ function user_interface() {
         var baseBands = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'];
 
         // Lógica de Regiões Selecionadas
-        var selectedNames = [];
-        Object.keys(regionCheckboxes).forEach(function (key) {
-            if (regionCheckboxes[key].getValue()) selectedNames.push(key);
-        });
+        var selectedNames = getSelectedRegionNames();
 
         var geom = current_regiones;
         if (selectedNames.length > 0) {
@@ -636,6 +666,42 @@ function user_interface() {
                     updateManagedLayer(layerId, extraImg.updateMask(spatialMask), extraDatasets[key].vis, extraDatasets[key].name + ' - ' + dateStr);
                 }
             });
+
+            // --- CLASSIFICAÇÕES REGIONAIS ---
+            var classBandCls = classBandCheckboxes['cls'] && classBandCheckboxes['cls'].getValue();
+            var classBandPrb = classBandCheckboxes['prb'] && classBandCheckboxes['prb'].getValue();
+            if (classBandCls || classBandPrb) {
+                var selectedRegions = getSelectedRegionNames();
+                var modelList = Object.keys(classCheckboxes).sort();
+                Object.keys(classCheckboxes).forEach(function (modelId) {
+                    if (!classCheckboxes[modelId].getValue()) return;
+                    var modelIdx = modelList.indexOf(modelId);
+                    var color = CLASS_PALETTE[modelIdx % 50] || '#e6194b';
+                    var col = ee.ImageCollection(REGIONAL_FOLDER + '/' + modelId);
+                    selectedRegions.forEach(function (regionName) {
+                        var assetName = regionName + '_' + dateStr;
+                        var filtered = col.filter(ee.Filter.stringContains('system:index', regionName))
+                            .filter(ee.Filter.stringContains('system:index', dateStr));
+                        var img = filtered.mosaic();
+                        if (classBandCls) {
+                            var lId = 'class_' + modelId + '_' + assetName + '_cls';
+                            desiredLayerIds.push(lId);
+                            updateManagedLayer(lId,
+                                img.select('classification').selfMask().updateMask(spatialMask),
+                                { min: 0, max: 1, palette: ['00000000', color] },
+                                modelId + ' ' + assetName);
+                        }
+                        if (classBandPrb) {
+                            var lId = 'class_' + modelId + '_' + assetName + '_prb';
+                            desiredLayerIds.push(lId);
+                            updateManagedLayer(lId,
+                                img.select('probability').selfMask().updateMask(spatialMask),
+                                { min: 0.5, max: 1, palette: PROB_PALETTE },
+                                modelId + ' prob ' + assetName);
+                        }
+                    });
+                });
+            }
         });
 
         // Remover camadas que não estão mais marcadas
@@ -645,6 +711,65 @@ function user_interface() {
                 delete managedLayers[id];
             }
         });
+    }
+
+    function updateClassificationsDrawer() {
+        drawerClassModels.panel.clear();
+        classCheckboxes = {};
+        var selectedNames = getSelectedRegionNames();
+        if (selectedNames.length === 0) return;
+
+        var labelVacio = ui.Label('(cargando...)', { fontSize: '10px', color: '#888' });
+        drawerClassModels.panel.add(labelVacio);
+
+        var collections = ee.data.listAssets({ parent: REGIONAL_FOLDER });
+        var modelAssets = collections ? collections.assets : [];
+
+        if (!modelAssets || modelAssets.length === 0) {
+            labelVacio.setValue('(sin modelos)');
+            return;
+        }
+
+        var modelIds = modelAssets.map(function (c) { return c.id.split('/').pop(); });
+        var pendentes = modelIds.length;
+
+        modelIds.forEach(function (modelId, idx) {
+            var colPath = REGIONAL_FOLDER + '/' + modelId;
+            try {
+                ee.data.listAssets({ parent: colPath }, function (images, err) {
+                    pendentes--;
+                    if (err || !images || !images.assets) {
+                        if (pendentes === 0) verifyEmpty();
+                        return;
+                    }
+                    var imageNames = images.assets.map(function (i) { return i.id.split('/').pop(); });
+                    var hasData = selectedNames.some(function (r) {
+                        return imageNames.some(function (img) { return img.indexOf(r) !== -1; });
+                    });
+                    if (hasData) {
+                        if (labelVacio.parent()) labelVacio.parent().remove(labelVacio);
+                        var chk = ui.Checkbox({
+                            label: modelId,
+                            value: false,
+                            onChange: function () { debouncedUpdateMosaic(); },
+                            style: { margin: '1px 3px', padding: '0px', fontSize: '10px', color: CLASS_PALETTE[idx % 50] }
+                        });
+                        classCheckboxes[modelId] = chk;
+                        drawerClassModels.panel.add(chk);
+                    }
+                    if (pendentes === 0) verifyEmpty();
+                });
+            } catch (e) {
+                pendentes--;
+                if (pendentes === 0) verifyEmpty();
+            }
+        });
+
+        function verifyEmpty() {
+            if (Object.keys(classCheckboxes).length === 0 && labelVacio.parent()) {
+                labelVacio.setValue('(sem modelos para esta regiao)');
+            }
+        }
     }
 
     function updateManagedLayer(id, eeObject, vis, name) {
@@ -863,6 +988,7 @@ function user_interface() {
                         updateExportLabel();
                         debouncedUpdateMosaic();
                         updateShortnameSuggestion();
+                        updateClassificationsDrawer();
                     },
                     style: { margin: '1px 3px', padding: '0px', fontSize: '10px', backgroundColor: '#f9f9f9' }
                 });
@@ -873,6 +999,7 @@ function user_interface() {
             updateExportLabel();
             debouncedUpdateMosaic();
             updateShortnameSuggestion();
+            updateClassificationsDrawer();
         });
 
         // Atualiza a gaveta de períodos
@@ -901,6 +1028,7 @@ function user_interface() {
         }
 
         updateImportList(conf);
+        updateClassificationsDrawer();
     }
 
     function updateImportList(conf) {
@@ -1104,6 +1232,20 @@ function user_interface() {
     // Mesclar os checkboxes para o gerenciamento global
     Object.keys(drawerAQ.checkboxes).forEach(function (k) { extraCheckboxes[k] = drawerAQ.checkboxes[k]; });
     Object.keys(drawerFocos.checkboxes).forEach(function (k) { extraCheckboxes[k] = drawerFocos.checkboxes[k]; });
+
+    // --- SUB-CABINET: CLASSIFICAÇÕES REGIONAIS ---
+    var subCabClass = createCabinet(L.cab_classifications, false, '2px 2px 2px 10px');
+    cabLayers.content.add(subCabClass.panel);
+
+    var drawerClassToggle = createLayerDrawer('Bandas', [
+        { id: 'cls', label: 'classification', value: true, onChange: function () { debouncedUpdateMosaic(); } },
+        { id: 'prb', label: 'probability', value: false, onChange: function () { debouncedUpdateMosaic(); } }
+    ]);
+    classBandCheckboxes = drawerClassToggle.checkboxes;
+    subCabClass.content.add(drawerClassToggle.panel);
+
+    var drawerClassModels = { panel: ui.Panel({ style: { margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9' } }) };
+    subCabClass.content.add(drawerClassModels.panel);
 
     // --- CABINET 4: SAMPLES ---
     var cabSamples = createCabinet(L.cab_samples, true);
