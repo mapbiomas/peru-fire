@@ -560,10 +560,10 @@ def run_m6_publish(upload_gee=True, groups=None, ui=None, logger=None):
         if ui is not None and getattr(ui, '_publish_checks', None):
             checked = [g for g, cb in ui._publish_checks.items() if cb.value]
             if not checked:
-                logger("  Nenhum grupo marcado em 'To Publish'. Marque ao menos um card e tente novamente.")
+                logger("  No groups checked in 'To Publish'. Select at least one card and try again.")
                 return
             groups = checked
-            logger(f"  Usando {len(groups)} grupos marcados na UI.")
+            logger(f"  Using {len(groups)} groups from UI selection.")
 
         if groups is None:
             from M6_ui import _M6_DISCOVERY_CACHE
@@ -572,13 +572,13 @@ def run_m6_publish(upload_gee=True, groups=None, ui=None, logger=None):
                 raw = cached['groups']
                 done = cached['mosaics'] & cached['stats_done'] & cached['gee_assets']
                 groups = [g for g in raw if g not in done]
-                logger(f"  Usando {len(groups)} grupos pendentes do cache ({len(raw)} total, {len(done)} completos).")
+                logger(f"  Using {len(groups)} pending groups from cache ({len(raw)} total, {len(done)} complete).")
             else:
                 groups = discover_classified_groups(fs=fs, logger=logger)
-                logger(f"  Descobertos {len(groups)} grupos via scan GCS.")
+                logger(f"  Discovered {len(groups)} groups via GCS scan.")
 
     if not groups:
-        logger("  Nenhum grupo para processar.")
+        logger("  No groups to process.")
         return
 
     groups = sorted(groups)

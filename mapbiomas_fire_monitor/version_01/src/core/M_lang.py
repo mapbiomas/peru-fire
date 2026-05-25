@@ -125,6 +125,26 @@ class L:
     ANALYTICS_FILTER_PERIOD = "Period"
     RUN_M6 = "Run M6 Publish"
     REFRESH_M6 = "Refresh M6"
+    M6_HEADER_TITLE = "M6 - Mosaic, Stats & Publication"
+    M6_LABEL_PERIOD = "Period:"
+    M6_GROUPS_PENDING = "{n} groups pending mosaic"
+    M6_MOSAIC_OK = "mosaic OK"
+    M6_PUBLISHED_GROUPS = "{n} published groups"
+    M6_BADGE_MOSAIC = "M"
+    M6_BADGE_STATS = "S"
+    M6_BADGE_GEE = "G"
+    M6_COL_PCT = "%"
+    M6_COL_HA = "ha"
+    M6_COL_TILES = "Tiles"
+    M6_LEGEND_PUBLISHED = "Published"
+    M6_LEGEND_PARTIAL = "Partial"
+    M6_LEGEND_CLASSIFIED_ONLY = "Classified only"
+    M6_LEGEND_NO_DATA = "No data"
+    M6_N_RECORDS = "{n} records"
+    M6_DOWNLOAD_LINK = "Download {fname}"
+    M6_NO_STATS = "No consolidated stats available. Run M6 publish first."
+    M6_NO_MATCHING = "No matching records."
+    M6_NO_CLASSIFIED_GROUPS = "No classified groups found."
 
     GUIDE_M5_HTML = """<div style='padding:20px; font-family:sans-serif;'>
         <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Large Scale Regional Classification</h3>
@@ -928,6 +948,26 @@ STRINGS_ES = {
     "M6_START": "Iniciando Filtrado",
     "M6_EXPORT_OK": "Tarea de exportación iniciada",
     "M6_SUMMARY": "Resumen de Configuración Usada",
+    "M6_HEADER_TITLE": "M6 - Mosaico, Stats y Publicación",
+    "M6_LABEL_PERIOD": "Periodo:",
+    "M6_GROUPS_PENDING": "{n} grupos pendientes de mosaico",
+    "M6_MOSAIC_OK": "mosaico OK",
+    "M6_PUBLISHED_GROUPS": "{n} grupos publicados",
+    "M6_BADGE_MOSAIC": "M",
+    "M6_BADGE_STATS": "E",
+    "M6_BADGE_GEE": "G",
+    "M6_COL_PCT": "%",
+    "M6_COL_HA": "ha",
+    "M6_COL_TILES": "Tiles",
+    "M6_LEGEND_PUBLISHED": "Publicado",
+    "M6_LEGEND_PARTIAL": "Parcial",
+    "M6_LEGEND_CLASSIFIED_ONLY": "Solo clasificado",
+    "M6_LEGEND_NO_DATA": "Sin datos",
+    "M6_N_RECORDS": "{n} registros",
+    "M6_DOWNLOAD_LINK": "Descargar {fname}",
+    "M6_NO_STATS": "No hay estadísticas consolidadas. Ejecute M6 publish primero.",
+    "M6_NO_MATCHING": "No hay registros coincidentes.",
+    "M6_NO_CLASSIFIED_GROUPS": "No se encontraron grupos clasificados.",
     # M7
     "M7_TITLE": "Curador",
     "M7_DESC": "Publicación de Colección Pre-Oficial",
@@ -1391,6 +1431,26 @@ STRINGS_PT = {
     "M6_START": "Iniciando Filtragem",
     "M6_EXPORT_OK": "Tarefa de exportação iniciada",
     "M6_SUMMARY": "Resumo da Configuração",
+    "M6_HEADER_TITLE": "M6 - Mosaico, Stats e Publicação",
+    "M6_LABEL_PERIOD": "Período:",
+    "M6_GROUPS_PENDING": "{n} grupos pendentes de mosaico",
+    "M6_MOSAIC_OK": "mosaico OK",
+    "M6_PUBLISHED_GROUPS": "{n} grupos publicados",
+    "M6_BADGE_MOSAIC": "M",
+    "M6_BADGE_STATS": "E",
+    "M6_BADGE_GEE": "G",
+    "M6_COL_PCT": "%",
+    "M6_COL_HA": "ha",
+    "M6_COL_TILES": "Tiles",
+    "M6_LEGEND_PUBLISHED": "Publicado",
+    "M6_LEGEND_PARTIAL": "Parcial",
+    "M6_LEGEND_CLASSIFIED_ONLY": "Somente classificado",
+    "M6_LEGEND_NO_DATA": "Sem dados",
+    "M6_N_RECORDS": "{n} registros",
+    "M6_DOWNLOAD_LINK": "Baixar {fname}",
+    "M6_NO_STATS": "Nenhuma estatística consolidada. Execute M6 publish primeiro.",
+    "M6_NO_MATCHING": "Nenhum registro correspondente.",
+    "M6_NO_CLASSIFIED_GROUPS": "Nenhum grupo classificado encontrado.",
     # M7
     "M7_TITLE": "Curador",
     "M7_DESC": "Publicação de Coleção Pré-Oficial",
@@ -1854,6 +1914,26 @@ STRINGS_FR = {
     "M6_START": "Démarrage filtrage",
     "M6_EXPORT_OK": "Tâche d'exportation démarrée",
     "M6_SUMMARY": "Résumé configuration",
+    "M6_HEADER_TITLE": "M6 - Mosaïque, Stats et Publication",
+    "M6_LABEL_PERIOD": "Période:",
+    "M6_GROUPS_PENDING": "{n} groupes en attente de mosaïque",
+    "M6_MOSAIC_OK": "mosaïque OK",
+    "M6_PUBLISHED_GROUPS": "{n} groupes publiés",
+    "M6_BADGE_MOSAIC": "M",
+    "M6_BADGE_STATS": "S",
+    "M6_BADGE_GEE": "G",
+    "M6_COL_PCT": "%",
+    "M6_COL_HA": "ha",
+    "M6_COL_TILES": "Tuiles",
+    "M6_LEGEND_PUBLISHED": "Publié",
+    "M6_LEGEND_PARTIAL": "Partiel",
+    "M6_LEGEND_CLASSIFIED_ONLY": "Classifié uniquement",
+    "M6_LEGEND_NO_DATA": "Pas de données",
+    "M6_N_RECORDS": "{n} enregistrements",
+    "M6_DOWNLOAD_LINK": "Télécharger {fname}",
+    "M6_NO_STATS": "Aucune statistique consolidée. Exécutez M6 publish d'abord.",
+    "M6_NO_MATCHING": "Aucun enregistrement correspondant.",
+    "M6_NO_CLASSIFIED_GROUPS": "Aucun groupe classifié trouvé.",
     # M7
     "M7_TITLE": "Curateur",
     "M7_DESC": "Publication collection pré-officielle",
@@ -2317,6 +2397,26 @@ STRINGS_ID = {
     "M6_START": "Memulai Penyaringan",
     "M6_EXPORT_OK": "Tugas ekspor dimulai",
     "M6_SUMMARY": "Ringkasan Konfigurasi",
+    "M6_HEADER_TITLE": "M6 - Mozaik, Statistik & Publikasi",
+    "M6_LABEL_PERIOD": "Periode:",
+    "M6_GROUPS_PENDING": "{n} grup menunggu mozaik",
+    "M6_MOSAIC_OK": "mozaik OK",
+    "M6_PUBLISHED_GROUPS": "{n} grup dipublikasikan",
+    "M6_BADGE_MOSAIC": "M",
+    "M6_BADGE_STATS": "S",
+    "M6_BADGE_GEE": "G",
+    "M6_COL_PCT": "%",
+    "M6_COL_HA": "ha",
+    "M6_COL_TILES": "Ubin",
+    "M6_LEGEND_PUBLISHED": "Dipublikasikan",
+    "M6_LEGEND_PARTIAL": "Parsial",
+    "M6_LEGEND_CLASSIFIED_ONLY": "Hanya diklasifikasi",
+    "M6_LEGEND_NO_DATA": "Tidak ada data",
+    "M6_N_RECORDS": "{n} catatan",
+    "M6_DOWNLOAD_LINK": "Unduh {fname}",
+    "M6_NO_STATS": "Tidak ada statistik terkonsolidasi. Jalankan M6 publish terlebih dahulu.",
+    "M6_NO_MATCHING": "Tidak ada catatan yang cocok.",
+    "M6_NO_CLASSIFIED_GROUPS": "Tidak ada grup terklasifikasi ditemukan.",
     # M7
     "M7_TITLE": "Kurator",
     "M7_DESC": "Publikasi Koleksi Pra-Resmi",

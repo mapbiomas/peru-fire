@@ -163,9 +163,9 @@ class M6WorkplanUI:
                 return f"<span style='display:inline-block;padding:0 6px;border-radius:8px;font-size:10px;font-weight:600;color:white;background:{color};margin:0 2px;'>{label}</span>"
 
             badges = widgets.HTML(
-                _badge(g in self._mosaics, 'M') +
-                _badge(g in self._stats_done, 'S') +
-                _badge(g in self._gee_assets, 'G'),
+                _badge(g in self._mosaics, Lang.M6_BADGE_MOSAIC) +
+                _badge(g in self._stats_done, Lang.M6_BADGE_STATS) +
+                _badge(g in self._gee_assets, Lang.M6_BADGE_GEE),
                 layout=L(margin='0 0 0 30px'))
 
             right_col = widgets.VBox([
@@ -173,8 +173,8 @@ class M6WorkplanUI:
                     cb,
                     widgets.HTML(f"<b style='font-size:15px;color:#0f172a;'>{m}</b> {c_label}"),
                 ], layout=L(align_items='center')),
-                widgets.HTML(f"<span style='color:#475569;margin-left:30px;'>Region: <b>{r}</b></span>"),
-                widgets.HTML(f"<span style='color:#475569;margin-left:30px;'>Period: <b>{p}</b></span>"),
+                widgets.HTML(f"<span style='color:#475569;margin-left:30px;'>{Lang.DROP_REGION} <b>{r}</b></span>"),
+                widgets.HTML(f"<span style='color:#475569;margin-left:30px;'>{Lang.M6_LABEL_PERIOD} <b>{p}</b></span>"),
                 badges,
             ], layout=L(flex='1', margin='0 0 0 12px'))
 
@@ -184,7 +184,7 @@ class M6WorkplanUI:
             on_all=lambda _: self._toggle_publish(True),
             on_none=lambda _: self._toggle_publish(False))
         self.tab_to_publish.children = [
-            widgets.HTML(f"<b>{len(pending)} groups pending mosaic</b>"),
+            widgets.HTML(f"<b>{Lang.M6_GROUPS_PENDING.format(n=len(pending))}</b>"),
             hbox_pub,
             widgets.VBox(cards),
         ]
@@ -206,25 +206,25 @@ class M6WorkplanUI:
                 widgets.HTML(f"<b>{m}</b>{c_label}", layout=L(width='220px')),
                 widgets.HTML(r, layout=L(width='150px')),
                 widgets.HTML(p, layout=L(width='120px')),
-                widgets.HTML("<span style='color:green;'> mosaic OK</span>"),
+                widgets.HTML(f"<span style='color:green;'> {Lang.M6_MOSAIC_OK}</span>"),
             ], layout=L(margin='2px 0', padding='4px', border='1px solid #eee')))
         self.tab_finished.children = [
-            widgets.HTML(f"<b>{len(done)} published groups</b>"),
+            widgets.HTML(f"<b>{Lang.M6_PUBLISHED_GROUPS.format(n=len(done))}</b>"),
             widgets.VBox(rows, layout=L(margin='10px 0'))
         ]
 
     def _render_analytics(self):
         if not self._stats_data:
-            self.tab_analytics.children = [make_empty_state("No consolidated stats available. Run M6 publish first.")]
+            self.tab_analytics.children = [make_empty_state(Lang.M6_NO_STATS)]
             return
 
         models = sorted(set(r['model_id'] for r in self._stats_data))
         regions = sorted(set(r['region'] for r in self._stats_data))
         periods = sorted(set(r['period'] for r in self._stats_data), reverse=True)
 
-        f_model = widgets.Dropdown(options=['All'] + models, value='All', description=Lang.ANALYTICS_FILTER_MODEL, layout=L(width='200px'))
-        f_region = widgets.Dropdown(options=['All'] + regions, value='All', description=Lang.ANALYTICS_FILTER_REGION, layout=L(width='200px'))
-        f_period = widgets.Dropdown(options=['All'] + periods, value='All', description=Lang.ANALYTICS_FILTER_PERIOD, layout=L(width='200px'))
+        f_model = widgets.Dropdown(options=[Lang.ALL] + models, value=Lang.ALL, description=Lang.ANALYTICS_FILTER_MODEL, layout=L(width='200px'))
+        f_region = widgets.Dropdown(options=[Lang.ALL_F] + regions, value=Lang.ALL_F, description=Lang.ANALYTICS_FILTER_REGION, layout=L(width='200px'))
+        f_period = widgets.Dropdown(options=[Lang.ALL] + periods, value=Lang.ALL, description=Lang.ANALYTICS_FILTER_PERIOD, layout=L(width='200px'))
         filters = widgets.HBox([f_model, f_region, f_period])
 
         w_table = widgets.HTML()
@@ -233,20 +233,20 @@ class M6WorkplanUI:
 
         def _update_table(_=None):
             data = self._stats_data
-            if f_model.value != 'All':
+            if f_model.value != Lang.ALL:
                 data = [r for r in data if r['model_id'] == f_model.value]
-            if f_region.value != 'All':
+            if f_region.value != Lang.ALL_F:
                 data = [r for r in data if r['region'] == f_region.value]
-            if f_period.value != 'All':
+            if f_period.value != Lang.ALL:
                 data = [r for r in data if r['period'] == f_period.value]
 
             if not data:
-                w_table.value = "<p style='color:gray;'>No matching records.</p>"
+                w_table.value = f"<p style='color:gray;'>{Lang.M6_NO_MATCHING}</p>"
                 return
 
             h = '<table style="border-collapse:collapse;width:100%;font-size:13px;">'
             h += '<tr style="background:#2c3e50;color:white;">'
-            for col in ['Model', 'Region', 'Period', 'ha', '%', 'Confidence', 'Tiles']:
+            for col in [Lang.MODEL, Lang.REGION, Lang.M6_LABEL_PERIOD.rstrip(':'), Lang.M6_COL_HA, Lang.M6_COL_PCT, Lang.CONFIDENCE, Lang.M6_COL_TILES]:
                 h += f'<th style="padding:6px 10px;text-align:left;">{col}</th>'
             h += '</tr>'
             for row in data:
@@ -260,7 +260,7 @@ class M6WorkplanUI:
                 h += f'<td style="padding:4px 10px;">{row.get("tiles_total", "0")}</td>'
                 h += '</tr>'
             h += '</table>'
-            h += f'<p style="color:gray;font-size:12px;">{len(data)} records</p>'
+            h += f'<p style="color:gray;font-size:12px;">{Lang.M6_N_RECORDS.format(n=len(data))}</p>'
             w_table.value = h
             btn_download._data = data
 
@@ -280,7 +280,7 @@ class M6WorkplanUI:
                 writer.writerow({k: row.get(k, '') for k in fieldnames})
             csv_bytes = output.getvalue().encode('utf-8')
             b64 = base64.b64encode(csv_bytes).decode('utf-8')
-            w_download.value = f'<a href="data:text/csv;base64,{b64}" download="{fname}">Download {fname}</a>'
+            w_download.value = f'<a href="data:text/csv;base64,{b64}" download="{fname}">{Lang.M6_DOWNLOAD_LINK.format(fname=fname)}</a>'
 
         for f in [f_model, f_region, f_period]:
             f.observe(_update_table, names='value')
@@ -294,11 +294,11 @@ class M6WorkplanUI:
         all_regions = sorted(set(g[1] for g in self._groups))
 
         if not all_rows:
-            self.tab_coverage.children = [make_empty_state("No classified groups found.")]
+            self.tab_coverage.children = [make_empty_state(Lang.M6_NO_CLASSIFIED_GROUPS)]
             return
 
         lines = ["<table style='border-collapse:collapse;font-size:13px;'>"]
-        header = "<tr><th style='padding:6px 10px;text-align:left;'>Model</th>"
+        header = "<tr><th style='padding:6px 10px;text-align:left;'>" + Lang.MODEL + "</th>"
         for r in all_regions:
             header += f"<th style='padding:6px 10px;'>{r}</th>"
         header += "</tr>"
@@ -326,12 +326,12 @@ class M6WorkplanUI:
             lines.append(line)
 
         lines.append("</table>")
-        legend = widgets.HTML("""
+        legend = widgets.HTML(f"""
             <div style='margin-top:15px;font-size:12px;'>
-                <span style='color:green;'>\u25cf Published</span> &nbsp;
-                <span style='color:#f39c12;'>\u25cf Partial</span> &nbsp;
-                <span style='color:#3498db;'>\u25cf Classified only</span> &nbsp;
-                <span style='color:#ccc;'>\u25cf No data</span>
+                <span style='color:green;'>\u25cf {Lang.M6_LEGEND_PUBLISHED}</span> &nbsp;
+                <span style='color:#f39c12;'>\u25cf {Lang.M6_LEGEND_PARTIAL}</span> &nbsp;
+                <span style='color:#3498db;'>\u25cf {Lang.M6_LEGEND_CLASSIFIED_ONLY}</span> &nbsp;
+                <span style='color:#ccc;'>\u25cf {Lang.M6_LEGEND_NO_DATA}</span>
             </div>
         """)
         self.tab_coverage.children = [widgets.HTML("".join(lines)), legend]
@@ -351,7 +351,7 @@ class M6WorkplanUI:
         self.tabs.set_title(4, Lang.TAB_M6_COVERAGE)
 
         header = widgets.HBox([
-            widgets.HTML("<b style='color:#2c3e50; font-size:14px;'>M6 - Mosaic, Stats & Publication</b>"),
+            widgets.HTML(f"<b style='color:#2c3e50; font-size:14px;'>{Lang.M6_HEADER_TITLE}</b>"),
             self.btn_refresh_container
         ], layout=L(margin='0 0 15px 0', align_items='center', padding='10px',
                     border='1px solid #e0e0e0', background='#fcfcfc'))
