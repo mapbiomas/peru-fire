@@ -263,7 +263,7 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                     output_prob[valid_mask] = np.round(probs * 1000).astype(np.int16)
                     if 'dayOfYear' in bands_block:
                         burned_2d = np.zeros((hb, wb), dtype=bool)
-                        burned_2d[valid_mask] = probs > 0.5
+                        burned_2d[valid_mask] = probs > 0
                         output_doy[burned_2d] = bands_block['dayOfYear'][burned_2d].astype(np.int16)
 
                     dst.write(output_prob, 1, window=dst_win)

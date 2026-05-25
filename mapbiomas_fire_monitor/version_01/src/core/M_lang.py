@@ -76,6 +76,7 @@ class L:
     SAVE_TASK_GCS = "Save Task GCS"
     EXCLUDE_TASK_GCS = "Exclude Task GCS"
     DELETE_MODEL = "Delete Model"
+    DISCARD_WORKPLAN = "Discard Workplan"
     DELETE_REGION = "Delete Region"
     DELETE_SELECTED = "Delete Selected"
     DELETE_ALL = "Delete All"
@@ -575,6 +576,7 @@ STRINGS_ES = {
     "SAVE_TASK_GCS": "Guardar Tarea GCS",
     "EXCLUDE_TASK_GCS": "Excluir Tarea GCS",
     "DELETE_MODEL": "Eliminar Modelo",
+    "DISCARD_WORKPLAN": "Descartar Plan de Trabajo",
     "DELETE_REGION": "Eliminar Región",
     "DELETE_SELECTED": "Eliminar Seleccionados",
     "DELETE_ALL": "Eliminar Todos",
@@ -1019,6 +1021,7 @@ STRINGS_PT = {
     "SAVE_TASK_GCS": "Salvar Tarefa GCS",
     "EXCLUDE_TASK_GCS": "Excluir Tarefa GCS",
     "DELETE_MODEL": "Excluir Modelo",
+    "DISCARD_WORKPLAN": "Descartar Plano de Trabalho",
     "DELETE_REGION": "Excluir Região",
     "DELETE_SELECTED": "Excluir Selecionados",
     "DELETE_ALL": "Excluir Todos",
@@ -1463,6 +1466,7 @@ STRINGS_FR = {
     "SAVE_TASK_GCS": "Enregistrer tâche GCS",
     "EXCLUDE_TASK_GCS": "Exclure tâche GCS",
     "DELETE_MODEL": "Supprimer le modèle",
+    "DISCARD_WORKPLAN": "Abandonner le Plan de Travail",
     "DELETE_REGION": "Supprimer la région",
     "DELETE_SELECTED": "Supprimer sélectionnés",
     "DELETE_ALL": "Tout supprimer",
@@ -1907,6 +1911,7 @@ STRINGS_ID = {
     "SAVE_TASK_GCS": "Simpan Tugas GCS",
     "EXCLUDE_TASK_GCS": "Keluarkan Tugas GCS",
     "DELETE_MODEL": "Hapus Model",
+    "DISCARD_WORKPLAN": "Buang Rencana Kerja",
     "DELETE_REGION": "Hapus Wilayah",
     "DELETE_SELECTED": "Hapus yang Dipilih",
     "DELETE_ALL": "Hapus Semua",

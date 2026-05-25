@@ -245,7 +245,7 @@ class M5WorkplanUI:
                 for m in range(1, max_m + 1):
                     periods.append(f"{y}_{m:02d}")
         periods.sort(reverse=True)
-        box, self.chk_periods = self._create_checkbox_grid(periods, "3. Seleccione Periodos (Anio / Anio_Mes):", bg_color='#ebf5eb', columns=4)
+        box, self.chk_periods = self._create_checkbox_grid(periods, "3. Seleccione Periodos (Año / Año_Mes):", bg_color='#ebf5eb', columns=4)
         btn_all_per, btn_none_per, hbox_per = make_select_all_none(
             on_all=lambda _: self._toggle_periods(True),
             on_none=lambda _: self._toggle_periods(False))
@@ -569,11 +569,8 @@ class M5WorkplanUI:
             all_jobs = [j for j in self.plan if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)]
             filtered = self._apply_search_filter(all_jobs, self.f_pend_search)
 
-            clear_container, btn_clear, _ = make_refresh_button('trash', self._on_clear_click, description=Lang.CLEAR_TEMP_TASKS, width='200px')
-            btn_clear.button_style = 'warning'
-
             tarea_section = self._tarea_section()
-            search_box = widgets.HBox([self.f_pend_search, clear_container], layout=L(margin='0 0 8px 0'))
+            search_box = self.f_pend_search
 
             debug_info = (f'<div style="font-size:11px;color:#94a3b8;margin:0 0 6px 0;">'
                           f'{len(all_jobs)} pendentes | {len(filtered)} apos filtro</div>')
@@ -631,25 +628,8 @@ class M5WorkplanUI:
                     else:
                         card_badge, badge_color = "Temporário", "#64748b"
 
-                    btn_del_model = widgets.Button(description=Lang.DELETE_MODEL, button_style='danger', layout=L(width='140px', height='28px', font_size='12px'))
-                    if saved_count == 0:
-                        save_box, btn_save, _ = make_refresh_button('upload', lambda m=model_name: self._on_save_gcs_click(m), description='Salvar no GCS', width='160px')
-                        btn_save.button_style = 'primary'
-                        btn_secondary = widgets.Button(description='Dispensar', button_style='warning', layout=L(width='120px', height='28px', font_size='12px'))
-                        btn_secondary.on_click(lambda _, m=model_name: self._on_dismiss_click(m))
-                        hbox_actions = widgets.HBox([save_box, btn_secondary, btn_del_model], layout=L(align_items='center', gap='6px', margin='0 0 6px 28px'))
-                    else:
-                        remaining = total_count - saved_count
-                        if remaining > 0:
-                            save_box, btn_save, _ = make_refresh_button('upload', lambda m=model_name: self._on_save_gcs_click(m), description=f'Salvar ({remaining})', width='160px')
-                            btn_save.button_style = 'primary'
-                        else:
-                            btn_save = widgets.Button(description='Salvo no GCS', button_style='success', layout=L(width='160px', height='28px', font_size='12px'), disabled=True)
-                            save_box = btn_save
-                        del_box, btn_secondary, _ = make_refresh_button('trash', lambda m=model_name: self._on_delete_gcs_click(m), description='Excluir do GCS', width='130px')
-                        btn_secondary.button_style = 'danger'
-                        hbox_actions = widgets.HBox([save_box, del_box, btn_del_model], layout=L(align_items='center', gap='6px', margin='0 0 6px 28px'))
-                    btn_del_model.on_click(lambda b, m=model_name, c=hbox_actions: inline_confirm(b, lambda: (self._delete_model_all(m), self._refresh_ui()), container=c))
+                    discard_box, btn_discard, _ = make_refresh_button('trash', lambda m=model_name: self._on_discard_workplan(m), description=Lang.DISCARD_WORKPLAN, width='220px')
+                    btn_discard.button_style = 'danger'
 
                     tarefas_assinadas = sorted(set(j.get('task_name', '') for j in jobs_list if j.get('task_name', '')))
                     task_badges = make_task_badges(tarefas_assinadas)
@@ -661,7 +641,7 @@ class M5WorkplanUI:
                             widgets.HTML(f"<span style='display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:white;background:{badge_color};'>{card_badge}</span>", layout=L(margin='0 0 0 auto')),
                         ], layout=L(align_items='center', margin='0 0 4px 0')),
                         widgets.HTML(f"<div style='margin:2px 0 6px 28px;'>{task_badges}</div>" if task_badges else ''),
-                        hbox_actions,
+                        discard_box,
                     ], layout=L(width='auto'))
 
                     region_lines = []
@@ -681,16 +661,13 @@ class M5WorkplanUI:
                         bar_color = '#22c55e' if running else '#3b82f6'
                         bar = (f'<div style="width:100px;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">'
                                f'<div style="width:{pct:.0f}%;height:100%;background:{bar_color};border-radius:4px;"></div></div>')
-                        btn_del = widgets.Button(description='', icon='trash', button_style='danger', layout=L(width='32px', height='26px', padding='0'))
                         row = widgets.HBox([
                             widgets.HTML(f'<span style="display:inline-block;width:10px;height:10px;background:{dot_color};border-radius:50%;margin:0 6px 0 0;"></span>'),
                             widgets.HTML(f"<span style='font-weight:600;color:#334155;width:140px;display:inline-block;'>{r}</span>"),
                             widgets.HTML(f"<span style='color:#64748b;font-size:12px;width:55px;'>{prog_str}</span>"),
                             widgets.HTML(bar, layout=L(margin='0 6px')),
                             widgets.HTML(f"<span style='color:#94a3b8;font-size:11px;'>{grid_str}</span>", layout=L(width='110px')),
-                            btn_del
                         ], layout=L(align_items='center', padding='5px 8px', margin='2px 0', border_bottom='1px solid #f1f5f9'))
-                        btn_del.on_click(lambda b, m=model_name, rg=r, c=row: inline_confirm(b, lambda: (self._delete_model_region(m, rg), self._refresh_ui()), container=c))
                         region_lines.append(row)
 
                     btn_detalhes = widgets.Button(description='Detalhes \u25bc', button_style='', layout=L(width='120px', height='26px', font_size='12px', padding='0 4px', margin='2px 0 2px 28px'))
@@ -840,6 +817,23 @@ class M5WorkplanUI:
         with self.out_msg:
             clear_output()
             display(HTML(f"<span style='color:red;'>Tarea eliminada del GCS: {model}.</span>"))
+        self._refresh_ui()
+
+    def _on_discard_workplan(self, model_name):
+        """Descarta todo o plano de trabalho de um modelo (local + GCS)."""
+        self.plan = load_workplan()
+        fs = _get_fs()
+        removed = 0
+        for j in self.plan:
+            if j['model'] == model_name:
+                if j.get('_saved'):
+                    delete_pending_job_gcs(j['model'], j['region'], j['period'], fs=fs)
+                removed += 1
+        self.plan = [j for j in self.plan if j['model'] != model_name]
+        save_workplan(self.plan)
+        with self.out_msg:
+            clear_output()
+            display(HTML(f"<b style='color:red;'>Plano descartado: {model_name} ({removed} jobs removidos).</b>"))
         self._refresh_ui()
 
     def _on_clear_click(self):
