@@ -416,15 +416,19 @@ def generate_region_thumbnail(region_name, size=64):
         return None
 
 
-def run_m6_publish(upload_gee=True, groups=None, logger=None):
+def run_m6_publish(upload_gee=True, groups=None, ui=None, logger=None):
     """Entry point M6: mosaic, stats, GEE upload.
     
     groups: lista de (model_id, region, period, campaign). Se None, descobre todos.
+    ui: M6WorkplanUI opcional. Se fornecido e groups=None, le os checkboxes da UI.
     """
     if logger is None:
         logger = print
 
     fs = _get_fs()
+    if groups is None and ui is not None:
+        groups = [g for g, cb in ui._publish_checks.items() if cb.value]
+        logger(f"  Using {len(groups)} checked groups from UI.")
     if groups is None:
         groups = discover_classified_groups(fs=fs, logger=logger)
     else:
