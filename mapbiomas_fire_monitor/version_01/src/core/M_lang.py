@@ -114,7 +114,6 @@ class L:
     ANALYTICS_FILTER_PERIOD = "Period"
     RUN_M6 = "Run M6 Publish"
     REFRESH_M6 = "Refresh M6"
-    PUBLISH_SELECTED = "Publish Selected ({n})"
 
     GUIDE_M5_HTML = """<div style='padding:20px; font-family:sans-serif;'>
         <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Large Scale Regional Classification</h3>
@@ -644,7 +643,6 @@ STRINGS_ES = {
     "STATUS_PUBLISHING": "Publicando",
     "STATUS_PUBLISHED": "Publicado",
     "STATUS_SKIPPED": "Omitido",
-    "PUBLISH_SELECTED": "Publicar Seleccionados ({n})",
     # M4 - Training
     "MODEL_TRAINER": "Entrenador del Modelo",
     "ITERATIONS": "Iteraciones",
@@ -1038,7 +1036,6 @@ STRINGS_PT = {
     "STATUS_PUBLISHING": "Publicando",
     "STATUS_PUBLISHED": "Publicado",
     "STATUS_SKIPPED": "Omitido",
-    "PUBLISH_SELECTED": "Publicar Selecionados ({n})",
     # M4 - Training
     "MODEL_TRAINER": "Treinador de Modelo",
     "ITERATIONS": "Iterações",
@@ -1432,7 +1429,6 @@ STRINGS_FR = {
     "STATUS_PUBLISHING": "Publication",
     "STATUS_PUBLISHED": "Publié",
     "STATUS_SKIPPED": "Ignoré",
-    "PUBLISH_SELECTED": "Publier sélectionnés ({n})",
     # M4 - Training
     "MODEL_TRAINER": "Entraîneur de modèle",
     "ITERATIONS": "Itérations",
@@ -1826,7 +1822,6 @@ STRINGS_ID = {
     "STATUS_PUBLISHING": "Mempublikasi",
     "STATUS_PUBLISHED": "Dipublikasi",
     "STATUS_SKIPPED": "Dilewati",
-    "PUBLISH_SELECTED": "Publikasikan yang Dipilih ({n})",
     # M4 - Training
     "MODEL_TRAINER": "Pelatih Model",
     "ITERATIONS": "Iterasi",

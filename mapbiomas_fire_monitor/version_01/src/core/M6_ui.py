@@ -103,88 +103,40 @@ class M6WorkplanUI:
         self._render_coverage()
 
     def _render_to_publish(self):
+        from M_ui_components import make_card_body, build_thumbnail_column
         pending = [g for g in self._groups if g not in self._mosaics]
         if not pending:
             self.tab_to_publish.children = [make_empty_state(Lang.NO_TASKS_PUBLISH)]
             return
 
-        cb_all = widgets.Checkbox(layout=L(width='40px'))
-        def _toggle_all(change):
-            for cb in self._publish_checks.values():
-                cb.value = change['new']
-        cb_all.observe(_toggle_all, names='value')
-
-        header = widgets.HBox([
-            cb_all,
-            widgets.HTML("<b>Model</b>", layout=L(width='180px')),
-            widgets.HTML("<b>Region</b>", layout=L(width='120px')),
-            widgets.HTML("<b>Period</b>", layout=L(width='100px')),
-            widgets.HTML("<b>Preview</b>", layout=L(width='90px')),
-        ], layout=L(margin='2px 0', padding='4px', border='1px solid #ccc', background='#f5f5f5'))
-
         self._publish_checks.clear()
-        rows = []
+        cards = []
         for g in sorted(pending):
             m, r, p, c = g
-            cb = widgets.Checkbox(layout=L(width='40px'))
+
+            thumb_b64 = self._thumbnails.get(r, '')
+            left_col = build_thumbnail_column(thumb_b64)
+
+            cb = widgets.Checkbox(description='', indent=False, layout=L(width='24px', margin='2px 6px 0 0'))
             self._publish_checks[g] = cb
-            c_label = f"<span style='color:#7f8c8d;'> [{c}]</span>" if c else ""
-            thumb_html = ""
-            if r in self._thumbnails:
-                thumb_html = f'<img src="data:image/png;base64,{self._thumbnails[r]}" width="60" style="border-radius:4px;">'
-            rows.append(widgets.HBox([
-                cb,
-                widgets.HTML(f"<b>{m}</b>{c_label}", layout=L(width='180px')),
-                widgets.HTML(r, layout=L(width='120px')),
-                widgets.HTML(p, layout=L(width='100px')),
-                widgets.HTML(thumb_html, layout=L(width='90px')),
-            ], layout=L(margin='2px 0', padding='4px', border='1px solid #eee')))
 
-        btn_publish = widgets.Button(
-            description=Lang.PUBLISH_SELECTED.format(n=0),
-            icon='check', layout=L(width='220px', margin='10px 0 0 0'))
-        self._btn_publish = btn_publish
+            c_label = f"<span style='color:#7f8c8d;font-size:12px;'>[{c}]</span>" if c else ""
 
-        def _on_check_change(_=None):
-            n = sum(1 for cb in self._publish_checks.values() if cb.value)
-            btn_publish.description = Lang.PUBLISH_SELECTED.format(n=n)
+            right_col = widgets.VBox([
+                widgets.HBox([
+                    cb,
+                    widgets.HTML(f"<b style='font-size:15px;color:#0f172a;'>{m}</b> {c_label}"),
+                ], layout=L(align_items='center')),
+                widgets.HTML(f"<span style='color:#475569;margin-left:30px;'>Region: <b>{r}</b></span>"),
+                widgets.HTML(f"<span style='color:#475569;margin-left:30px;'>Period: <b>{p}</b></span>"),
+            ], layout=L(flex='1', margin='0 0 0 12px'))
 
-        for g, cb in self._publish_checks.items():
-            cb.observe(_on_check_change, names='value')
-
-        btn_publish.on_click(self._publish_selected)
+            cards.append(make_card_body(left_col, right_col))
 
         self.tab_to_publish.children = [
             widgets.HTML(f"<b>{len(pending)} groups pending mosaic</b>"),
-            header,
-            widgets.VBox(rows, layout=L(margin='0 0 5px 0')),
-            btn_publish,
+            widgets.VBox(cards),
         ]
-
-    def _publish_selected(self, _=None):
-        from M6_publisher import merge_region_tiles, compute_region_stats_from_mosaic, update_consolidated_stats
-        checked = [g for g, cb in self._publish_checks.items() if cb.value]
-        if not checked:
-            return
-        out = widgets.Output()
-        display(out)
-        for g in checked:
-            m, r, p, c = g
-            with out:
-                print(f"  Publishing {m} | {r} | {p}...")
-            mosaic_path = merge_region_tiles(m, r, p, fs=self.fs, logger=lambda msg: print(f"    {msg}"), campaign=c)
-            if not mosaic_path:
-                with out:
-                    print(f"  [WARN] No tiles for {r}, skipping.")
-                continue
-            row = compute_region_stats_from_mosaic(m, r, p, fs=self.fs, logger=lambda msg: print(f"    {msg}"), campaign=c)
-            if row:
-                update_consolidated_stats(row, fs=self.fs, campaign=c)
-            self._mosaics.add(g)
-            with out:
-                print(f"  Done: {m} | {r} | {p}")
-        self._render_to_publish()
-        self._render_finished()
 
     def _render_finished(self):
         done = sorted([g for g in self._groups if g in self._mosaics])
