@@ -3,6 +3,8 @@ import csv
 import json
 import time
 import shutil
+import subprocess
+from datetime import datetime
 import numpy as np
 import rasterio
 from osgeo import gdal
@@ -167,7 +169,7 @@ def update_consolidated_stats(row, fs=None, logger=None, campaign=None):
 
 
 def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None, scale=10):
-    """Envia el mosaico regional CLASSIFIED_REGION como ImageCollection a GEE."""
+    """Envia o mosaico regional como Image para o GEE via earthengine CLI."""
     import ee
 
     if fs is None:
@@ -182,9 +184,7 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
         return False
 
     if logger:
-        logger(f"    Submitting GEE import task...")
-
-    img = ee.Image.loadGeoTIFF(gcs_uri)
+        logger(f"    Setting up GEE folders...")
 
     base = CONFIG['asset_monitor_base']
     for sub in ['LIBRARY_CLASSIFICATIONS', 'LIBRARY_CLASSIFICATIONS/REGIONAL']:
@@ -200,19 +200,62 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
         pass
 
     asset_id = f"{parent}/{region}_{period}"
-    task = ee.batch.Export.image.toAsset(
-        image=img,
-        description=f"PUBLISH_{model_id}_{region}_{period}",
-        assetId=asset_id,
-        scale=scale,
-        maxPixels=1e13,
-        pyramidingPolicy={'.default': 'mean'}
+
+    # Deletar se ja existir
+    try:
+        ee.data.getAsset(asset_id)
+        if logger:
+            logger(f"    Asset already exists, deleting: {asset_id}")
+        ee.data.deleteAsset(asset_id)
+        time.sleep(2)
+    except Exception:
+        pass
+
+    # Parse period -> timestamps
+    year_s, month_s = period.split('_')
+    y, m = int(year_s), int(month_s)
+    ts_start = int(datetime(y, m, 1).timestamp() * 1000)
+    if m == 12:
+        ts_end = int(datetime(y + 1, 1, 1).timestamp() * 1000)
+    else:
+        ts_end = int(datetime(y, m + 1, 1).timestamp() * 1000)
+
+    ee_project = CONFIG.get('gee_project', 'mapbiomas-peru')
+    country = CONFIG.get('country', 'peru')
+    version = CONFIG.get('version', 'version_01')
+
+    cmd = (
+        f'earthengine --project {ee_project} upload image '
+        f'--asset_id={asset_id} '
+        f'--pyramiding_policy=mode '
+        f'--band_names classification,probability '
+        f'--time_start {ts_start} '
+        f'--time_end {ts_end} '
+        f'--property source=mapbiomas-fire '
+        f'--property model_id={model_id} '
+        f'--property region={region} '
+        f'--property period={period} '
+        f'--property year={year_s} '
+        f'--property month={month_s} '
+        f'--property campaign={campaign or ""} '
+        f'--property country={country} '
+        f'--property version={version} '
+        f'--property type=monthly_burned_area '
+        f'--property periodicity=monthly '
+        f'{gcs_uri}'
     )
-    task.start()
 
     if logger:
-        logger(f"    GEE task submitted! Asset: {asset_id}")
-    return True
+        logger(f"    Submitting earthengine upload...")
+    ret = subprocess.run(cmd, shell=True)
+    if ret.returncode == 0:
+        if logger:
+            logger(f"    GEE upload task submitted! Asset: {asset_id}")
+        return True
+    else:
+        if logger:
+            logger(f"    [ERROR] GEE upload failed (exit {ret.returncode})")
+        return False
 
 
 def gee_asset_exists(model_id, region, period, campaign=None):
