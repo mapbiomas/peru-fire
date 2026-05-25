@@ -182,13 +182,12 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
     """Envia o mosaico regional como Image para o GEE via earthengine CLI."""
     import ee
 
-    if fs is None:
-        fs = _get_fs()
-
     mosaic_gcs = gcs_full(region_path(model_id, region, period, campaign))
     gcs_uri = f"gs://{mosaic_gcs}"
 
-    if not fs.exists(mosaic_gcs):
+    # Usa gsutil stat (nao gcsfs.exists) para evitar cache stale
+    ret = subprocess.run(['gsutil', '-q', 'stat', gcs_uri], capture_output=True)
+    if ret.returncode != 0:
         if logger:
             logger(f"    [WARN] Mosaic not found for GEE upload")
         return False
