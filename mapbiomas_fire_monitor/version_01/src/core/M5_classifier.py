@@ -8,6 +8,7 @@ from M0_auth_config import CONFIG, _get_fs, _gcs_models_base, _gcs_download, _gc
 from M_cache import CacheManager
 from M5_workplan import load_workplan, save_workplan, make_job_id, tile_path, gcs_full, archive_job_on_gcs, delete_pending_job_gcs
 from M5_inference import load_model_from_gcs, classify_cell_with_cogs, build_band_paths
+from M_lang import L as Lang
 from M_regions import REGION_NAME_PROPERTY
 
 _log_lock = threading.Lock()
@@ -61,7 +62,7 @@ def _run_classification(plan, out, progress_callback=None, n_workers=None):
     if not pending:
         with out:
             clear_output()
-            display(HTML("<b style='color:green;'>No pending jobs to classify.</b>"))
+            display(HTML(f"<b style='color:green;'>{Lang.NO_PENDING_JOBS}</b>"))
         return
 
     with out:

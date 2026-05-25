@@ -77,6 +77,14 @@ class L:
     EXCLUDE_TASK_GCS = "Exclude Task GCS"
     DELETE_MODEL = "Delete Model"
     DISCARD_WORKPLAN = "Discard Workplan"
+    GLOBAL_ACTIONS = "Global Actions"
+    NO_PENDING_JOBS = "No pending jobs to classify."
+    CARD_SAVED = "Saved \u2713"
+    CARD_TEMP = "Temporary"
+    CARD_SAVED_PARTIAL = "{s}/{t} Saved"
+    BTN_DETAILS_COLLAPSED = "Details \u25bc"
+    BTN_DETAILS_EXPANDED = "Details \u25b2"
+    NO_METADATA = "Model metadata unavailable (offline or missing metadata.json)."
     DELETE_REGION = "Delete Region"
     DELETE_SELECTED = "Delete Selected"
     DELETE_ALL = "Delete All"
@@ -577,6 +585,14 @@ STRINGS_ES = {
     "EXCLUDE_TASK_GCS": "Excluir Tarea GCS",
     "DELETE_MODEL": "Eliminar Modelo",
     "DISCARD_WORKPLAN": "Descartar Plan de Trabajo",
+    "GLOBAL_ACTIONS": "Acciones Globales",
+    "NO_PENDING_JOBS": "No hay trabajos pendientes para clasificar.",
+    "CARD_SAVED": "Guardado \u2713",
+    "CARD_TEMP": "Temporal",
+    "CARD_SAVED_PARTIAL": "{s}/{t} Guardados",
+    "BTN_DETAILS_COLLAPSED": "Detalles \u25bc",
+    "BTN_DETAILS_EXPANDED": "Detalles \u25b2",
+    "NO_METADATA": "Metadatos del modelo no disponibles (offline o sin metadata.json).",
     "DELETE_REGION": "Eliminar Región",
     "DELETE_SELECTED": "Eliminar Seleccionados",
     "DELETE_ALL": "Eliminar Todos",
@@ -1022,6 +1038,14 @@ STRINGS_PT = {
     "EXCLUDE_TASK_GCS": "Excluir Tarefa GCS",
     "DELETE_MODEL": "Excluir Modelo",
     "DISCARD_WORKPLAN": "Descartar Plano de Trabalho",
+    "GLOBAL_ACTIONS": "Ações Globais",
+    "NO_PENDING_JOBS": "Nenhum trabalho pendente para classificar.",
+    "CARD_SAVED": "Salvo \u2713",
+    "CARD_TEMP": "Temporário",
+    "CARD_SAVED_PARTIAL": "{s}/{t} Salvos",
+    "BTN_DETAILS_COLLAPSED": "Detalhes \u25bc",
+    "BTN_DETAILS_EXPANDED": "Detalhes \u25b2",
+    "NO_METADATA": "Metadados do modelo indisponíveis (offline ou sem metadata.json).",
     "DELETE_REGION": "Excluir Região",
     "DELETE_SELECTED": "Excluir Selecionados",
     "DELETE_ALL": "Excluir Todos",
@@ -1467,6 +1491,14 @@ STRINGS_FR = {
     "EXCLUDE_TASK_GCS": "Exclure tâche GCS",
     "DELETE_MODEL": "Supprimer le modèle",
     "DISCARD_WORKPLAN": "Abandonner le Plan de Travail",
+    "GLOBAL_ACTIONS": "Actions Globales",
+    "NO_PENDING_JOBS": "Aucun travail en attente à classer.",
+    "CARD_SAVED": "Enregistré \u2713",
+    "CARD_TEMP": "Temporaire",
+    "CARD_SAVED_PARTIAL": "{s}/{t} Enregistrés",
+    "BTN_DETAILS_COLLAPSED": "Détails \u25bc",
+    "BTN_DETAILS_EXPANDED": "Détails \u25b2",
+    "NO_METADATA": "Métadonnées du modèle indisponibles (hors ligne ou metadata.json manquant).",
     "DELETE_REGION": "Supprimer la région",
     "DELETE_SELECTED": "Supprimer sélectionnés",
     "DELETE_ALL": "Tout supprimer",
@@ -1912,6 +1944,14 @@ STRINGS_ID = {
     "EXCLUDE_TASK_GCS": "Keluarkan Tugas GCS",
     "DELETE_MODEL": "Hapus Model",
     "DISCARD_WORKPLAN": "Buang Rencana Kerja",
+    "GLOBAL_ACTIONS": "Aksi Global",
+    "NO_PENDING_JOBS": "Tidak ada pekerjaan tertunda untuk diklasifikasikan.",
+    "CARD_SAVED": "Tersimpan \u2713",
+    "CARD_TEMP": "Sementara",
+    "CARD_SAVED_PARTIAL": "{s}/{t} Tersimpan",
+    "BTN_DETAILS_COLLAPSED": "Detail \u25bc",
+    "BTN_DETAILS_EXPANDED": "Detail \u25b2",
+    "NO_METADATA": "Metadata model tidak tersedia (offline atau metadata.json hilang).",
     "DELETE_REGION": "Hapus Wilayah",
     "DELETE_SELECTED": "Hapus yang Dipilih",
     "DELETE_ALL": "Hapus Semua",

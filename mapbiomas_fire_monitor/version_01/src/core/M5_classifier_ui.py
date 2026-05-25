@@ -170,23 +170,11 @@ class M5WorkplanUI:
     # --- GUIA ---
 
     def _build_guide(self):
-        html = """
-        <div style='padding:20px; font-family:sans-serif;'>
-            <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Clasificacion Regional de Gran Escala</h3>
-            <p>Clasifica multiples regiones (cartas <b>cim-world-1-250000</b>) usando modelos del M4.</p>
-            <h4>Flujo:</h4>
-            <ol style='line-height:1.6;'>
-                <li><b>""" + Lang.TAB_REGISTER + """</b> — seleccione modelo + regiones + periodos.</li>
-                <li><b>""" + Lang.TAB_PENDING + """</b> — siga la clasificacion tile a tile.</li>
-                <li><b>""" + Lang.TAB_MAP + """</b> — visibilidad del progreso en vivo.</li>
-                <li>Ejecute <code>run_m5_workplan()</code> en el notebook para procesar.</li>
-            </ol>
-            <h4>Publicacion (M6):</h4>
-            <p>Use <b>M6</b> para mosaicar tiles, generar estadisticas regionales y subir a GEE.
-            Abra la UI de M6 y ejecute <code>run_m6_publish()</code> en el notebook.</p>
-            <p>Los trabajos clasificados (COMPLETED) apareceran en la UI de M6.</p>
-        </div>
-        """
+        html = Lang.GUIDE_M5_HTML.format(
+            tab_register=Lang.TAB_REGISTER,
+            tab_pending=Lang.TAB_PENDING,
+            tab_map=Lang.TAB_MAP
+        )
         self.w_guide = widgets.HTML(value=html)
 
     # --- CHECKBOX GRID ---
@@ -622,11 +610,11 @@ class M5WorkplanUI:
                     saved_count = sum(1 for j in jobs_list if j.get('_saved'))
                     total_count = len(jobs_list)
                     if saved_count == total_count and total_count > 0:
-                        card_badge, badge_color = "Salvo ✓", "#2563eb"
+                        card_badge, badge_color = Lang.CARD_SAVED, "#2563eb"
                     elif saved_count > 0:
-                        card_badge, badge_color = f"{saved_count}/{total_count} Salvos", "#ca8a04"
+                        card_badge, badge_color = Lang.CARD_SAVED_PARTIAL.format(s=saved_count, t=total_count), "#ca8a04"
                     else:
-                        card_badge, badge_color = "Temporário", "#64748b"
+                        card_badge, badge_color = Lang.CARD_TEMP, "#64748b"
 
                     discard_box, btn_discard, _ = make_refresh_button('trash', lambda m=model_name: self._on_discard_workplan(m), description=Lang.DISCARD_WORKPLAN, width='220px')
                     btn_discard.button_style = 'danger'
@@ -641,7 +629,6 @@ class M5WorkplanUI:
                             widgets.HTML(f"<span style='display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:white;background:{badge_color};'>{card_badge}</span>", layout=L(margin='0 0 0 auto')),
                         ], layout=L(align_items='center', margin='0 0 4px 0')),
                         widgets.HTML(f"<div style='margin:2px 0 6px 28px;'>{task_badges}</div>" if task_badges else ''),
-                        discard_box,
                     ], layout=L(width='auto'))
 
                     region_lines = []
@@ -670,19 +657,20 @@ class M5WorkplanUI:
                         ], layout=L(align_items='center', padding='5px 8px', margin='2px 0', border_bottom='1px solid #f1f5f9'))
                         region_lines.append(row)
 
-                    btn_detalhes = widgets.Button(description='Detalhes \u25bc', button_style='', layout=L(width='120px', height='26px', font_size='12px', padding='0 4px', margin='2px 0 2px 28px'))
+                    btn_detalhes = widgets.Button(description=Lang.BTN_DETAILS_COLLAPSED, button_style='', layout=L(width='120px', height='26px', font_size='12px', padding='0 4px'))
+                    actions_row = widgets.HBox([discard_box, btn_detalhes], layout=L(align_items='center', gap='8px', margin='4px 0 4px 28px'))
                     details_panel = self._build_details_panel(model_name, jobs_list)
                     details_panel.layout.display = 'none'
                     def toggle_details(b, panel=details_panel, btn=btn_detalhes):
                         if panel.layout.display == 'none':
                             panel.layout.display = 'block'
-                            btn.description = 'Detalhes \u25b2'
+                            btn.description = Lang.BTN_DETAILS_EXPANDED
                         else:
                             panel.layout.display = 'none'
-                            btn.description = 'Detalhes \u25bc'
+                            btn.description = Lang.BTN_DETAILS_COLLAPSED
                     btn_detalhes.on_click(toggle_details)
 
-                    right_col = widgets.VBox([header, btn_detalhes, details_panel] + region_lines, layout=L(flex='1', margin='0 0 0 12px'))
+                    right_col = widgets.VBox([header, actions_row, details_panel] + region_lines, layout=L(flex='1', margin='0 0 0 12px'))
                     body = make_card_body(left_col, right_col)
                     cards.append(body)
 
@@ -764,8 +752,7 @@ class M5WorkplanUI:
                 layout=L(margin='4px 0')))
         else:
             parts.append(widgets.HTML(
-                "<span style='font-size:12px;color:#94a3b8;'>"
-                "Metadados do modelo indisponiveis (offline ou sem metadata.json).</span>"))
+                f"<span style='font-size:12px;color:#94a3b8;'>{Lang.NO_METADATA}</span>"))
 
         # -- secao: resumo dos jobs --
         regions = sorted(set(j['region'] for j in jobs_list))
@@ -1274,13 +1261,13 @@ class M5WorkplanUI:
             save_workplan(self.plan)
 
     def _apply_filters(self, jobs, f_model, f_region, f_year, f_task=None):
-        if f_model.value != 'Todos':
+        if f_model.value != Lang.ALL:
             jobs = [j for j in jobs if j['model'] == f_model.value]
-        if f_region.value != 'Todas':
+        if f_region.value != Lang.ALL_F:
             jobs = [j for j in jobs if j['region'] == f_region.value]
-        if f_year.value != 'Todos':
+        if f_year.value != Lang.ALL:
             jobs = [j for j in jobs if j['period'].split('_')[0] == f_year.value]
-        if f_task is not None and f_task.value != 'Todas':
+        if f_task is not None and f_task.value != Lang.ALL_F:
             jobs = [j for j in jobs if j.get('task_name', '') == f_task.value]
         return jobs
 
@@ -1314,9 +1301,9 @@ class M5WorkplanUI:
         all_regions = sorted(set(j['region'] for j in filtered_plan))
         all_years = sorted(set(j['period'].split('_')[0] for j in filtered_plan), reverse=True)
         for f_m, f_r, f_y in [(self.f_mapa_model, self.f_mapa_region, self.f_mapa_year)]:
-            _safe_update(f_m, ['Todos'] + all_models)
-            _safe_update(f_r, ['Todas'] + all_regions)
-            _safe_update(f_y, ['Todos'] + all_years)
+            _safe_update(f_m, [Lang.ALL] + all_models)
+            _safe_update(f_r, [Lang.ALL_F] + all_regions)
+            _safe_update(f_y, [Lang.ALL] + all_years)
 
         self._render_pending()
         self._render_mapa()
@@ -1353,7 +1340,7 @@ class M5WorkplanUI:
         self.tabs.set_title(3, Lang.TAB_MAP)
 
         header_actions = widgets.HBox([
-            widgets.HTML("<b style='color:#2c3e50; font-size:14px; margin-right:15px;'>Acciones Globales:</b>"),
+            widgets.HTML(f"<b style='color:#2c3e50; font-size:14px; margin-right:15px;'>{Lang.GLOBAL_ACTIONS}:</b>"),
             self.btn_refresh_container
         ], layout=L(margin='0 0 15px 0', align_items='center', padding='10px', border='1px solid #e0e0e0', background_color='#fcfcfc', border_radius='5px'))
 
