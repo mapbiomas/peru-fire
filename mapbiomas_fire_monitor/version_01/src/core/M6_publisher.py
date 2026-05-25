@@ -227,6 +227,45 @@ def gee_asset_exists(model_id, region, period, campaign=None):
         return False
 
 
+def load_gee_assets(model_id):
+    """Retorna set de region_period que ja existem no GEE para este modelo. 1 chamada GEE."""
+    import ee
+    parent = f"{CONFIG['asset_monitor_base']}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
+    assets = set()
+    try:
+        result = ee.data.listAssets({'parent': parent})
+        for a in result.get('assets', []):
+            name = a['name'].split('/')[-1]
+            assets.add(name)
+    except Exception:
+        pass
+    return assets
+
+
+def load_stats_done(groups, fs=None):
+    """Baixa consolidated_stats.csv de cada campanha e retorna set de (model, region, period, campaign) que existem.
+    groups: iteravel de (model_id, region, period, campaign)."""
+    if fs is None:
+        fs = _get_fs()
+    done = set()
+    for campaign in set(c for _, _, _, c in groups):
+        path = gcs_full(consolidated_stats_path(campaign))
+        if not fs.exists(path):
+            continue
+        local_csv = os.path.join(get_temp_dir('stats'), "load_stats_done.csv")
+        try:
+            _gcs_download(path, local_csv)
+            with open(local_csv, 'r') as f:
+                for r in csv.DictReader(f):
+                    done.add((r['model_id'], r['region'], r['period'], campaign))
+        except Exception:
+            pass
+        finally:
+            if os.path.exists(local_csv):
+                os.remove(local_csv)
+    return done
+
+
 def compute_region_stats_from_tiles(model_id, region, period, fs=None, logger=None, campaign=None):
     """Agrega stats dos tiles (1 por vez, RAM baixa). Unidades em hectares."""
     if fs is None:

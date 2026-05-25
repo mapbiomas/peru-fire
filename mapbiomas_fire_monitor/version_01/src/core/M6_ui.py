@@ -7,12 +7,15 @@ from IPython.display import display, HTML, clear_output
 import ipywidgets as widgets
 from M0_auth_config import CONFIG, _get_fs
 from M5_workplan import gcs_full, consolidated_stats_path, region_path
-from M6_publisher import discover_classified_groups, gee_asset_exists, stats_row_exists
+from M6_publisher import discover_classified_groups, gee_asset_exists, stats_row_exists, load_gee_assets, load_stats_done
 from M_cache import CacheManager
 from M_ui_components import make_empty_state, flash_output, make_select_all_none
 from M_lang import L as Lang
 
 L = widgets.Layout
+
+# Cache módulo: evita re-scan GEE/GCS entre refreshes no mesmo kernel
+_M6_DISCOVERY_CACHE = None
 
 
 class M6WorkplanUI:
@@ -35,7 +38,7 @@ class M6WorkplanUI:
         self.tab_coverage = widgets.VBox()
 
         self.btn_refresh = widgets.Button(description=Lang.REFRESH_M6, icon='refresh', layout=L(width='150px'))
-        self.btn_refresh.on_click(lambda _: self._refresh_all())
+        self.btn_refresh.on_click(lambda _: self._refresh_all(force=True))
 
         self._build_guide()
 
@@ -47,22 +50,56 @@ class M6WorkplanUI:
             tab_coverage=Lang.TAB_M6_COVERAGE,
         )
 
-    def _discover_all(self):
+    def _discover_all(self, force=False):
+        global _M6_DISCOVERY_CACHE
+        if _M6_DISCOVERY_CACHE is not None and not force:
+            ch = _M6_DISCOVERY_CACHE
+            self._groups = ch['groups']
+            self._mosaics = ch['mosaics']
+            self._gee_assets = ch['gee_assets']
+            self._stats_done = ch['stats_done']
+            self._thumbnails = ch['thumbnails']
+            return
+
         raw = discover_classified_groups(fs=self.fs)
         self._groups = sorted(raw)
         self._mosaics = set()
         self._gee_assets = set()
         self._stats_done = set()
+
+        # 1. Mosaic: GCS exists check (barato)
         for group in self._groups:
             m, r, p, c = group
-            mg = gcs_full(region_path(m, r, p, c))
-            if self.fs.exists(mg):
+            if self.fs.exists(gcs_full(region_path(m, r, p, c))):
                 self._mosaics.add(group)
-            if gee_asset_exists(m, r, p, c):
-                self._gee_assets.add(group)
-            if stats_row_exists(m, r, p, c, self.fs):
-                self._stats_done.add(group)
+
+        # 2. GEE: 1 chamada listAssets por modelo
+        by_model = {}
+        for g in self._groups:
+            by_model.setdefault(g[0], []).append(g)
+        for model_id, model_groups in by_model.items():
+            assets = load_gee_assets(model_id)
+            for m, r, p, c in model_groups:
+                if f"{r}_{p}" in assets:
+                    self._gee_assets.add((m, r, p, c))
+
+        # 3. Stats: 1 download CSV por campanha
+        stats_done = load_stats_done(self._groups, self.fs)
+        for g in self._groups:
+            if g in stats_done:
+                self._stats_done.add(g)
+
+        # 4. Thumbnails
         self._load_thumbnails()
+
+        # Salva cache
+        _M6_DISCOVERY_CACHE = {
+            'groups': list(self._groups),
+            'mosaics': set(self._mosaics),
+            'gee_assets': set(self._gee_assets),
+            'stats_done': set(self._stats_done),
+            'thumbnails': dict(self._thumbnails),
+        }
 
     def _load_stats(self):
         self._stats_data = []
@@ -91,8 +128,8 @@ class M6WorkplanUI:
                 if b64:
                     self._thumbnails[r] = b64
 
-    def _refresh_all(self):
-        self._discover_all()
+    def _refresh_all(self, force=False):
+        self._discover_all(force=force)
         self._load_stats()
         self._render_to_publish()
         self._render_finished()
@@ -299,7 +336,7 @@ class M6WorkplanUI:
 
     def display(self):
         self._build_guide()
-        self._refresh_all()
+        self._refresh_all(force=True)
 
         self.tabs.children = [
             self.w_guide, self.tab_to_publish, self.tab_finished,
