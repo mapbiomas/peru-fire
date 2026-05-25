@@ -404,10 +404,10 @@ def compute_region_stats_from_tiles(model_id, region, period, fs=None, logger=No
 
 def stats_row_exists(model_id, region, period, campaign=None, fs=None):
     """Check if consolidated_stats.csv ja tem linha para (model, region, period)."""
-    if fs is None:
-        fs = _get_fs()
     path = gcs_full(consolidated_stats_path(campaign))
-    if not fs.exists(path):
+    gcs_uri = f"gs://{path}"
+    ret = subprocess.run(['gsutil', '-q', 'stat', gcs_uri], capture_output=True)
+    if ret.returncode != 0:
         return False
     local_csv = os.path.join(get_temp_dir('stats'), "check_stats.csv")
     try:
@@ -536,8 +536,13 @@ def run_m6_publish(upload_gee=True, groups=None, ui=None, logger=None):
     if groups is None and ui is not None:
         groups = [g for g, cb in ui._publish_checks.items() if cb.value]
         logger(f"  Using {len(groups)} checked groups from UI.")
-    if groups is None:
-        groups = discover_classified_groups(fs=fs, logger=logger)
+    elif groups is None:
+        from M6_ui import _M6_DISCOVERY_CACHE
+        if _M6_DISCOVERY_CACHE is not None:
+            groups = _M6_DISCOVERY_CACHE['groups']
+            logger(f"  Using {len(groups)} groups from UI cache.")
+        else:
+            groups = discover_classified_groups(fs=fs, logger=logger)
     else:
         groups = list(groups)
 
@@ -553,8 +558,11 @@ def run_m6_publish(upload_gee=True, groups=None, ui=None, logger=None):
         campaign_str = f" [{campaign}]" if campaign else ""
         logger(f"\n  [{idx+1}/{len(groups)}] {model_id} | {region} | {period}{campaign_str}")
 
-        # 1. Mosaic
-        mosaic_exists = fs.exists(gcs_full(region_path(model_id, region, period, campaign)))
+        # 1. Mosaic (gsutil stat para evitar cache stale do gcsfs)
+        mosaic_gcs = gcs_full(region_path(model_id, region, period, campaign))
+        mosaic_uri = f"gs://{mosaic_gcs}"
+        ret = subprocess.run(['gsutil', '-q', 'stat', mosaic_uri], capture_output=True)
+        mosaic_exists = (ret.returncode == 0)
         if mosaic_exists:
             logger(f"    Mosaic already exists.")
 
