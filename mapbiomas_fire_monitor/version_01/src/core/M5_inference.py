@@ -111,6 +111,18 @@ def build_band_paths(bands_config, year, month):
         b_correct = 'dayOfYear' if b.lower() == 'dayofyear' else b
         cog_name = f"{mosaic_name(year, month, periodicity, band=b_correct, mosaic=m_type, sensor=s_name)}_cog.tif"
         paths[b] = f"{CONFIG['bucket']}/{rel_folder}/{cog_name}"
+
+    # dayOfYear sempre incluso para banda de saida, independente de ser feature
+    if 'dayOfYear' not in paths:
+        first_cfg = next(iter(bands_config.values()), {})
+        s_name = first_cfg.get('sensor', 'sentinel2').lower()
+        if periodicity == 'monthly':
+            doy_folder = monthly_cog_path(year, month, mosaic='minnbr', sensor=s_name)
+        else:
+            doy_folder = yearly_cog_path(year, mosaic='minnbr', sensor=s_name)
+        doy_name = f"{mosaic_name(year, month, periodicity, band='dayOfYear', mosaic='minnbr', sensor=s_name)}_cog.tif"
+        paths['dayOfYear'] = f"{CONFIG['bucket']}/{doy_folder}/{doy_name}"
+
     return paths
 
 def _reproject_geometry(geom_coords, src_crs):
@@ -156,6 +168,13 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
         for b in band_order:
             vsig = f"/vsigs/{band_paths[b]}"
             sources[b] = rasterio.open(vsig)
+
+        # Abre COG dayOfYear para banda de saida mesmo se nao for feature
+        if 'dayOfYear' in band_paths and 'dayOfYear' not in sources:
+            try:
+                sources['dayOfYear'] = rasterio.open(f"/vsigs/{band_paths['dayOfYear']}")
+            except Exception:
+                pass
 
         src_crs = sources[band_order[0]].crs
         src_transform = sources[band_order[0]].transform
