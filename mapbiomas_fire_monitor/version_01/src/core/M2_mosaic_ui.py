@@ -15,8 +15,8 @@ from M2_mosaic_logic import assemble_country_mosaic
 class MosaicAssemblerUI(PipelineStepUI):
     def __init__(self, years=None):
         super().__init__(
-            title="M2 - Montador de Mosaicos (COG)", 
-            description="Interfaz para convertir chunks GCS en mosaicos COG nacionales."
+            title=Lang.M2_CONSTRUCTOR_TITLE, 
+            description=Lang.M2_CONSTRUCTOR_DESC
         )
         self.chk_dict = {}
         self.requested_years = years
@@ -57,8 +57,8 @@ class MosaicAssemblerUI(PipelineStepUI):
     def _build_mosaic_grid(self, sensor, period, mosaic_method):
         L = widgets.Layout
         hdr = [
-            widgets.HTML('<div style="width:100px;">Data</div>'),
-            widgets.HTML('<div style="width:40px; text-align:center; font-weight:bold;">[S]</div>')
+            widgets.HTML(f'<div style="width:100px;">{Lang.DATE}</div>'),
+            widgets.HTML(f'<div style="width:40px; text-align:center; font-weight:bold;">{Lang.BTN_SELECT_ROW}</div>')
         ]
         for b in self.bands:
             h_widget = widgets.HTML(f'<div style="text-align:center; font-weight:bold; font-size:11px;">{b}</div>')
@@ -103,7 +103,7 @@ class MosaicAssemblerUI(PipelineStepUI):
                 
                 cells = [widgets.HTML(f'<div style="width:100px;font-family:monospace;">{date_str}</div>')]
                 
-                btn_s = widgets.Button(description='[S]', layout=L(width='40px', height='28px', padding='0'))
+                btn_s = widgets.Button(description=Lang.BTN_SELECT_ROW, layout=L(width='40px', height='28px', padding='0'))
                 btn_s._sensor, btn_s._period, btn_s._mosaic, btn_s._date = sensor, period, mosaic_method, date_str
                 btn_s.on_click(self._on_select_row)
                 cells.append(btn_s)
@@ -174,22 +174,22 @@ class MosaicAssemblerUI(PipelineStepUI):
         header_html = f'''
         <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 5px 10px; background: #fff; border-bottom: 2px solid #333; margin-bottom: 5px;">
             <div style="display: flex; align-items: center; gap: 15px;">
-                <span style="font-weight: bold; font-size: 16px; color: #333;">M2 - Montador</span>
-                <span style="color: #888; font-size: 11px; font-style: italic;">Interfaz para montaje de mosaicos nacionales (COG)</span>
+                <span style="font-weight: bold; font-size: 16px; color: #333;">{Lang.M2_HEADER_TITLE}</span>
+                <span style="color: #888; font-size: 11px; font-style: italic;">{Lang.M2_HEADER_SUBTITLE}</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; padding: 3px 12px; background: #fff1f0; border: 1px solid #ffa39e; border-radius: 4px;">
-                <span style="color: #cf1322; font-size: 10px; font-weight: bold; text-transform: uppercase;">Project</span>
+                <span style="color: #cf1322; font-size: 10px; font-weight: bold; text-transform: uppercase;">{Lang.LABEL_PROJECT}</span>
                 <span style="color: #cf1322; font-weight: bold; font-size: 12px;">MapBiomas Fire Monitor</span>
             </div>
         </div>
         '''
         
         # --- FOOTER DE CONTROLE ---
-        self.btn_refresh = widgets.Button(description="Sincronizar Datos", button_style='success', icon='refresh', layout=L(width='180px'))
+        self.btn_refresh = widgets.Button(description=Lang.MOSAIC_SYNC, button_style='success', icon='refresh', layout=L(width='180px'))
         self.btn_refresh.on_click(lambda _: self._refresh_cache())
         
-        btn_all = widgets.Button(description="Seleccionar Pendientes", button_style='info', layout=L(width='180px'))
-        btn_none = widgets.Button(description="Limpiar Selección", button_style='warning', layout=L(width='150px'))
+        btn_all = widgets.Button(description=Lang.MOSAIC_SELECT, button_style='info', layout=L(width='180px'))
+        btn_none = widgets.Button(description=Lang.MOSAIC_CLEAR, button_style='warning', layout=L(width='150px'))
         btn_all.on_click(self._on_select_all)
         btn_none.on_click(self._on_select_none)
         
@@ -306,7 +306,7 @@ class MosaicAssemblerUI(PipelineStepUI):
         m_idx = self.sensor_children[real_idx].children[p_idx].selected_index
         
         target_container = self.sensor_children[real_idx].children[p_idx].children[m_idx]
-        target_container.children = [widgets.HTML("<i>Filtrando...</i>")]
+        target_container.children = [widgets.HTML(f"<i>{Lang.FILTERING}</i>")]
         self._load_tab(real_idx, p_idx, m_idx)
 
     def _refresh_cache(self):
@@ -322,7 +322,7 @@ class MosaicAssemblerUI(PipelineStepUI):
             m_idx = self.sensor_children[real_idx].children[p_idx].selected_index
             self.last_tabs = (vis_idx, p_idx, m_idx)
             
-            self.show_loader("Sincronizando...")
+            self.show_loader(Lang.SYNCING)
             self.state = CacheManager.build_full_cache(logger=self.update_status, years=self.years)
             self._build_ui()
         finally:

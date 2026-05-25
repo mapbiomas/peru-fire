@@ -29,14 +29,14 @@ def list_gcs_files(prefix, logger=None):
     fs = _get_fs()
     clean_prefix = prefix.replace(f"gs://{CONFIG['bucket']}/", "").strip("/") + "/"
     
-    if logger: logger(f"Buscando shards em: gs://{CONFIG['bucket']}/{clean_prefix}", "info")
+    if logger: logger(f"Searching shards in: gs://{CONFIG['bucket']}/{clean_prefix}", "info")
     
     try:
         files = fs.find(f"gs://{CONFIG['bucket']}/{clean_prefix}")
         tif_files = [f for f in files if f.endswith('.tif')]
         return [f"gs://{f}" for f in tif_files]
     except Exception as e:
-        if logger: logger(f"Erro ao acessar GCS: {e}", "error")
+        if logger: logger(f"Error accessing GCS: {e}", "error")
         return []
 
 def check_m2_dependencies():
@@ -57,7 +57,7 @@ def run_cmd(args, label="Comando"):
         res = subprocess.run(args, capture_output=True, text=True, check=True)
         return res
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Erro em {label}: {e.stderr.strip() if e.stderr else e.stdout.strip()}")
+        raise RuntimeError(f"Error in {label}: {e.stderr.strip() if e.stderr else e.stdout.strip()}")
 
 def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sensor=None, mosaic_method='minnbr', logger=None, progress_idx=0, progress_total=0, start_time=None):
     import shutil
@@ -75,13 +75,13 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
         chunk_prefix  = yearly_chunk_path(year, mosaic=m_method, sensor=s)
         mosaic_prefix = yearly_cog_path(year, mosaic=m_method, sensor=s)
         base_name = mosaic_name(year, period='yearly', mosaic=m_method, sensor=s)
-        label = f"{year} Anual"
+        label = f"{year} Annual"
 
     missing = check_m2_dependencies()
     # Remove gsutil from required deps — now using gcsfs
     missing = [d for d in missing if d != 'gsutil']
     if missing:
-        msg = f" Faltam dependências vitais: {missing}"
+        msg = f" Missing vital dependencies: {missing}"
         if logger: logger(msg, "error")
         return []
 
@@ -99,7 +99,7 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
         gcs_files = list_gcs_files(chunk_prefix, logger=logger)
         
         if not gcs_files:
-            if logger: logger(f"Ningún shard encontrado en GCS para {label}.", "warning")
+            if logger: logger(f"No shard found in GCS for {label}.", "warning")
             return []
             
         found_bands = {}
@@ -117,13 +117,13 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
         # Log para conferência
         if logger:
             for b, f_list in found_bands.items():
-                logger(f"[DEBUG] Banda {b}: {len(f_list)} shards encontrados.", "info")
+                logger(f"[DEBUG] Band {b}: {len(f_list)} shards found.", "info")
         
         target_bands = bands or CONFIG['bands_all']
         bands_to_process = {b: found_bands[b] for b in target_bands if b in found_bands}
         
         if not bands_to_process:
-            if logger: logger(f"Bandas objetivo {target_bands} no detectadas en GCS para {base_name}.", "warning")
+            if logger: logger(f"Target bands {target_bands} not detected in GCS for {base_name}.", "warning")
             return []
 
         current_step = progress_idx
@@ -132,7 +132,7 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
             clean_b_name = "dayOfYear" if b_name.lower() == "dayofyear" else b_name
             current_step += 1
             
-            if logger: logger(f"Procesando [{b_name}] ({len(remote_shards)} shards)...", "info")
+            if logger: logger(f"Processing [{b_name}] ({len(remote_shards)} shards)...", "info")
             
             band_tmp = os.path.join(tmp_path, b_name)
             os.makedirs(band_tmp, exist_ok=True)
@@ -157,12 +157,12 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
                     'gdal_translate', '-of', 'COG', '-ot', dt,
                     '-co', 'COMPRESS=LZW', '-co', 'PREDICTOR=2',
                     '-co', 'NUM_THREADS=2', '-co', 'BIGTIFF=YES', vrt_path, cog_local_path
-                ], label=f"Conversão COG ({clean_b_name})")
+                ], label=f"COG Conversion ({clean_b_name})")
 
                 dest = f"{CONFIG['bucket']}/{mosaic_prefix}/{cog_remote_name}"
                 upload(cog_local_path, dest)
                 
-                if logger: logger(f" Éxito: {cog_remote_name}", "success")
+                if logger: logger(f" Success: {cog_remote_name}", "success")
                 results.append(f"gs://{dest}")
             finally:
                 if os.path.exists(band_tmp): shutil.rmtree(band_tmp)

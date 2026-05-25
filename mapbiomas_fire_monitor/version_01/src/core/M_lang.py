@@ -445,6 +445,14 @@ class L:
     EXPORT_SENT = "tasks sent."
     EXPORT_NONE_SEL = "No option selected for export."
 
+    M1_HEADER_TITLE = "M1 - Dispatcher"
+    M1_HEADER_SUBTITLE = "Multi-sensor export interface"
+    M1_TITLE_FULL = "M1 - Mosaic Dispatcher"
+    M1_DESCRIPTION = "Multi-sensor interface to dispatch compositions (Assets/GCS) to the cloud."
+    LABEL_PROJECT = "Project"
+    BTN_SELECT_ROW = "[S]"
+    COL_TYPE = "Type"
+
     # ── M2 - Mosaic ─────────────────────────────────────
     MOSAIC_TITLE = "Mosaic Assembly"
     MOSAIC_SYNC = "Sync Data"
@@ -452,6 +460,11 @@ class L:
     MOSAIC_CLEAR = "Clear Selection"
     MOSAIC_START_BTN = "Start Assembly"
     MOSAIC_DONE = "Assembly completed successfully"
+    M2_HEADER_TITLE = "M2 - Assembler"
+    M2_HEADER_SUBTITLE = "Interface for national COG mosaic assembly"
+    M2_CONSTRUCTOR_TITLE = "M2 - COG Mosaic Assembler"
+    M2_CONSTRUCTOR_DESC = "Interface for converting GCS chunks into national COG mosaics."
+    STATUS_READY = "READY"
 
     # ── M0 - Startup ────────────────────────────────────
     START_COUNTRY = "Country"
@@ -562,6 +575,7 @@ STRINGS_ES = {
     "DELETING": "Eliminando...",
     "SAVING": "Guardando...",
     "SYNCING": "Sincronizando...",
+    "SYNCING_TASKS": "Sincronizando tareas GEE...",
     "SEARCHING": "Buscando...",
     "DONE": "Hecho",
     "ERROR": "Error",
@@ -925,6 +939,18 @@ STRINGS_ES = {
     "MOSAIC_CLEAR": "Limpiar Seleccion",
     "MOSAIC_START_BTN": "Iniciar Montaje",
     "MOSAIC_DONE": "Montaje concluido con éxito",
+    "M1_HEADER_TITLE": "M1 - Despachador",
+    "M1_HEADER_SUBTITLE": "Interfaz multisensor para exportación",
+    "M1_TITLE_FULL": "M1 - Despachador de Mosaicos",
+    "M1_DESCRIPTION": "Interfaz multisensor para despachar composiciones (Assets/GCS) a la nube.",
+    "LABEL_PROJECT": "Proyecto",
+    "BTN_SELECT_ROW": "[S]",
+    "COL_TYPE": "Tipo",
+    "M2_HEADER_TITLE": "M2 - Montador",
+    "M2_HEADER_SUBTITLE": "Interfaz para montaje de mosaicos nacionales (COG)",
+    "M2_CONSTRUCTOR_TITLE": "M2 - Montador de Mosaicos (COG)",
+    "M2_CONSTRUCTOR_DESC": "Interfaz para convertir chunks GCS en mosaicos COG nacionales.",
+    "STATUS_READY": "LISTO",
     # M0 - Startup
     "START_COUNTRY": "País",
     "START_BUCKET": "Bucket",
@@ -1045,6 +1071,7 @@ STRINGS_PT = {
     "DELETING": "Excluindo...",
     "SAVING": "Salvando...",
     "SYNCING": "Sincronizando...",
+    "SYNCING_TASKS": "Sincronizando tarefas GEE...",
     "SEARCHING": "Buscando...",
     "DONE": "Feito",
     "ERROR": "Erro",
@@ -1408,6 +1435,18 @@ STRINGS_PT = {
     "MOSAIC_CLEAR": "Limpar Seleção",
     "MOSAIC_START_BTN": "Iniciar Montagem",
     "MOSAIC_DONE": "Montagem concluída com sucesso",
+    "M1_HEADER_TITLE": "M1 - Despachador",
+    "M1_HEADER_SUBTITLE": "Interface multi-sensor para exportação",
+    "M1_TITLE_FULL": "M1 - Despachador de Mosaicos",
+    "M1_DESCRIPTION": "Interface multi-sensor para despachar composições (Assets/GCS) para a nuvem.",
+    "LABEL_PROJECT": "Projeto",
+    "BTN_SELECT_ROW": "[S]",
+    "COL_TYPE": "Tipo",
+    "M2_HEADER_TITLE": "M2 - Montador",
+    "M2_HEADER_SUBTITLE": "Interface para montagem de mosaicos nacionais (COG)",
+    "M2_CONSTRUCTOR_TITLE": "M2 - Montador de Mosaicos (COG)",
+    "M2_CONSTRUCTOR_DESC": "Interface para converter chunks GCS em mosaicos COG nacionais.",
+    "STATUS_READY": "PRONTO",
     # M0 - Startup
     "START_COUNTRY": "País",
     "START_BUCKET": "Bucket",
@@ -1528,6 +1567,7 @@ STRINGS_FR = {
     "DELETING": "Suppression...",
     "SAVING": "Enregistrement...",
     "SYNCING": "Synchronisation...",
+    "SYNCING_TASKS": "Synchronisation des tâches GEE...",
     "SEARCHING": "Recherche...",
     "DONE": "Terminé",
     "ERROR": "Erreur",
@@ -1891,6 +1931,18 @@ STRINGS_FR = {
     "MOSAIC_CLEAR": "Effacer sélection",
     "MOSAIC_START_BTN": "Démarrer assemblage",
     "MOSAIC_DONE": "Assemblage terminé avec succès",
+    "M1_HEADER_TITLE": "M1 - Répartiteur",
+    "M1_HEADER_SUBTITLE": "Interface multisensor d'exportation",
+    "M1_TITLE_FULL": "M1 - Répartiteur de Mosaïques",
+    "M1_DESCRIPTION": "Interface multisensor pour répartir des compositions (Assets/GCS) vers le cloud.",
+    "LABEL_PROJECT": "Projet",
+    "BTN_SELECT_ROW": "[S]",
+    "COL_TYPE": "Type",
+    "M2_HEADER_TITLE": "M2 - Assembleur",
+    "M2_HEADER_SUBTITLE": "Interface d'assemblage de mosaïques COG nationales",
+    "M2_CONSTRUCTOR_TITLE": "M2 - Assembleur de Mosaïques (COG)",
+    "M2_CONSTRUCTOR_DESC": "Interface pour convertir des fragments GCS en mosaïques COG nationales.",
+    "STATUS_READY": "PRÊT",
     # M0 - Startup
     "START_COUNTRY": "Pays",
     "START_BUCKET": "Bucket",
@@ -2011,6 +2063,7 @@ STRINGS_ID = {
     "DELETING": "Menghapus...",
     "SAVING": "Menyimpan...",
     "SYNCING": "Menyinkronkan...",
+    "SYNCING_TASKS": "Menyinkronkan tugas GEE...",
     "SEARCHING": "Mencari...",
     "DONE": "Selesai",
     "ERROR": "Kesalahan",
@@ -2374,6 +2427,18 @@ STRINGS_ID = {
     "MOSAIC_CLEAR": "Bersihkan Pilihan",
     "MOSAIC_START_BTN": "Mulai Perakitan",
     "MOSAIC_DONE": "Perakitan berhasil diselesaikan",
+    "M1_HEADER_TITLE": "M1 - Operator",
+    "M1_HEADER_SUBTITLE": "Antarmuka multi-sensor untuk ekspor",
+    "M1_TITLE_FULL": "M1 - Operator Mozaik",
+    "M1_DESCRIPTION": "Antarmuka multi-sensor untuk mengirim komposisi (Assets/GCS) ke cloud.",
+    "LABEL_PROJECT": "Proyek",
+    "BTN_SELECT_ROW": "[S]",
+    "COL_TYPE": "Tipe",
+    "M2_HEADER_TITLE": "M2 - Perakit",
+    "M2_HEADER_SUBTITLE": "Antarmuka perakitan mozaik COG nasional",
+    "M2_CONSTRUCTOR_TITLE": "M2 - Perakit Mozaik (COG)",
+    "M2_CONSTRUCTOR_DESC": "Antarmuka untuk mengonversi fragmen GCS menjadi mozaik COG nasional.",
+    "STATUS_READY": "SIAP",
     # M0 - Startup
     "START_COUNTRY": "Negara",
     "START_BUCKET": "Bucket",

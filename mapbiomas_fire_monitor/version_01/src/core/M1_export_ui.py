@@ -18,8 +18,8 @@ class ExportDispatcherUI(PipelineStepUI):
 
     def __init__(self, years=None):
         super().__init__(
-            title="M1 - Despachador de Mosaicos", 
-            description="Interface multi-sensor para despachar composições (Assets/GCS) para a nuvem."
+            title=Lang.M1_TITLE_FULL, 
+            description=Lang.M1_DESCRIPTION
         )
         self.chk_dict = {}
         self.requested_years = years
@@ -79,9 +79,9 @@ class ExportDispatcherUI(PipelineStepUI):
         L = widgets.Layout
         
         hdr = [
-            widgets.HTML('<div style="width:100px;">Data</div>'),
-            widgets.HTML('<div style="width:60px;">Tipo</div>'),
-            widgets.HTML('<div style="width:40px; text-align:center; font-weight:bold;">[S]</div>')
+            widgets.HTML(f'<div style="width:100px;">{Lang.DATE}</div>'),
+            widgets.HTML(f'<div style="width:60px;">{Lang.COL_TYPE}</div>'),
+            widgets.HTML(f'<div style="width:40px; text-align:center; font-weight:bold;">{Lang.BTN_SELECT_ROW}</div>')
         ]
         for b in self.bands:
             h_widget = widgets.HTML(f'<div style="text-align:center; font-weight:bold; font-size:11px;">{b}</div>')
@@ -123,7 +123,7 @@ class ExportDispatcherUI(PipelineStepUI):
                         widgets.HTML(f'<div style="width:60px;font-weight:bold;color:#666;">{row_type}</div>'),
                     ]
                     
-                    btn_s = widgets.Button(description='[S]', layout=L(width='40px', height='28px', padding='0'))
+                    btn_s = widgets.Button(description=Lang.BTN_SELECT_ROW, layout=L(width='40px', height='28px', padding='0'))
                     btn_s._sensor, btn_s._period, btn_s._mosaic, btn_s._date, btn_s._type = sensor, period, mosaic_method, date_str, row_type
                     btn_s.on_click(self._on_select_row)
                     cells.append(btn_s)
@@ -189,21 +189,21 @@ class ExportDispatcherUI(PipelineStepUI):
         header_html = f'''
         <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 5px 10px; background: #fff; border-bottom: 2px solid #333; margin-bottom: 10px;">
             <div style="display: flex; align-items: center; gap: 15px;">
-                <span style="font-weight: bold; font-size: 16px; color: #333;">M1 - Despachador</span>
-                <span style="color: #888; font-size: 11px; font-style: italic;">Interfaz multisensor para exportación</span>
+                <span style="font-weight: bold; font-size: 16px; color: #333;">{Lang.M1_HEADER_TITLE}</span>
+                <span style="color: #888; font-size: 11px; font-style: italic;">{Lang.M1_HEADER_SUBTITLE}</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; padding: 3px 12px; background: #fff1f0; border: 1px solid #ffa39e; border-radius: 4px;">
-                <span style="color: #cf1322; font-size: 10px; font-weight: bold; text-transform: uppercase;">Project</span>
+                <span style="color: #cf1322; font-size: 10px; font-weight: bold; text-transform: uppercase;">{Lang.LABEL_PROJECT}</span>
                 <span style="color: #cf1322; font-weight: bold; font-size: 12px;">MapBiomas Fire Monitor</span>
             </div>
         </div>
         '''
         
-        self.btn_refresh = widgets.Button(description="Sincronizar Datos", button_style='success', icon='refresh', layout=L(width='180px'))
+        self.btn_refresh = widgets.Button(description=Lang.SYNC_DATA, button_style='success', icon='refresh', layout=L(width='180px'))
         self.btn_refresh.on_click(lambda _: self._refresh_cache())
         
-        btn_all = widgets.Button(description="Seleccionar Pendientes", button_style='info', layout=L(width='180px'))
-        btn_none = widgets.Button(description="Limpiar Selección", button_style='warning', layout=L(width='150px'))
+        btn_all = widgets.Button(description=Lang.SELECT_PENDING, button_style='info', layout=L(width='180px'))
+        btn_none = widgets.Button(description=Lang.CLEAR_SELECTION, button_style='warning', layout=L(width='150px'))
         btn_all.on_click(self._on_select_all)
         btn_none.on_click(self._on_select_none)
         
@@ -215,7 +215,7 @@ class ExportDispatcherUI(PipelineStepUI):
         periods = GLOBAL_OPTS['PERIODICITY'] if isinstance(GLOBAL_OPTS['PERIODICITY'], list) else [GLOBAL_OPTS['PERIODICITY']]
         methods = CONFIG['mosaic_methods']
         
-        self.update_status("Sincronizando tarefas GEE...")
+        self.update_status(Lang.SYNCING_TASKS)
         active_tasks = self._get_active_tasks()
         
         self.sensor_tabs = widgets.Tab()
@@ -327,7 +327,7 @@ class ExportDispatcherUI(PipelineStepUI):
                     m_tab = s_tab.children[self._last_period_idx]
                     self._last_method_idx = m_tab.selected_index
                 
-            self.show_loader("Sincronizando...")
+            self.show_loader(Lang.SYNCING)
             self.state = CacheManager.build_full_cache(logger=self.update_status, years=self.years)
             self._build_ui()
         finally:
@@ -351,7 +351,7 @@ def start_export(ui_obj, mode=None):
                 selected.append(meta)
     
     if not selected:
-        print(" No option selected for export.")
+        print(Lang.EXPORT_NONE_SEL)
         return
 
     from M1_export_logic import export_to_asset, export_to_gcs
