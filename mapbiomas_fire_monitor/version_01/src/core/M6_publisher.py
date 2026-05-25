@@ -342,12 +342,8 @@ def run_m6_publish(upload_gee=True, groups=None, logger=None):
         if not mosaic_exists:
             mosaic_path = merge_region_tiles(model_id, region, period, fs=fs, logger=logger, campaign=campaign)
             if not mosaic_path:
-                logger(f"    [WARN] No tiles to mosaic for {region}, skipping stats.")
+                logger(f"    [WARN] No tiles to mosaic for {region}.")
                 continue
-
-        row = compute_region_stats_from_mosaic(model_id, region, period, fs=fs, logger=logger, campaign=campaign)
-        if row:
-            update_consolidated_stats(row, fs=fs, logger=logger, campaign=campaign)
 
         if upload_gee:
             upload_to_gee(model_id, region, period, fs=fs, logger=logger, campaign=campaign)
