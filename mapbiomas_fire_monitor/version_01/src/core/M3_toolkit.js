@@ -685,8 +685,8 @@ function user_interface() {
                         var filtered = col.filter(ee.Filter.stringContains('system:index', regionName))
                             .filter(ee.Filter.stringContains('system:index', dateStr));
                         var img = filtered.mosaic();
-                        var clsImg = img.select([0], ['classification']).byte().selfMask().updateMask(spatialMask);
-                        var prbImg = img.select([1], ['probability']).multiply(100).byte().selfMask().updateMask(spatialMask);
+                        var prbImg = img.select([0], ['probability']).divide(10).toByte().selfMask().updateMask(spatialMask);
+                        var clsImg = prbImg.gte(50).selfMask().updateMask(spatialMask);
                         if (classBandCls) {
                             var lId = 'class_' + modelId + '_' + assetName + '_cls';
                             desiredLayerIds.push(lId);

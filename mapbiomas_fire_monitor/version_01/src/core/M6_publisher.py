@@ -96,8 +96,8 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=
         # Nomeia as bandas no GeoTIFF — GEE respeita BandDescription
         try:
             ds = gdal.Open(mosaic_local, 1)
-            ds.GetRasterBand(1).SetDescription('classification')
-            ds.GetRasterBand(2).SetDescription('probability')
+            ds.GetRasterBand(1).SetDescription('probability')
+            ds.GetRasterBand(2).SetDescription('dayOfYear')
             ds = None
         except Exception:
             pass
@@ -127,13 +127,13 @@ def compute_region_stats_from_mosaic(model_id, region, period, fs=None, logger=N
         return None
 
     with rasterio.open(local_tmp) as src:
-        class_band = src.read(1)
-        prob_band = src.read(2)
+        prob_band = src.read(1)  # int16, 0-1000
+        doy_band = src.read(2)   # int16, 1-366, -9999 nodata
 
     os.remove(local_tmp)
 
-    total_valid = int((class_band >= 0).sum())
-    burned_mask = class_band > 0.5
+    total_valid = int((prob_band != -9999).sum())
+    burned_mask = prob_band > 500  # 50.0% threshold
     n_burned = int(burned_mask.sum())
 
     resolution_m = _get_resolution_from_model(model_id)
@@ -142,7 +142,7 @@ def compute_region_stats_from_mosaic(model_id, region, period, fs=None, logger=N
     total_area_km2 = total_valid * pixel_area_m2 / 1_000_000 if total_valid else 0
 
     if n_burned > 0:
-        mean_conf = float(prob_band[burned_mask].mean())
+        mean_conf = float(prob_band[burned_mask].mean()) / 1000.0
     else:
         mean_conf = 0.0
 
@@ -373,14 +373,13 @@ def compute_region_stats_from_tiles(model_id, region, period, fs=None, logger=No
             _gcs_download(tp, local)
 
             with rasterio.open(local) as src:
-                class_band = src.read(1)
-                prob_band = src.read(2)
+                prob_band = src.read(1)  # int16, 0-1000
 
             os.remove(local)
 
-            valid_mask = class_band >= 0
+            valid_mask = prob_band != -9999
             n_valid = int(valid_mask.sum())
-            burned_mask = class_band > 0.5
+            burned_mask = prob_band > 500
             n_burned = int(burned_mask.sum())
 
             total_valid += n_valid
@@ -502,6 +501,107 @@ def cleanup_old_m5_stats(fs=None, logger=print):
         logger(f"  Removed {geral}")
 
     logger("  Cleanup done.")
+
+
+def purge_all_classifications(logger=print, dry_run=False):
+    """Remove todos os tiles, mosaicos, stats e assets GEE de CLASSIFICACOES.
+
+    Usado uma vez apos migracao de formato (float32 -> int16) para limpar
+    dados antigos incompatíveis. Nao afeta modelos, COGs ou workplan.
+
+    dry_run=True: apenas exibe o que seria removido, sem executar.
+    """
+    from M_gcs import rm as gcs_rm, exists as gcs_exists
+
+    fs = _get_fs()
+    base = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}"
+    total_tiles = 0
+    total_mosaics = 0
+    total_models = 0
+
+    # --- GCS: CLASSIFIED_TILES e CLASSIFIED_REGION ---
+    for model_dir in sorted(fs.glob(f"{base}/*/")) + sorted(fs.glob(f"{base}/*/*/")):
+        bare = model_dir.rstrip('/')
+        model_id = os.path.basename(bare)
+        parent = os.path.basename(os.path.dirname(bare))
+        if parent == 'LIBRARY_CLASSIFICATIONS' or parent == model_id:
+            pass  # model dir ou com campanha
+        else:
+            continue
+
+        tiles_dir = f"{bare}/CLASSIFIED_TILES"
+        mosaics_dir = f"{bare}/CLASSIFIED_REGION"
+
+        # Tiles
+        if gcs_exists(tiles_dir):
+            tile_files = list(fs.glob(f"{tiles_dir}/*.tif"))
+            if tile_files:
+                total_tiles += len(tile_files)
+                if dry_run:
+                    logger(f"  [DRY] Would delete {len(tile_files)} tiles in {tiles_dir}")
+                else:
+                    for f in tile_files:
+                        gcs_rm(f)
+                    logger(f"  Deleted {len(tile_files)} tiles in {tiles_dir}")
+
+        # Mosaicos
+        if gcs_exists(mosaics_dir):
+            mos_files = list(fs.glob(f"{mosaics_dir}/*.tif"))
+            if mos_files:
+                total_mosaics += len(mos_files)
+                if dry_run:
+                    logger(f"  [DRY] Would delete {len(mos_files)} mosaics in {mosaics_dir}")
+                else:
+                    for f in mos_files:
+                        gcs_rm(f)
+                    logger(f"  Deleted {len(mos_files)} mosaics in {mosaics_dir}")
+
+        if tiles_dir or mosaics_dir:
+            total_models += 1
+
+    # --- GEE: regional assets ---
+    gee_count = 0
+    try:
+        import ee
+        base_gee = f"{CONFIG['asset_monitor_base']}/LIBRARY_CLASSIFICATIONS/REGIONAL"
+        try:
+            result = ee.data.listAssets({'parent': base_gee})
+        except Exception:
+            result = {'assets': []}
+        for folder in result.get('assets', []):
+            model_assets = ee.data.listAssets({'parent': folder['name']})
+            for a in model_assets.get('assets', []):
+                asset_id = a['name']
+                gee_count += 1
+                if dry_run:
+                    logger(f"  [DRY] Would delete GEE asset: {asset_id}")
+                else:
+                    ee.data.deleteAsset(asset_id)
+                    logger(f"  Deleted GEE asset: {asset_id}")
+            if not dry_run:
+                try:
+                    ee.data.deleteAsset(folder['name'])
+                except Exception:
+                    pass
+    except Exception as e:
+        logger(f"  [WARN] GEE cleanup: {e}")
+    if dry_run:
+        logger(f"  [DRY] Would delete {gee_count} GEE assets")
+    else:
+        logger(f"  Deleted {gee_count} GEE assets")
+
+    # --- consolidated_stats.csv (todas as campanhas) ---
+    for csv_path in fs.glob(f"{base}/*/consolidated_stats.csv") + fs.glob(f"{base}/consolidated_stats.csv"):
+        if dry_run:
+            logger(f"  [DRY] Would delete stats: {csv_path}")
+        else:
+            gcs_rm(csv_path)
+            logger(f"  Deleted stats: {csv_path}")
+
+    if dry_run:
+        logger(f"\n[DRY RUN] Would remove: {total_tiles} tiles, {total_mosaics} mosaicos, {gee_count} assets GEE de {total_models} modelos")
+    else:
+        logger(f"\nPurge complete: {total_tiles} tiles, {total_mosaics} mosaicos, {gee_count} GEE assets, stats reset")
 
 
 def generate_region_thumbnail(region_name, size=64):

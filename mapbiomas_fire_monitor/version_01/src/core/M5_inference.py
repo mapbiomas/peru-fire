@@ -7,6 +7,7 @@ from rasterio.windows import Window, from_bounds
 from affine import Affine
 from shapely.geometry import shape, mapping
 from pyproj import Transformer
+from osgeo import gdal
 from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _gcs_download, _gcs_upload
 from M4_data_extractor import normalize
 
@@ -180,7 +181,7 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
             'height': win_h,
             'width': win_w,
             'transform': out_transform,
-            'dtype': rasterio.float32,
+            'dtype': rasterio.int16,
             'count': 2,
             'compress': 'lzw',
             'nodata': -9999,
@@ -221,8 +222,8 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                     n_valid = int(valid_mask.sum())
 
                     if n_valid == 0:
-                        dst.write(np.zeros((hb, wb), dtype=np.float32), 1, window=dst_win)
-                        dst.write(np.full((hb, wb), -9999, dtype=np.float32), 2, window=dst_win)
+                        dst.write(np.full((hb, wb), -9999, dtype=np.int16), 1, window=dst_win)
+                        dst.write(np.full((hb, wb), -9999, dtype=np.int16), 2, window=dst_win)
                         continue
 
                     X_norm = normalize(stack[valid_mask], norm_stats)
@@ -235,13 +236,16 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                     if probs.ndim > 1 and probs.shape[1] == 1:
                         probs = probs.flatten()
 
-                    output_class = np.zeros((hb, wb), dtype=np.float32)
-                    output_prob = np.full((hb, wb), -9999, dtype=np.float32)
-                    output_class[valid_mask] = (probs > 0.5).astype(np.float32)
-                    output_prob[valid_mask] = probs.astype(np.float32)
+                    output_prob = np.full((hb, wb), -9999, dtype=np.int16)
+                    output_doy = np.full((hb, wb), -9999, dtype=np.int16)
+                    output_prob[valid_mask] = np.round(probs * 1000).astype(np.int16)
+                    if 'dayOfYear' in bands_block:
+                        burned_2d = np.zeros((hb, wb), dtype=bool)
+                        burned_2d[valid_mask] = probs > 0.5
+                        output_doy[burned_2d] = bands_block['dayOfYear'][burned_2d].astype(np.int16)
 
-                    dst.write(output_class, 1, window=dst_win)
-                    dst.write(output_prob, 2, window=dst_win)
+                    dst.write(output_prob, 1, window=dst_win)
+                    dst.write(output_doy, 2, window=dst_win)
 
                     total_valid += n_valid
                     burned = probs > 0.5
@@ -256,6 +260,15 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                 logger(f"    [WARN] {cell_id}: all pixels are nodata")
             os.remove(local_tmp)
             return None
+
+        # Nomeia as bandas no GeoTIFF
+        try:
+            ds = gdal.Open(local_tmp, 1)
+            ds.GetRasterBand(1).SetDescription('probability')
+            ds.GetRasterBand(2).SetDescription('dayOfYear')
+            ds = None
+        except Exception:
+            pass
 
         _gcs_upload(local_tmp, out_gcs_path)
         os.remove(local_tmp)
