@@ -230,8 +230,15 @@ def discover_classified_groups(fs=None, logger=None):
             parts = basename.replace('tile_', '', 1).split('_')
             if len(parts) < 3:
                 continue
-            region = parts[0]
-            period = parts[-1].replace('.tif', '')
+            # Period: mensal (YYYY_MM) ou anual (YYYY)
+            last = parts[-1].replace('.tif', '')
+            if (len(last) == 2 and last.isdigit() and 1 <= int(last) <= 12
+                and len(parts) >= 3 and len(parts[-2]) == 4 and parts[-2].isdigit()):
+                period = f"{parts[-2]}_{last}"
+                region = '_'.join(parts[:-3])
+            else:
+                period = last
+                region = '_'.join(parts[:-2]) if len(parts) >= 2 else parts[0]
             model_dir = tp.split('/CLASSIFIED_TILES')[0]
             model_id = os.path.basename(model_dir)
             parent = os.path.basename(os.path.dirname(model_dir))
@@ -266,41 +273,35 @@ def cleanup_old_m5_stats(fs=None, logger=print):
     logger("  Cleanup done.")
 
 
-def generate_region_thumbnail(region_name, fs=None, logger=print):
-    """Gera PNG 200x200: Peru outline + regiao destacada, salva no GCS."""
+def generate_region_thumbnail(region_name, size=64):
+    """Retorna base64 PNG estilo M5: Peru outline + grid + regiao destacada."""
     import ee
+    import base64
     import requests
     from M0_auth_config import authenticate
-    from M_gcs import mkdir as gcs_mkdir
-
-    authenticate()
-    if fs is None:
-        fs = _get_fs()
-
-    thumb_dir = f"{CONFIG['gcs_library_classifications']}/thumbnails"
-    thumb_gcs = gcs_full(f"{thumb_dir}/{region_name}.png")
-    if fs.exists(thumb_gcs):
-        return thumb_gcs
+    if not getattr(ee.data, '_credentials', None):
+        authenticate()
 
     peru = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(
         ee.Filter.eq('ADM0_NAME', 'Peru'))
-    region_fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(
+    all_regions = ee.FeatureCollection(CONFIG['asset_regions'])
+    sel_region = all_regions.filter(
         ee.Filter.eq(REGION_NAME_PROPERTY, region_name))
+    grid = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
 
-    img = ee.Image(1).byte().paint(peru, 0).paint(region_fc, 1)
-    url = img.getThumbURL({
-        'min': 0, 'max': 1, 'dimensions': 200, 'format': 'png'})
+    bg = peru.style(**{'fillColor': 'f0f0f0', 'color': 'cccccc', 'width': 1})
+    region_lines = all_regions.style(**{'color': '2980b9', 'width': 1, 'fillColor': '00000000'})
+    grid_lines = grid.style(**{'color': 'e0e0e0', 'width': 0.3, 'fillColor': '00000000'})
+    sel_fill = sel_region.style(**{'color': '2980b9', 'width': 1, 'fillColor': '2980b920'})
 
-    local = os.path.join(get_temp_dir('tiles'), f"thumb_{region_name}.png")
-    with open(local, 'wb') as f:
-        f.write(requests.get(url).content)
-
-    gcs_mkdir(gcs_full(thumb_dir))
-    _gcs_upload(local, thumb_gcs)
-    os.remove(local)
-    if logger:
-        logger(f"    Thumbnail saved: {thumb_gcs}")
-    return thumb_gcs
+    overlay = ee.ImageCollection([bg, grid_lines, region_lines, sel_fill]).mosaic()
+    bounds = peru.geometry().bounds(1, 'EPSG:4326')
+    try:
+        url = overlay.getThumbURL({'region': bounds, 'dimensions': size, 'format': 'png'})
+        resp = requests.get(url, timeout=60)
+        return base64.b64encode(resp.content).decode('ascii')
+    except Exception:
+        return None
 
 
 def run_m6_publish(upload_gee=True, logger=None):

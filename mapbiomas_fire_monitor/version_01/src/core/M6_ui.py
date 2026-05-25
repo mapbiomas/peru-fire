@@ -76,23 +76,12 @@ class M6WorkplanUI:
                     continue
 
     def _load_thumbnails(self):
-        from M0_auth_config import _gcs_download
         from M6_publisher import generate_region_thumbnail
-        thumb_dir = gcs_full(f"{self.lc_base}/thumbnails")
-        regions = sorted(set(g[1] for g in self._groups))
-        for r in regions:
-            if r in self._thumbnails:
-                continue
-            thumb_gcs = f"{thumb_dir}/{r}.png"
-            if not self.fs.exists(thumb_gcs):
-                generate_region_thumbnail(r, fs=self.fs, logger=print)
-            if self.fs.exists(thumb_gcs):
-                local = os.path.join('/tmp', f"thumb_{r}.png")
-                _gcs_download(thumb_gcs, local)
-                with open(local, 'rb') as f:
-                    b64 = base64.b64encode(f.read()).decode('utf-8')
-                self._thumbnails[r] = b64
-                os.remove(local)
+        for r in sorted(set(g[1] for g in self._groups)):
+            if r not in self._thumbnails:
+                b64 = generate_region_thumbnail(r, size=64)
+                if b64:
+                    self._thumbnails[r] = b64
 
     def _refresh_all(self):
         self._discover_all()
