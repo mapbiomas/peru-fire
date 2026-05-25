@@ -672,7 +672,8 @@ function user_interface() {
             // --- CLASSIFICAÇÕES REGIONAIS ---
             var classBandCls = classBandCheckboxes['cls'] && classBandCheckboxes['cls'].getValue();
             var classBandPrb = classBandCheckboxes['prb'] && classBandCheckboxes['prb'].getValue();
-            if (classBandCls || classBandPrb) {
+            var classBandDoy = classBandCheckboxes['doy'] && classBandCheckboxes['doy'].getValue();
+            if (classBandCls || classBandPrb || classBandDoy) {
                 var selectedRegions = getSelectedRegionNames();
                 var modelList = Object.keys(classCheckboxes).sort();
                 Object.keys(classCheckboxes).forEach(function (modelId) {
@@ -686,14 +687,17 @@ function user_interface() {
                             .filter(ee.Filter.stringContains('system:index', dateStr));
                         var img = filtered.mosaic();
                         var prbImg = img.select([0], ['probability']).divide(10).toByte().selfMask().updateMask(spatialMask);
-                        var clsImg = prbImg.gte(50).selfMask().updateMask(spatialMask);
-                        if (classBandCls) {
-                            var lId = 'class_' + modelId + '_' + assetName + '_cls';
+                        var clsImg = img.select([0], ['probability']).gte(1).selfMask().updateMask(spatialMask);
+                        var doyImg = img.select([1], ['dayOfYear']).selfMask().updateMask(spatialMask);
+
+                        // Ordem inversa: doy (base) → prb → cls (topo)
+                        if (classBandDoy) {
+                            var lId = 'class_' + modelId + '_' + assetName + '_doy';
                             desiredLayerIds.push(lId);
                             updateManagedLayer(lId,
-                                clsImg,
-                                { min: 0, max: 1, palette: ['00000000', color] },
-                                modelId + ' ' + assetName);
+                                doyImg,
+                                { min: 1, max: 366, palette: ['313695', '4575b4', '74add1', 'abd9e9', 'e0f3f8', 'fee090', 'fdae61', 'f46d43', 'd73027'] },
+                                modelId + ' doy ' + assetName);
                         }
                         if (classBandPrb) {
                             var lId = 'class_' + modelId + '_' + assetName + '_prb';
@@ -702,6 +706,14 @@ function user_interface() {
                                 prbImg,
                                 { min: 0, max: 100, palette: PROB_PALETTE },
                                 modelId + ' prob ' + assetName);
+                        }
+                        if (classBandCls) {
+                            var lId = 'class_' + modelId + '_' + assetName + '_cls';
+                            desiredLayerIds.push(lId);
+                            updateManagedLayer(lId,
+                                clsImg,
+                                { min: 0, max: 1, palette: ['00000000', color] },
+                                modelId + ' ' + assetName);
                         }
                     });
                 });
@@ -1236,7 +1248,8 @@ function user_interface() {
 
     var drawerClassToggle = createLayerDrawer('Bandas', [
         { id: 'cls', label: 'classification', value: true, onChange: function () { debouncedUpdateMosaic(); } },
-        { id: 'prb', label: 'probability', value: false, onChange: function () { debouncedUpdateMosaic(); } }
+        { id: 'prb', label: 'probability', value: false, onChange: function () { debouncedUpdateMosaic(); } },
+        { id: 'doy', label: 'dayOfYear', value: false, onChange: function () { debouncedUpdateMosaic(); } }
     ]);
     classBandCheckboxes = drawerClassToggle.checkboxes;
     subCabClass.content.add(drawerClassToggle.panel);
