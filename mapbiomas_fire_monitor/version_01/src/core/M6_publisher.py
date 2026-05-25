@@ -208,6 +208,115 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
     return True
 
 
+def gee_asset_exists(model_id, region, period, campaign=None):
+    """Check if GEE asset ja existe."""
+    import ee
+    parent = f"{CONFIG['asset_monitor_base']}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
+    asset_id = f"{parent}/{region}_{period}"
+    try:
+        ee.data.getAsset(asset_id)
+        return True
+    except Exception:
+        return False
+
+
+def compute_region_stats_from_tiles(model_id, region, period, fs=None, logger=None, campaign=None):
+    """Agrega stats dos tiles (1 por vez, RAM baixa). Unidades em hectares."""
+    if fs is None:
+        fs = _get_fs()
+
+    tiles_dir = gcs_full(classified_tiles_dir(model_id, campaign))
+    match_prefix = f"tile_{region}_"
+    match_suffix = f"_{period}.tif"
+    tile_paths = sorted([
+        p for p in fs.glob(f"{tiles_dir}/*.tif")
+        if os.path.basename(p).startswith(match_prefix)
+        and os.path.basename(p).endswith(match_suffix)
+        and not p.endswith('.aux.xml')
+    ])
+
+    if not tile_paths:
+        if logger:
+            logger(f"    [WARN] No tiles for stats: {region} {period}")
+        return None
+
+    total_valid = 0
+    total_burned = 0
+    sum_conf = 0.0
+    n_tiles = len(tile_paths)
+
+    tmpdir = os.path.join(get_temp_dir('stats'), f"tile_stats_{model_id}_{region}_{period}_{int(time.time())}")
+    os.makedirs(tmpdir, exist_ok=True)
+
+    try:
+        for i, tp in enumerate(tile_paths):
+            local = os.path.join(tmpdir, f"tile_{i:04d}.tif")
+            _gcs_download(tp, local)
+
+            with rasterio.open(local) as src:
+                class_band = src.read(1)
+                prob_band = src.read(2)
+
+            os.remove(local)
+
+            valid_mask = class_band >= 0
+            n_valid = int(valid_mask.sum())
+            burned_mask = class_band > 0.5
+            n_burned = int(burned_mask.sum())
+
+            total_valid += n_valid
+            total_burned += n_burned
+            if n_burned > 0:
+                sum_conf += float(prob_band[burned_mask].sum())
+
+            if logger and (i + 1) % 5 == 0:
+                logger(f"    Stats tile {i+1}/{n_tiles} ({n_burned} burned / {n_valid} px)")
+
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+    burned_area_ha = total_burned / 100
+    total_area_ha = total_valid / 100 if total_valid else 0
+    mean_conf = sum_conf / total_burned if total_burned > 0 else 0.0
+
+    row = {
+        'model_id': model_id,
+        'region': region,
+        'period': period,
+        'tiles_total': n_tiles,
+        'tiles_processed': n_tiles,
+        'total_pixels': total_valid,
+        'burned_pixels': total_burned,
+        'burned_area_ha': f"{burned_area_ha:.2f}",
+        'total_area_ha': f"{total_area_ha:.2f}",
+        'burned_percentage': f"{(total_burned / total_valid * 100):.2f}" if total_valid else "0.00",
+        'mean_confidence': f"{mean_conf:.4f}",
+    }
+    return row
+
+
+def stats_row_exists(model_id, region, period, campaign=None, fs=None):
+    """Check if consolidated_stats.csv ja tem linha para (model, region, period)."""
+    if fs is None:
+        fs = _get_fs()
+    path = gcs_full(consolidated_stats_path(campaign))
+    if not fs.exists(path):
+        return False
+    local_csv = os.path.join(get_temp_dir('stats'), "check_stats.csv")
+    try:
+        _gcs_download(path, local_csv)
+        with open(local_csv, 'r') as f:
+            for r in csv.DictReader(f):
+                if r['region'] == region and r['period'] == period and r['model_id'] == model_id:
+                    return True
+    except Exception:
+        return False
+    finally:
+        if os.path.exists(local_csv):
+            os.remove(local_csv)
+    return False
+
+
 def discover_classified_groups(fs=None, logger=None):
     """Scan GCS e descobre grupos (modelo, regiao, periodo, campaign) com tiles classificados."""
     if fs is None:
@@ -333,11 +442,10 @@ def run_m6_publish(upload_gee=True, groups=None, logger=None):
         campaign_str = f" [{campaign}]" if campaign else ""
         logger(f"\n  [{idx+1}/{len(groups)}] {model_id} | {region} | {period}{campaign_str}")
 
-        mosaic_exists = False
-        mosaic_gcs = gcs_full(region_path(model_id, region, period, campaign))
-        if fs.exists(mosaic_gcs):
-            mosaic_exists = True
-            logger(f"    Mosaic already exists, skipping merge.")
+        # 1. Mosaic
+        mosaic_exists = fs.exists(gcs_full(region_path(model_id, region, period, campaign)))
+        if mosaic_exists:
+            logger(f"    Mosaic already exists.")
 
         if not mosaic_exists:
             mosaic_path = merge_region_tiles(model_id, region, period, fs=fs, logger=logger, campaign=campaign)
@@ -345,8 +453,20 @@ def run_m6_publish(upload_gee=True, groups=None, logger=None):
                 logger(f"    [WARN] No tiles to mosaic for {region}.")
                 continue
 
+        # 2. Stats (per tile, RAM-friendly)
+        if not stats_row_exists(model_id, region, period, campaign, fs):
+            row = compute_region_stats_from_tiles(model_id, region, period, fs=fs, logger=logger, campaign=campaign)
+            if row:
+                update_consolidated_stats(row, fs=fs, logger=logger, campaign=campaign)
+        else:
+            logger(f"    Stats already exist.")
+
+        # 3. GEE upload
         if upload_gee:
-            upload_to_gee(model_id, region, period, fs=fs, logger=logger, campaign=campaign)
+            if not gee_asset_exists(model_id, region, period, campaign):
+                upload_to_gee(model_id, region, period, fs=fs, logger=logger, campaign=campaign)
+            else:
+                logger(f"    Already in GEE.")
 
     total = time.time() - _t0
     logger(f"\n  --- M6 publish done in {_fmt_time(total)} ---")

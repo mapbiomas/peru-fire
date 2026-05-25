@@ -7,7 +7,7 @@ from IPython.display import display, HTML, clear_output
 import ipywidgets as widgets
 from M0_auth_config import CONFIG, _get_fs
 from M5_workplan import gcs_full, consolidated_stats_path, region_path
-from M6_publisher import discover_classified_groups
+from M6_publisher import discover_classified_groups, gee_asset_exists, stats_row_exists
 from M_cache import CacheManager
 from M_ui_components import make_empty_state, flash_output, make_select_all_none
 from M_lang import L as Lang
@@ -20,6 +20,8 @@ class M6WorkplanUI:
         self.fs = _get_fs()
         self._groups = []
         self._mosaics = set()
+        self._gee_assets = set()
+        self._stats_done = set()
         self._stats_data = []
         self.lc_base = CONFIG['gcs_library_classifications']
         self._thumbnails = {}
@@ -49,11 +51,17 @@ class M6WorkplanUI:
         raw = discover_classified_groups(fs=self.fs)
         self._groups = sorted(raw)
         self._mosaics = set()
+        self._gee_assets = set()
+        self._stats_done = set()
         for group in self._groups:
             m, r, p, c = group
             mg = gcs_full(region_path(m, r, p, c))
             if self.fs.exists(mg):
                 self._mosaics.add(group)
+            if gee_asset_exists(m, r, p, c):
+                self._gee_assets.add(group)
+            if stats_row_exists(m, r, p, c, self.fs):
+                self._stats_done.add(group)
         self._load_thumbnails()
 
     def _load_stats(self):
@@ -93,7 +101,7 @@ class M6WorkplanUI:
 
     def _render_to_publish(self):
         from M_ui_components import make_card_body, build_thumbnail_column
-        pending = [g for g in self._groups if g not in self._mosaics]
+        pending = [g for g in self._groups if not (g in self._mosaics and g in self._gee_assets and g in self._stats_done)]
         if not pending:
             self.tab_to_publish.children = [make_empty_state(Lang.NO_TASKS_PUBLISH)]
             return
@@ -111,6 +119,16 @@ class M6WorkplanUI:
 
             c_label = f"<span style='color:#7f8c8d;font-size:12px;'>[{c}]</span>" if c else ""
 
+            def _badge(ok, label):
+                color = '#22c55e' if ok else '#ef4444'
+                return f"<span style='display:inline-block;padding:0 6px;border-radius:8px;font-size:10px;font-weight:600;color:white;background:{color};margin:0 2px;'>{label}</span>"
+
+            badges = widgets.HTML(
+                _badge(g in self._mosaics, 'M') +
+                _badge(g in self._stats_done, 'S') +
+                _badge(g in self._gee_assets, 'G'),
+                layout=L(margin='0 0 0 30px'))
+
             right_col = widgets.VBox([
                 widgets.HBox([
                     cb,
@@ -118,6 +136,7 @@ class M6WorkplanUI:
                 ], layout=L(align_items='center')),
                 widgets.HTML(f"<span style='color:#475569;margin-left:30px;'>Region: <b>{r}</b></span>"),
                 widgets.HTML(f"<span style='color:#475569;margin-left:30px;'>Period: <b>{p}</b></span>"),
+                badges,
             ], layout=L(flex='1', margin='0 0 0 12px'))
 
             cards.append(make_card_body(left_col, right_col))
@@ -136,7 +155,7 @@ class M6WorkplanUI:
             cb.value = value
 
     def _render_finished(self):
-        done = sorted([g for g in self._groups if g in self._mosaics])
+        done = sorted([g for g in self._groups if g in self._mosaics and g in self._gee_assets and g in self._stats_done])
         if not done:
             self.tab_finished.children = [make_empty_state(Lang.NO_TASKS_DONE)]
             return
@@ -188,7 +207,7 @@ class M6WorkplanUI:
 
             h = '<table style="border-collapse:collapse;width:100%;font-size:13px;">'
             h += '<tr style="background:#2c3e50;color:white;">'
-            for col in ['Model', 'Region', 'Period', 'km\u00b2', '%', 'Confidence', 'Tiles']:
+            for col in ['Model', 'Region', 'Period', 'ha', '%', 'Confidence', 'Tiles']:
                 h += f'<th style="padding:6px 10px;text-align:left;">{col}</th>'
             h += '</tr>'
             for row in data:
@@ -196,7 +215,7 @@ class M6WorkplanUI:
                 h += f'<td style="padding:4px 10px;">{row["model_id"]}</td>'
                 h += f'<td style="padding:4px 10px;">{row["region"]}</td>'
                 h += f'<td style="padding:4px 10px;">{row["period"]}</td>'
-                h += f'<td style="padding:4px 10px;">{row.get("burned_area_km2", "0")}</td>'
+                h += f'<td style="padding:4px 10px;">{row.get("burned_area_ha", "0")}</td>'
                 h += f'<td style="padding:4px 10px;">{row.get("burned_percentage", "0")}%</td>'
                 h += f'<td style="padding:4px 10px;">{row.get("mean_confidence", "0")}</td>'
                 h += f'<td style="padding:4px 10px;">{row.get("tiles_total", "0")}</td>'
@@ -215,7 +234,7 @@ class M6WorkplanUI:
             fname = fname.replace(' ', '_').replace('/', '-')
 
             output = io.StringIO()
-            fieldnames = ['model_id', 'region', 'period', 'burned_area_km2', 'burned_percentage', 'mean_confidence', 'tiles_total', 'total_pixels', 'burned_pixels']
+            fieldnames = ['model_id', 'region', 'period', 'burned_area_ha', 'burned_percentage', 'mean_confidence', 'tiles_total', 'total_pixels', 'burned_pixels']
             writer = csv.DictWriter(output, fieldnames=fieldnames)
             writer.writeheader()
             for row in data:
