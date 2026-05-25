@@ -681,41 +681,42 @@ function user_interface() {
                     var modelIdx = modelList.indexOf(modelId);
                     var color = CLASS_PALETTE[modelIdx % 50] || '#e6194b';
                     var col = ee.ImageCollection(REGIONAL_FOLDER + '/' + modelId);
-                    selectedRegions.forEach(function (regionName) {
-                        var assetName = regionName + '_' + dateStr;
-                        var filtered = col.filter(ee.Filter.stringContains('system:index', regionName))
-                            .filter(ee.Filter.stringContains('system:index', dateStr));
-                        var img = filtered.mosaic();
-                        var prbImg = img.select([0], ['probability']).divide(10).toByte().selfMask().updateMask(spatialMask);
-                        var clsImg = img.select([0], ['probability']).gte(1).selfMask().updateMask(spatialMask);
-                        var doyImg = img.select([1], ['dayOfYear']).selfMask().updateMask(spatialMask);
 
-                        // Ordem inversa: doy (base) → prb → cls (topo)
-                        if (classBandDoy) {
-                            var lId = 'class_' + modelId + '_' + assetName + '_doy';
-                            desiredLayerIds.push(lId);
-                            updateManagedLayer(lId,
-                                doyImg,
-                                { min: 1, max: 366, palette: ['313695', '4575b4', '74add1', 'abd9e9', 'e0f3f8', 'fee090', 'fdae61', 'f46d43', 'd73027'] },
-                                modelId + ' doy ' + assetName);
-                        }
-                        if (classBandPrb) {
-                            var lId = 'class_' + modelId + '_' + assetName + '_prb';
-                            desiredLayerIds.push(lId);
-                            updateManagedLayer(lId,
-                                prbImg,
-                                { min: 0, max: 100, palette: PROB_PALETTE },
-                                modelId + ' prob ' + assetName);
-                        }
-                        if (classBandCls) {
-                            var lId = 'class_' + modelId + '_' + assetName + '_cls';
-                            desiredLayerIds.push(lId);
-                            updateManagedLayer(lId,
-                                clsImg,
-                                { min: 0, max: 1, palette: ['00000000', color] },
-                                modelId + ' ' + assetName);
-                        }
+                    // Mosaic todas as regioes selecionadas em uma unica imagem
+                    var regionImages = selectedRegions.map(function (regionName) {
+                        return col.filter(ee.Filter.stringContains('system:index', regionName))
+                            .filter(ee.Filter.stringContains('system:index', dateStr)).mosaic();
                     });
+                    var img = ee.ImageCollection(regionImages).mosaic();
+                    var prbImg = img.select([0], ['probability']).divide(10).toByte().selfMask().updateMask(spatialMask);
+                    var clsImg = img.select([0], ['probability']).gte(1).selfMask().updateMask(spatialMask);
+                    var doyImg = img.select([1], ['dayOfYear']).selfMask().updateMask(spatialMask);
+
+                    // Ordem inversa: doy (base) → prb → cls (topo)
+                    if (classBandDoy) {
+                        var lId = 'class_' + modelId + '_' + dateStr + '_doy';
+                        desiredLayerIds.push(lId);
+                        updateManagedLayer(lId,
+                            doyImg,
+                            { min: 1, max: 366, palette: ['313695', '4575b4', '74add1', 'abd9e9', 'e0f3f8', 'fee090', 'fdae61', 'f46d43', 'd73027'] },
+                            modelId + ' doy ' + dateStr);
+                    }
+                    if (classBandPrb) {
+                        var lId = 'class_' + modelId + '_' + dateStr + '_prb';
+                        desiredLayerIds.push(lId);
+                        updateManagedLayer(lId,
+                            prbImg,
+                            { min: 0, max: 100, palette: PROB_PALETTE },
+                            modelId + ' prob ' + dateStr);
+                    }
+                    if (classBandCls) {
+                        var lId = 'class_' + modelId + '_' + dateStr + '_cls';
+                        desiredLayerIds.push(lId);
+                        updateManagedLayer(lId,
+                            clsImg,
+                            { min: 0, max: 1, palette: ['00000000', color] },
+                            modelId + ' ' + dateStr);
+                    }
                 });
             }
         });
