@@ -8,7 +8,7 @@ from M5_workplan import load_workplan, save_workplan, make_job_id, new_job, gcs_
     save_pending_job_to_gcs, delete_pending_job_gcs, \
     load_pending_from_gcs, sync_gcs_to_local_workplan
 from M4_data_extractor import list_campaigns_gcs
-from M_ui_components import inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output, make_select_all_none
+from M_ui_components import inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output, make_select_all_none, make_refresh_button
 from M_lang import L as Lang
 from M_regions import REGION_NAME_PROPERTY
 
@@ -35,11 +35,10 @@ class M5WorkplanUI:
         self.chk_regions = []
         self.chk_periods = []
 
-        self.btn_add = widgets.Button(description=Lang.ADD_BATCH, button_style='primary', icon='plus', layout=L(width='200px'))
-        self.btn_add.on_click(self._on_add_click)
-
-        self.btn_refresh = widgets.Button(description=Lang.REFRESH_VIEW, icon='refresh', layout=L(width='150px'))
-        self.btn_refresh.on_click(lambda _: self._refresh_ui())
+        self.btn_add_container, self.btn_add, _ = make_refresh_button('plus', self._on_add_click, description=Lang.ADD_BATCH, width='200px')
+        self.btn_add.button_style = 'primary'
+        
+        self.btn_refresh_container, self.btn_refresh, _ = make_refresh_button('refresh', self._refresh_ui, description=Lang.REFRESH_VIEW, width='150px')
 
         self.w_task_name = widgets.Text(
             value='',
@@ -72,8 +71,7 @@ class M5WorkplanUI:
         self.f_mapa_model = widgets.Dropdown(description=Lang.DROP_MODEL, options=[Lang.ALL], layout=L(width='250px'))
         self.f_mapa_region = widgets.Dropdown(description=Lang.DROP_REGION, options=[Lang.ALL_F], layout=L(width='250px'))
         self.f_mapa_year = widgets.Dropdown(description=Lang.DROP_YEAR, options=[Lang.ALL], layout=L(width='200px'))
-        self.btn_mapa_refresh = widgets.Button(description=Lang.REFRESH_MAP, icon='refresh', layout=L(width='150px'))
-        self.btn_mapa_refresh.on_click(lambda _: self._render_mapa())
+        self.btn_mapa_refresh_container, self.btn_mapa_refresh, _ = make_refresh_button('refresh', self._render_mapa, description=Lang.REFRESH_MAP, width='150px')
         for f in [self.f_mapa_model, self.f_mapa_region, self.f_mapa_year]:
             f.observe(lambda _: self._render_mapa(), names='value')
 
@@ -459,9 +457,10 @@ class M5WorkplanUI:
             years = sorted(set(p.split('_')[0] for p in periods))
             label = f" Modelo: {model} | Regiones: {', '.join(regions)} | Periodos: {', '.join(years)}"
 
-            btn_cargar = widgets.Button(description=Lang.LOAD_TO_QUEUE, button_style='success', layout=L(width='150px', height='28px'))
+            cargar_container, btn_cargar, _ = make_refresh_button('plus', _make_cargar(model, regions, periods), description=Lang.LOAD_TO_QUEUE, width='150px')
+            btn_cargar.button_style = 'success'
             def _make_cargar(m, regs, pers):
-                def _h(_):
+                def _h():
                     campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
                     self.plan = load_workplan()
                     added = 0
@@ -470,7 +469,7 @@ class M5WorkplanUI:
                     gcs_fail = 0
                     with self.out_msg:
                         clear_output(wait=True)
-                        display(HTML("<i>⏳ Salvando no GCS...</i>"))
+                        display(HTML("<i>Salvando no GCS...</i>"))
                     fs = _get_fs()
                     for r in regs:
                         for p in pers:
@@ -497,15 +496,14 @@ class M5WorkplanUI:
                         if gcs_fail > 0:
                             failures.append(f"{gcs_fail} falharam no GCS")
                         if failures:
-                            msg += f"<br><span style='color:red;'>⚠ {'; '.join(failures)}.</span>"
+                            msg += f"<br><span style='color:red;'> {', '.join(failures)}.</span>"
                         display(HTML(msg))
                     self._refresh_ui()
                 return _h
-            btn_cargar.on_click(_make_cargar(model, regions, periods))
 
             row = widgets.HBox([
                 widgets.HTML(label, layout=L(width='auto')),
-                btn_cargar
+                cargar_container
             ], layout=L(align_items='center', margin='2px 0', padding='5px', border='1px solid #eee'))
             cards.append(row)
 
@@ -571,11 +569,11 @@ class M5WorkplanUI:
             all_jobs = [j for j in self.plan if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)]
             filtered = self._apply_search_filter(all_jobs, self.f_pend_search)
 
-            btn_clear = widgets.Button(description=Lang.CLEAR_TEMP_TASKS, button_style='warning', icon='trash', layout=L(width='200px'))
-            btn_clear.on_click(lambda _: self._on_clear_click())
+            clear_container, btn_clear, _ = make_refresh_button('trash', self._on_clear_click, description=Lang.CLEAR_TEMP_TASKS, width='200px')
+            btn_clear.button_style = 'warning'
 
             tarea_section = self._tarea_section()
-            search_box = widgets.HBox([self.f_pend_search, btn_clear], layout=L(margin='0 0 8px 0'))
+            search_box = widgets.HBox([self.f_pend_search, clear_container], layout=L(margin='0 0 8px 0'))
 
             debug_info = (f'<div style="font-size:11px;color:#94a3b8;margin:0 0 6px 0;">'
                           f'{len(all_jobs)} pendentes | {len(filtered)} apos filtro</div>')
@@ -633,22 +631,24 @@ class M5WorkplanUI:
                     else:
                         card_badge, badge_color = "Temporário", "#64748b"
 
+                    btn_del_model = widgets.Button(description=Lang.DELETE_MODEL, button_style='danger', layout=L(width='140px', height='28px', font_size='12px'))
                     if saved_count == 0:
-                        btn_save = widgets.Button(description='Salvar no GCS', button_style='primary', layout=L(width='160px', height='28px', font_size='12px'))
-                        btn_save.on_click(lambda _, m=model_name: self._on_save_gcs_click(m))
+                        save_box, btn_save, _ = make_refresh_button('upload', lambda m=model_name: self._on_save_gcs_click(m), description='Salvar no GCS', width='160px')
+                        btn_save.button_style = 'primary'
                         btn_secondary = widgets.Button(description='Dispensar', button_style='warning', layout=L(width='120px', height='28px', font_size='12px'))
                         btn_secondary.on_click(lambda _, m=model_name: self._on_dismiss_click(m))
+                        hbox_actions = widgets.HBox([save_box, btn_secondary, btn_del_model], layout=L(align_items='center', gap='6px', margin='0 0 6px 28px'))
                     else:
                         remaining = total_count - saved_count
                         if remaining > 0:
-                            btn_save = widgets.Button(description=f'Salvar ({remaining})', button_style='primary', layout=L(width='160px', height='28px', font_size='12px'))
+                            save_box, btn_save, _ = make_refresh_button('upload', lambda m=model_name: self._on_save_gcs_click(m), description=f'Salvar ({remaining})', width='160px')
+                            btn_save.button_style = 'primary'
                         else:
-                            btn_save = widgets.Button(description='Salvo ✓ no GCS', button_style='success', layout=L(width='160px', height='28px', font_size='12px'), disabled=True)
-                        btn_save.on_click(lambda _, m=model_name: self._on_save_gcs_click(m))
-                        btn_secondary = widgets.Button(description='Excluir do GCS', button_style='danger', layout=L(width='130px', height='28px', font_size='12px'))
-                        btn_secondary.on_click(lambda _, m=model_name: self._on_delete_gcs_click(m))
-                    btn_del_model = widgets.Button(description=Lang.DELETE_MODEL, button_style='danger', layout=L(width='140px', height='28px', font_size='12px'))
-                    hbox_actions = widgets.HBox([btn_save, btn_secondary, btn_del_model], layout=L(align_items='center', gap='6px', margin='0 0 6px 28px'))
+                            btn_save = widgets.Button(description='Salvo no GCS', button_style='success', layout=L(width='160px', height='28px', font_size='12px'), disabled=True)
+                            save_box = btn_save
+                        del_box, btn_secondary, _ = make_refresh_button('trash', lambda m=model_name: self._on_delete_gcs_click(m), description='Excluir do GCS', width='130px')
+                        btn_secondary.button_style = 'danger'
+                        hbox_actions = widgets.HBox([save_box, del_box, btn_del_model], layout=L(align_items='center', gap='6px', margin='0 0 6px 28px'))
                     btn_del_model.on_click(lambda b, m=model_name, c=hbox_actions: inline_confirm(b, lambda: (self._delete_model_all(m), self._refresh_ui()), container=c))
 
                     tarefas_assinadas = sorted(set(j.get('task_name', '') for j in jobs_list if j.get('task_name', '')))
@@ -1114,7 +1114,7 @@ class M5WorkplanUI:
     def _render_mapa(self):
         self.plan = load_workplan()
         campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
-        filter_box = widgets.HBox([self.f_mapa_model, self.f_mapa_region, self.f_mapa_year, self.btn_mapa_refresh], layout=L(margin='0 0 15px 0'))
+        filter_box = widgets.HBox([self.f_mapa_model, self.f_mapa_region, self.f_mapa_year, self.btn_mapa_refresh_container], layout=L(margin='0 0 15px 0'))
 
         try:
             import ee
@@ -1345,7 +1345,7 @@ class M5WorkplanUI:
         form = widgets.VBox([
             self.w_model_box, self.w_region_box, self.w_period_box,
             widgets.VBox([self.w_campaign, self.w_task_name], layout=L(margin='15px 0 5px 0')),
-            widgets.HBox([self.btn_add], layout=L(margin='5px 0 10px 0', align_items='center')),
+            widgets.HBox([self.btn_add_container], layout=L(margin='5px 0 10px 0', align_items='center')),
             self.out_msg
         ], layout=L(padding='20px'))
 
@@ -1360,7 +1360,7 @@ class M5WorkplanUI:
 
         header_actions = widgets.HBox([
             widgets.HTML("<b style='color:#2c3e50; font-size:14px; margin-right:15px;'>Acciones Globales:</b>"),
-            self.btn_refresh
+            self.btn_refresh_container
         ], layout=L(margin='0 0 15px 0', align_items='center', padding='10px', border='1px solid #e0e0e0', background_color='#fcfcfc', border_radius='5px'))
 
         display(widgets.VBox([header_actions, self.tabs]))

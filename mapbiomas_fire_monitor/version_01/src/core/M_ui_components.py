@@ -276,23 +276,62 @@ def flash_output(output_widget, content, as_html=True):
 # ---------------------------------------------------------------------------
 # make_sync_button — botao com estado "Sincronizando..." + disable
 # ---------------------------------------------------------------------------
-def make_sync_button(description, icon, on_click_callback, width='220px', height='30px', button_style='success'):
-    """Retorna (btn, output) onde btn desabilita durante callback."""
+def make_sync_button(description, icon, on_click_callback, width='220px', height='30px', button_style='success', ui=None):
+    """Retorna (btn, output) onde btn desabilita durante callback.
+    
+    Se ui for um PipelineStepUI, chama ui.show_loader() antes e ui.hide_loader() depois.
+    """
     btn = widgets.Button(description=description, icon=icon, button_style=button_style,
                          layout=Layout(width=width, height=height))
     out = widgets.Output()
 
     def _handler(b):
+        if ui:
+            ui.show_loader(L.SYNCING)
         btn.description = L.SYNCING
         btn.disabled = True
-        with out:
-            clear_output()
-            on_click_callback()
-        btn.description = description
-        btn.disabled = False
+        try:
+            with out:
+                clear_output()
+                on_click_callback()
+        finally:
+            btn.description = description
+            btn.disabled = False
+            if ui:
+                ui.hide_loader()
 
     btn.on_click(_handler)
     return btn, out
+
+
+# ---------------------------------------------------------------------------
+# make_refresh_button — botao icone com spinner inline, nao precisa de PipelineStepUI
+# ---------------------------------------------------------------------------
+def make_refresh_button(icon, on_click_callback, description='', tooltip='', width='32px', button_style='info'):
+    """Retorna (container_hbox, btn, spinner).
+
+    O spinner aparece ao lado do botao durante a execucao do callback.
+    Usar 'container' no lugar do btn no layout, e 'btn' se precisar referenciar o botao.
+
+    description: texto do botao (opcional, para botoes maiores com label).
+    """
+    btn = widgets.Button(description=description, icon=icon, layout=Layout(width=width),
+                         button_style=button_style, tooltip=tooltip)
+    spinner = make_spinner()
+    spinner.layout.display = 'none'
+    container = widgets.HBox([btn, spinner], layout=Layout(align_items='center'))
+
+    def _handler(b):
+        btn.disabled = True
+        spinner.layout.display = 'block'
+        try:
+            on_click_callback()
+        finally:
+            spinner.layout.display = 'none'
+            btn.disabled = False
+
+    btn.on_click(_handler)
+    return container, btn, spinner
 
 
 # ---------------------------------------------------------------------------

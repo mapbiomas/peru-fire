@@ -9,7 +9,7 @@ from M0_auth_config import CONFIG, _get_fs
 from M5_workplan import gcs_full, consolidated_stats_path, region_path
 from M6_publisher import discover_classified_groups, gee_asset_exists, stats_row_exists, load_gee_assets, load_stats_done
 from M_cache import CacheManager
-from M_ui_components import make_empty_state, flash_output, make_select_all_none
+from M_ui_components import make_empty_state, flash_output, make_select_all_none, make_refresh_button
 from M_lang import L as Lang
 
 L = widgets.Layout
@@ -40,8 +40,7 @@ class M6WorkplanUI:
         self.tab_analytics = widgets.VBox()
         self.tab_coverage = widgets.VBox()
 
-        self.btn_refresh = widgets.Button(description=Lang.REFRESH_M6, icon='refresh', layout=L(width='150px'))
-        self.btn_refresh.on_click(lambda _: self._refresh_all(force=True))
+        self.btn_refresh_container, self.btn_refresh, _ = make_refresh_button('refresh', lambda: self._refresh_all(force=True), description=Lang.REFRESH_M6, width='150px')
 
         self._build_guide()
 
@@ -353,7 +352,7 @@ class M6WorkplanUI:
 
         header = widgets.HBox([
             widgets.HTML("<b style='color:#2c3e50; font-size:14px;'>M6 - Mosaic, Stats & Publication</b>"),
-            self.btn_refresh
+            self.btn_refresh_container
         ], layout=L(margin='0 0 15px 0', align_items='center', padding='10px',
                     border='1px solid #e0e0e0', background='#fcfcfc'))
 

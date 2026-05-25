@@ -66,20 +66,20 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
             ax.matshow(cm_norm, cmap='Blues', alpha=0.8, vmin=0, vmax=1)
             for (i, j), z in np.ndenumerate(cm):
                 ax.text(j, i, f"{z:,}\n({cm_norm[i,j]:.1%})", ha='center', va='center', weight='bold', color='black' if cm_norm[i,j] < 0.5 else 'white')
-            ax.set_title('Matriz de Confusión (%)', pad=15, weight='bold')
+            ax.set_title(Lang.CONFUSION_MATRIX, pad=15, weight='bold')
             ax.set_xticks([0, 1]); ax.set_yticks([0, 1])
-            ax.set_xticklabels(['No-fuego', 'Fuego']); ax.set_yticklabels(['No-fuego', 'Fuego'])
+            ax.set_xticklabels([Lang.NO_FIRE, Lang.FIRE]); ax.set_yticklabels([Lang.NO_FIRE, Lang.FIRE])
 
         elif ptype == 'history':
             if history and 'steps' in history and len(history['steps']) > 0:
                 ax = fig.add_subplot(rows, cols, idx + 1)
                 ax.plot(history['steps'], history['acc'], color='#28a745', label='Acc', linewidth=2)
                 if 'val_acc' in history: ax.plot(history['steps'], history['val_acc'], color='#28a745', label='Val', linestyle='--', alpha=0.6)
-                ax.set_ylabel('Acurácia', color='#28a745', weight='bold')
+                ax.set_ylabel(Lang.ACCURACY, color='#28a745', weight='bold')
                 axb = ax.twinx()
                 axb.plot(history['steps'], history['loss'], color='#dc3545', label='Loss', linewidth=1.5, alpha=0.7)
-                axb.set_ylabel('Custo (Loss)', color='#dc3545', weight='bold')
-                ax.set_title('Evolución Histórica', weight='bold')
+                axb.set_ylabel(Lang.COST_LOSS, color='#dc3545', weight='bold')
+                ax.set_title(Lang.HISTORICAL_EVOLUTION, weight='bold')
                 ax.grid(True, linestyle='--', alpha=0.3)
 
         elif ptype == 'pca2d':
@@ -91,16 +91,16 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
             if coords2 is not None:
                 ax = fig.add_subplot(rows, cols, idx + 1)
                 ax.scatter(coords2[:, 0], coords2[:, 1], c=preds_f, cmap='RdYlBu_r', s=25, alpha=0.7, edgecolors='white', linewidth=0.3, vmin=0, vmax=1)
-                ax.set_title('Proyección Latente 2D', weight='bold', fontsize=10)
+                ax.set_title(Lang.LATENT_PROJ_2D, weight='bold', fontsize=10)
                 ax.set_xticks([]); ax.set_yticks([])
 
         elif ptype == 'prob':
             ax = fig.add_subplot(rows, cols, idx + 1)
             if len(preds_f) > 0 and len(y_true_f) > 0:
-                ax.hist(preds_f[y_true_f==0], bins=30, alpha=0.5, color='#007bff', label='No-Fuego', density=True)
-                ax.hist(preds_f[y_true_f==1], bins=30, alpha=0.5, color='#ff4d4d', label='Fuego', density=True)
-            ax.set_title('Distribución de Probabilidades', weight='bold', fontsize=10)
-            ax.set_xlabel('Confianza'); ax.legend(fontsize=8); ax.grid(True, alpha=0.2)
+                ax.hist(preds_f[y_true_f==0], bins=30, alpha=0.5, color='#007bff', label=Lang.NO_FIRE, density=True)
+                ax.hist(preds_f[y_true_f==1], bins=30, alpha=0.5, color='#ff4d4d', label=Lang.FIRE, density=True)
+            ax.set_title(Lang.PROB_DISTRIBUTION, weight='bold', fontsize=10)
+            ax.set_xlabel(Lang.CONFIDENCE); ax.legend(fontsize=8); ax.grid(True, alpha=0.2)
 
         elif ptype == 'pr':
             try:
@@ -109,8 +109,8 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
                 ax = fig.add_subplot(rows, cols, idx + 1)
                 ax.plot(recall, precision, color='#17a2b8', linewidth=2, label=f'AP={ap_score:.3f}')
                 ax.fill_between(recall, precision, alpha=0.2, color='#17a2b8')
-                ax.set_title('Curva Precision-Recall', weight='bold', fontsize=10)
-                ax.set_xlabel('Recall'); ax.legend(loc='lower left', fontsize=8); ax.grid(True, alpha=0.3)
+                ax.set_title(Lang.VIZ_PR_CURVE, weight='bold', fontsize=10)
+                ax.set_xlabel(Lang.RECALL); ax.legend(loc='lower left', fontsize=8); ax.grid(True, alpha=0.3)
             except Exception: pass
         elif '3d_static' in ptype:
             from mpl_toolkits.mplot3d import Axes3D
@@ -129,8 +129,8 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
                 ax = fig.add_subplot(rows, cols, idx + 1, projection='3d')
                 ax.scatter(coords3[:, 0], coords3[:, 1], coords3[:, 2], c=preds_f, cmap='RdYlBu_r', s=10, alpha=0.6)
                 ax.view_init(elev=elev, azim=azim)
-                t = "PCA 3D" if is_pca else "t-SNE 3D"
-                ax.set_title(f"{t} (Ang {azim}°)", fontsize=9, weight='bold')
+                t = Lang.PCA_3D if is_pca else Lang.TSNE_3D
+                ax.set_title(f"{t} (Ang {azim}deg)", fontsize=9, weight='bold')
                 ax.set_xticks([]); ax.set_yticks([]); ax.set_zticks([])
 
     fig.tight_layout()
@@ -160,9 +160,9 @@ def render_model_card_html(hp, metrics, only_header=False):
     </style>
     """
     if only_header:
-        return f"{style}<div class='dash-card-header'>Ficha del modelo: {hp.get('training_id')} / {hp.get('shortname')}</div>"
+        return f"{style}<div class='dash-card-header'>{Lang.MODEL}: {hp.get('training_id')} / {hp.get('shortname')}</div>"
 
-    date_str = hp.get('training_date', 'Entrenando...')
+    date_str = hp.get('training_date', Lang.TRAINING_IN_PROGRESS)
     if date_str and 'T' in date_str: date_str = date_str[:16].replace('T', ' ')
 
     rep = metrics.get('classification_report', {}) if metrics else {}
@@ -189,15 +189,15 @@ def render_model_card_html(hp, metrics, only_header=False):
     <div class="dash-card-body">
         <div style="display: flex; flex-wrap: wrap; gap: 15px;">
             <div style="flex: 2; min-width: 300px;">
-                <p class="meta-text"><span class="meta-label">Data:</span> {date_str}</p>
-                <p class="meta-text"><span class="meta-label">Sensor:</span> {sensor}</p>
-                <p class="meta-text"><span class="meta-label">Camadas:</span> {layers} | <b>LR:</b> {lr}</p>
-                <p class="meta-text"><span class="meta-label">Iterações:</span> {n_iters} | <b>Batch:</b> {batch}</p>
-                <p class="meta-text"><span class="meta-label">Acurácia:</span> {acc} | <b>F1:</b> {f1}</p>
-                <p class="meta-text"><span class="meta-label">Muestras:</span> {', '.join(hp.get('sample_collections', []))}</p>
+                <p class="meta-text"><span class="meta-label">{Lang.DATE}:</span> {date_str}</p>
+                <p class="meta-text"><span class="meta-label">{Lang.SENSOR}:</span> {sensor}</p>
+                <p class="meta-text"><span class="meta-label">{Lang.LAYERS_LABEL}</span> {layers} | <b>{Lang.LR_ABBR}</b> {lr}</p>
+                <p class="meta-text"><span class="meta-label">{Lang.ITERATIONS}:</span> {n_iters} | <b>{Lang.BATCH_SIZE}:</b> {batch}</p>
+                <p class="meta-text"><span class="meta-label">{Lang.ACCURACY}:</span> {acc} | <b>{Lang.F1_SCORE}:</b> {f1}</p>
+                <p class="meta-text"><span class="meta-label">{Lang.SAMPLES_LABEL}</span> {', '.join(hp.get('sample_collections', []))}</p>
                 <div style="margin-top:8px; padding:8px; background:#fff3cd; border-radius:4px; border:1px solid #ffeeba;">
-                    <p class="meta-text" style="color:#856404; font-weight:bold; margin-bottom:3px;">Comentario:</p>
-                    <p class="meta-text" style="color:#856404; font-style:italic;">{hp.get('comment', 'Sin comentarios.')}</p>
+                    <p class="meta-text" style="color:#856404; font-weight:bold; margin-bottom:3px;">{Lang.COMMENTS}:</p>
+                    <p class="meta-text" style="color:#856404; font-style:italic;">{hp.get('comment', Lang.NO_COMMENTS)}</p>
                 </div>
             </div>
         </div>
@@ -206,12 +206,12 @@ def render_model_card_html(hp, metrics, only_header=False):
             var btn = this;
             if (el.style.display === 'none' || el.style.display === '') {{
                 el.style.display = 'block';
-                btn.innerText = '▲ Ocultar parámetros avanzados';
+                btn.innerText = '{Lang.HIDE_ADVANCED}';
             }} else {{
                 el.style.display = 'none';
-                btn.innerText = '▼ Mostrar todos los parámetros';
+                btn.innerText = '{Lang.SHOW_ALL_PARAMS}';
             }}
-        ">▼ Mostrar todos los parámetros</a>
+        ">{Lang.SHOW_ALL_PARAMS}</a>
     </div>
     <div id="advanced_params_{_uid}" class="dash-card-advanced" style="display:none;">
         <table style="width:100%; border-collapse:collapse;">{param_rows}</table>
@@ -290,11 +290,11 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                 </div>
                 """)
 
-            kpi_acc = make_kpi_card("Accuracy", f"{rep.get('accuracy', 0):.1%}", "#2c3e50", icon="crosshairs")
-            kpi_prec = make_kpi_card("Precision", f"{rep.get('1', {}).get('precision', 0):.1%}", "#8e44ad", icon="bullseye")
-            kpi_rec = make_kpi_card("Recall", f"{rep.get('1', {}).get('recall', 0):.1%}", "#e67e22", icon="search-plus")
-            kpi_f1 = make_kpi_card("F1-Score", f"{rep.get('1', {}).get('f1-score', 0):.1%}", "#16a085", icon="balance-scale")
-            kpi_auto = make_kpi_card("Nota IA", f"{a_rating}/5", "#34495e", icon="flash")
+            kpi_acc = make_kpi_card(Lang.ACCURACY, f"{rep.get('accuracy', 0):.1%}", "#2c3e50", icon="crosshairs")
+            kpi_prec = make_kpi_card(Lang.PRECISION, f"{rep.get('1', {}).get('precision', 0):.1%}", "#8e44ad", icon="bullseye")
+            kpi_rec = make_kpi_card(Lang.RECALL, f"{rep.get('1', {}).get('recall', 0):.1%}", "#e67e22", icon="search-plus")
+            kpi_f1 = make_kpi_card(Lang.F1_SCORE, f"{rep.get('1', {}).get('f1-score', 0):.1%}", "#16a085", icon="balance-scale")
+            kpi_auto = make_kpi_card(Lang.AI_NOTE, f"{a_rating}/5", "#34495e", icon="flash")
 
             # Nota Humana Interativa no KPI
             user_stars_container = widgets.HBox([], layout=widgets.Layout(margin='0', align_items='center'))
@@ -320,7 +320,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
 
             _show_stars()
             kpi_human_box = widgets.VBox([
-                widgets.HTML("<div style='font-size: 10px; color: #7f8c8d; text-transform: uppercase; font-weight: bold; margin-bottom: 2px;'>Nota Humana</div>"),
+                widgets.HTML(f"<div style='font-size: 10px; color: #7f8c8d; text-transform: uppercase; font-weight: bold; margin-bottom: 2px;'>{Lang.HUMAN_NOTE}</div>"),
                 user_stars_container
             ], layout=widgets.Layout(background='white', padding='10px', border_left='5px solid #f1c40f', border_radius='4px', box_shadow='0 2px 4px rgba(0,0,0,0.08)', flex='1.5'))
 
@@ -339,28 +339,23 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
 
             # --- CICLO DE VIDA (GESTÃO OPCIONAL) ---
             if viz_config.get('management'):
-                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'> Gestión del Ciclo de Vida</h4>"))
-                def _set_intent(mode):
-                    def __h(_):
-                        if ui:
-                            ui.retrain_intent = {'mode': mode, 'hp': hp}
-                            ui._load_config_into_widgets(hp)
-                            ui.tab.selected_index = 1 # Novo Treino
-                    return __h
+                display(HTML(f"<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'> {Lang.VIZ_MANAGEMENT}</h4>"))
 
-                btn_retr = widgets.Button(description="Retreinar", icon="refresh", layout=widgets.Layout(width='120px'), button_style='info')
-                btn_reex = widgets.Button(description="Re-extraer", icon="database", layout=widgets.Layout(width='120px'), button_style='info')
-                btn_borr = widgets.Button(description="Limpiar&Ret", icon="trash", layout=widgets.Layout(width='130px'), button_style='danger')
-                btn_retr.on_click(_set_intent('retrain')); btn_reex.on_click(_set_intent('re-extract')); btn_borr.on_click(_set_intent('borrar'))
+                btn_retrain = widgets.Button(description=Lang.RETRAIN, icon="refresh", layout=widgets.Layout(width='120px'), button_style='danger')
+                def _on_retrain(_):
+                    if ui:
+                        ui.retrain_intent = {'mode': 'borrar', 'hp': hp}
+                        ui._load_config_into_widgets(hp)
+                        ui.tab.selected_index = 1
+                btn_retrain.on_click(_on_retrain)
 
-                # Botão de Deletar com Countdown
                 del_out = widgets.Output()
                 def _show_del_btn():
                     del_out.clear_output()
-                    btn_del = widgets.Button(description="Deletar Modelo", icon="trash", layout=widgets.Layout(width='140px'), button_style='danger')
+                    btn_del = widgets.Button(description=Lang.DELETE_MODEL, icon="trash", layout=widgets.Layout(width='140px'), button_style='danger')
                     def _on_del_click(_):
                         import threading
-                        btn_conf = widgets.Button(description="Confirmar!", button_style='warning', layout=widgets.Layout(width='100px'))
+                        btn_conf = widgets.Button(description=Lang.CONFIRM, button_style='warning', layout=widgets.Layout(width='100px'))
                         btn_canc = widgets.Button(description="X", button_style='info', layout=widgets.Layout(width='30px'))
                         msg = widgets.HTML("<span style='color:red; font-size:10px; margin-left:5px;'>5s</span>")
                         del_out.clear_output()
@@ -369,7 +364,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                         def _do_conf(_):
                             stop[0] = True
                             del_out.clear_output()
-                            with del_out: display(widgets.HTML("<i>Borrando...</i>"))
+                            with del_out: display(widgets.HTML(f"<i>{Lang.DELETING}</i>"))
                             ModelTrainer.delete_model(hp['training_id'], hp['shortname'])
                             if ui: 
                                 ui.selected_models.pop(hp['training_id'], None)
@@ -385,14 +380,14 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                     with del_out: display(btn_del)
                 _show_del_btn()
 
-                display(widgets.HBox([btn_retr, btn_reex, btn_borr, widgets.HTML("<div style='width:20px'></div>"), del_out], 
+                display(widgets.HBox([btn_retrain, widgets.HTML("<div style='width:20px'></div>"), del_out], 
                                     layout=widgets.Layout(margin='5px 0 15px 0', align_items='center')))
 
             # --- GRUPOS DE GRÁFICOS ---
             # 1. MÉTRICAS CLÁSSICAS (Incluindo Estáticas 3D)
             classic_keys = ['cm', 'history', 'prob', 'pr', 'pca3d_static', 'tsne3d_static']
             if any(viz_config.get(k) for k in classic_keys):
-                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px;'> Métricas Clásicas y Proyecciones Estáticas</h4>"))
+                display(HTML(f"<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px;'> {Lang.CLASSIC_METRICS}</h4>"))
                 
                 # Trunca o histórico caso o slider de tempo esteja ativado
                 history_data = hp.get('history', {})
@@ -408,7 +403,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
             # 2. ESPAÇO LATENTE (INTERATIVO SIDE-BY-SIDE)
             latent_keys = ['pca3d', 'tsne3d']
             if any(viz_config.get(k) for k in latent_keys):
-                display(HTML("<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'> Espacio Latente Interactivo</h4>"))
+                display(HTML(f"<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'> {Lang.INTERACTIVE_LATENT}</h4>"))
                 import plotly.graph_objects as go
                 fire_colorscale = [[0, '#2c3e50'], [0.5, '#bdc3c7'], [1, '#e67e22']]
                 
@@ -420,18 +415,18 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                     fig_pca = go.Figure(data=[go.Scatter3d(
                         x=pca_coords_final[:,0], y=pca_coords_final[:,1], z=pca_coords_final[:,2], mode='markers',
                         marker=dict(size=3, color=preds_final, colorscale=fire_colorscale, opacity=0.7),
-                        text=[f"Real: {l}<br>Pred: {p:.2%}" for l, p in zip(y_true_final, preds_final)]
+                        text=[f"{l}<br>Pred: {p:.2%}" for l, p in zip(y_true_final, preds_final)]
                     )])
-                    fig_pca.update_layout(title="PCA 3D Interactive", margin=dict(l=0, r=0, b=0, t=30), height=400)
+                    fig_pca.update_layout(title=Lang.PCA_3D_INTERACTIVE, margin=dict(l=0, r=0, b=0, t=30), height=400)
                     with out_pca: display(HTML(fig_pca.to_html(include_plotlyjs=True, full_html=False)))
 
                 if viz_config.get('tsne3d') and tsne_coords_final is not None and len(tsne_coords_final) > 0:
                     fig_tsne = go.Figure(data=[go.Scatter3d(
                         x=tsne_coords_final[:,0], y=tsne_coords_final[:,1], z=tsne_coords_final[:,2], mode='markers',
                         marker=dict(size=3, color=preds_final, colorscale=fire_colorscale, opacity=0.7),
-                        text=[f"Real: {l}<br>Pred: {p:.2%}" for l, p in zip(y_true_final, preds_final)]
+                        text=[f"{l}<br>Pred: {p:.2%}" for l, p in zip(y_true_final, preds_final)]
                     )])
-                    fig_tsne.update_layout(title="t-SNE 3D Interactive", margin=dict(l=0, r=0, b=0, t=30), height=400)
+                    fig_tsne.update_layout(title=Lang.TSNE_3D_INTERACTIVE, margin=dict(l=0, r=0, b=0, t=30), height=400)
                     with out_tsne: display(HTML(fig_tsne.to_html(include_plotlyjs=True, full_html=False)))
 
             # --- TENSORBOARD PROJECTOR ---

@@ -458,6 +458,58 @@ class L:
     M3_EDITOR = "Direct access (GEE Editor)"
     M3_DOCS = "Documentation and usage guidelines"
 
+    # ── M4 - Analytics / KPIs ──────────────────────────
+    ACCURACY = "Accuracy"
+    PRECISION = "Precision"
+    RECALL = "Recall"
+    F1_SCORE = "F1-Score"
+    AI_NOTE = "AI Note"
+    HUMAN_NOTE = "Human Note"
+    NO_METRICS = "No metrics"
+    CONFUSION_MATRIX = "Confusion Matrix (%)"
+    HISTORICAL_EVOLUTION = "Historical Evolution"
+    PROB_DISTRIBUTION = "Probability Distribution"
+    CONFIDENCE = "Confidence"
+    LATENT_PROJ_2D = "2D Latent Projection"
+    COST_LOSS = "Cost (Loss)"
+    CLASSIC_METRICS = "Classic Metrics and Static Projections"
+    INTERACTIVE_LATENT = "Interactive Latent Space"
+    PCA_3D = "PCA 3D"
+    TSNE_3D = "t-SNE 3D"
+    PCA_3D_INTERACTIVE = "PCA 3D Interactive"
+    TSNE_3D_INTERACTIVE = "t-SNE 3D Interactive"
+    RETRAIN = "Retrain"
+
+    # ── M4 - Fire class labels ────────────────────────
+    FIRE = "Fire"
+    NO_FIRE = "No-fire"
+    FIRE_CLASS = "Fire"
+    NO_FIRE_CLASS = "No-fire"
+
+    # ── M4 - UI Labels ────────────────────────────────
+    BASIC_STATS = "Basic Statistics"
+    PCA_LATENT = "PCA Latent Space"
+    TSNE_LATENT = "t-SNE Latent Space"
+    VIZ_OPTIONS = "Visualization Options"
+    HYPERPARAMS_SECTION = "Hyperparameters (DNN)"
+    LIVE_TRAINING = "Live Training"
+    TRAINING_IN_PROGRESS = "Training in progress..."
+    LIVE_TSNE_AUDIT = "Live t-SNE Audit (Latent Space)"
+    ADD_TO_CANVAS = "Add to Canvas"
+    REMOVE_FROM_CANVAS = "Remove from Canvas"
+    RELOAD_SAMPLES = "Reload samples list from GCS"
+
+    # ── M4 - Analytics card labels ────────────────────
+    LAYERS_LABEL = "Layers:"
+    LR_ABBR = "LR:"
+    SAMPLES_LABEL = "Samples:"
+    NO_COMMENTS = "No comments."
+    HIDE_ADVANCED = "Hide advanced parameters"
+    SHOW_ALL_PARAMS = "Show all parameters"
+    TSNE_AXIS_1 = "t-SNE 1"
+    TSNE_AXIS_2 = "t-SNE 2"
+    TSNE_AXIS_3 = "t-SNE 3"
+
 
 # ── Locale dictionaries ────────────────────────────────────
 
@@ -852,6 +904,54 @@ STRINGS_ES = {
     "M3_SOURCE": "Acceso al codigo fuente (GitHub)",
     "M3_EDITOR": "Acceso directo (Editor GEE)",
     "M3_DOCS": "Documentación y normas de uso",
+    # M4 - Analytics / KPIs
+    "ACCURACY": "Precisión",
+    "PRECISION": "Precisión",
+    "RECALL": "Exhaustividad",
+    "F1_SCORE": "F1-Score",
+    "AI_NOTE": "Nota IA",
+    "HUMAN_NOTE": "Nota Humana",
+    "NO_METRICS": "Sin métricas",
+    "CONFUSION_MATRIX": "Matriz de Confusión (%)",
+    "HISTORICAL_EVOLUTION": "Evolución Histórica",
+    "PROB_DISTRIBUTION": "Distribución de Probabilidades",
+    "CONFIDENCE": "Confianza",
+    "LATENT_PROJ_2D": "Proyección Latente 2D",
+    "COST_LOSS": "Costo (Loss)",
+    "CLASSIC_METRICS": "Métricas Clásicas y Proyecciones Estáticas",
+    "INTERACTIVE_LATENT": "Espacio Latente Interactivo",
+    "PCA_3D": "PCA 3D",
+    "TSNE_3D": "t-SNE 3D",
+    "PCA_3D_INTERACTIVE": "PCA 3D Interactivo",
+    "TSNE_3D_INTERACTIVE": "t-SNE 3D Interactivo",
+    "RETRAIN": "Reentrenar",
+    # M4 - Fire class labels
+    "FIRE": "Fuego",
+    "NO_FIRE": "No-fuego",
+    "FIRE_CLASS": "Fuego",
+    "NO_FIRE_CLASS": "No-fuego",
+    # M4 - UI Labels
+    "BASIC_STATS": "Estadísticas Básicas",
+    "PCA_LATENT": "Espacio Latente PCA",
+    "TSNE_LATENT": "Espacio Latente t-SNE",
+    "VIZ_OPTIONS": "Opciones de Visualización",
+    "HYPERPARAMS_SECTION": "Hiperparámetros (DNN)",
+    "LIVE_TRAINING": "Entrenamiento en Vivo",
+    "TRAINING_IN_PROGRESS": "Entrenamiento en curso...",
+    "LIVE_TSNE_AUDIT": "Auditoría t-SNE en Vivo (Espacio Latente)",
+    "ADD_TO_CANVAS": "Agregar al Canvas",
+    "REMOVE_FROM_CANVAS": "Retirar del Canvas",
+    "RELOAD_SAMPLES": "Recargar lista de muestras del GCS",
+    # M4 - Analytics card labels
+    "LAYERS_LABEL": "Capas:",
+    "LR_ABBR": "LR:",
+    "SAMPLES_LABEL": "Muestras:",
+    "NO_COMMENTS": "Sin comentarios.",
+    "HIDE_ADVANCED": "Ocultar parámetros avanzados",
+    "SHOW_ALL_PARAMS": "Mostrar todos los parámetros",
+    "TSNE_AXIS_1": "t-SNE 1",
+    "TSNE_AXIS_2": "t-SNE 2",
+    "TSNE_AXIS_3": "t-SNE 3",
 }
 
 STRINGS_PT = {
@@ -1245,6 +1345,54 @@ STRINGS_PT = {
     "M3_SOURCE": "Acesso ao código fonte (GitHub)",
     "M3_EDITOR": "Acesso direto (Editor GEE)",
     "M3_DOCS": "Documentação e normas de uso",
+    # M4 - Analytics / KPIs
+    "ACCURACY": "Acurácia",
+    "PRECISION": "Precisão",
+    "RECALL": "Recall",
+    "F1_SCORE": "F1-Score",
+    "AI_NOTE": "Nota IA",
+    "HUMAN_NOTE": "Nota Humana",
+    "NO_METRICS": "Sem métricas",
+    "CONFUSION_MATRIX": "Matriz de Confusão (%)",
+    "HISTORICAL_EVOLUTION": "Evolução Histórica",
+    "PROB_DISTRIBUTION": "Distribuição de Probabilidades",
+    "CONFIDENCE": "Confiança",
+    "LATENT_PROJ_2D": "Projeção Latente 2D",
+    "COST_LOSS": "Custo (Loss)",
+    "CLASSIC_METRICS": "Métricas Clássicas e Projeções Estáticas",
+    "INTERACTIVE_LATENT": "Espaço Latente Interativo",
+    "PCA_3D": "PCA 3D",
+    "TSNE_3D": "t-SNE 3D",
+    "PCA_3D_INTERACTIVE": "PCA 3D Interativo",
+    "TSNE_3D_INTERACTIVE": "t-SNE 3D Interativo",
+    "RETRAIN": "Retreinar",
+    # M4 - Fire class labels
+    "FIRE": "Fogo",
+    "NO_FIRE": "Não-fogo",
+    "FIRE_CLASS": "Fogo",
+    "NO_FIRE_CLASS": "Não-fogo",
+    # M4 - UI Labels
+    "BASIC_STATS": "Estatísticas Básicas",
+    "PCA_LATENT": "Espaço Latente PCA",
+    "TSNE_LATENT": "Espaço Latente t-SNE",
+    "VIZ_OPTIONS": "Opções de Visualização",
+    "HYPERPARAMS_SECTION": "Hiperparâmetros (DNN)",
+    "LIVE_TRAINING": "Treinamento ao Vivo",
+    "TRAINING_IN_PROGRESS": "Treinamento em andamento...",
+    "LIVE_TSNE_AUDIT": "Auditoria t-SNE ao Vivo (Espaço Latente)",
+    "ADD_TO_CANVAS": "Adicionar ao Canvas",
+    "REMOVE_FROM_CANVAS": "Remover do Canvas",
+    "RELOAD_SAMPLES": "Recarregar lista de amostras do GCS",
+    # M4 - Analytics card labels
+    "LAYERS_LABEL": "Camadas:",
+    "LR_ABBR": "LR:",
+    "SAMPLES_LABEL": "Amostras:",
+    "NO_COMMENTS": "Sem comentários.",
+    "HIDE_ADVANCED": "Ocultar parâmetros avançados",
+    "SHOW_ALL_PARAMS": "Mostrar todos os parâmetros",
+    "TSNE_AXIS_1": "t-SNE 1",
+    "TSNE_AXIS_2": "t-SNE 2",
+    "TSNE_AXIS_3": "t-SNE 3",
 }
 
 STRINGS_FR = {
@@ -1638,6 +1786,54 @@ STRINGS_FR = {
     "M3_SOURCE": "Code source (GitHub)",
     "M3_EDITOR": "Accès direct (Éditeur GEE)",
     "M3_DOCS": "Documentation et normes d'utilisation",
+    # M4 - Analytics / KPIs
+    "ACCURACY": "Précision",
+    "PRECISION": "Précision",
+    "RECALL": "Rappel",
+    "F1_SCORE": "F1-Score",
+    "AI_NOTE": "Note IA",
+    "HUMAN_NOTE": "Note Humaine",
+    "NO_METRICS": "Aucune métrique",
+    "CONFUSION_MATRIX": "Matrice de Confusion (%)",
+    "HISTORICAL_EVOLUTION": "Évolution Historique",
+    "PROB_DISTRIBUTION": "Distribution des Probabilités",
+    "CONFIDENCE": "Confiance",
+    "LATENT_PROJ_2D": "Projection Latente 2D",
+    "COST_LOSS": "Coût (Loss)",
+    "CLASSIC_METRICS": "Métriques Classiques et Projections Statiques",
+    "INTERACTIVE_LATENT": "Espace Latent Interactif",
+    "PCA_3D": "PCA 3D",
+    "TSNE_3D": "t-SNE 3D",
+    "PCA_3D_INTERACTIVE": "PCA 3D Interactif",
+    "TSNE_3D_INTERACTIVE": "t-SNE 3D Interactif",
+    "RETRAIN": "Réentraîner",
+    # M4 - Fire class labels
+    "FIRE": "Feu",
+    "NO_FIRE": "Non-feu",
+    "FIRE_CLASS": "Feu",
+    "NO_FIRE_CLASS": "Non-feu",
+    # M4 - UI Labels
+    "BASIC_STATS": "Statistiques de Base",
+    "PCA_LATENT": "Espace Latent PCA",
+    "TSNE_LATENT": "Espace Latent t-SNE",
+    "VIZ_OPTIONS": "Options de Visualisation",
+    "HYPERPARAMS_SECTION": "Hyperparamètres (DNN)",
+    "LIVE_TRAINING": "Entraînement en Direct",
+    "TRAINING_IN_PROGRESS": "Entraînement en cours...",
+    "LIVE_TSNE_AUDIT": "Audit t-SNE en Direct (Espace Latent)",
+    "ADD_TO_CANVAS": "Ajouter au Canvas",
+    "REMOVE_FROM_CANVAS": "Retirer du Canvas",
+    "RELOAD_SAMPLES": "Recharger la liste d'échantillons du GCS",
+    # M4 - Analytics card labels
+    "LAYERS_LABEL": "Couches:",
+    "LR_ABBR": "LR:",
+    "SAMPLES_LABEL": "Échantillons:",
+    "NO_COMMENTS": "Aucun commentaire.",
+    "HIDE_ADVANCED": "Masquer les paramètres avancés",
+    "SHOW_ALL_PARAMS": "Afficher tous les paramètres",
+    "TSNE_AXIS_1": "t-SNE 1",
+    "TSNE_AXIS_2": "t-SNE 2",
+    "TSNE_AXIS_3": "t-SNE 3",
 }
 
 STRINGS_ID = {
@@ -2031,6 +2227,54 @@ STRINGS_ID = {
     "M3_SOURCE": "Kode sumber (GitHub)",
     "M3_EDITOR": "Akses langsung (Editor GEE)",
     "M3_DOCS": "Dokumentasi dan panduan penggunaan",
+    # M4 - Analytics / KPIs
+    "ACCURACY": "Akurasi",
+    "PRECISION": "Presisi",
+    "RECALL": "Recall",
+    "F1_SCORE": "F1-Score",
+    "AI_NOTE": "Catatan AI",
+    "HUMAN_NOTE": "Catatan Manusia",
+    "NO_METRICS": "Tidak ada metrik",
+    "CONFUSION_MATRIX": "Matriks Kebingungan (%)",
+    "HISTORICAL_EVOLUTION": "Evolusi Historis",
+    "PROB_DISTRIBUTION": "Distribusi Probabilitas",
+    "CONFIDENCE": "Keyakinan",
+    "LATENT_PROJ_2D": "Proyeksi Laten 2D",
+    "COST_LOSS": "Biaya (Loss)",
+    "CLASSIC_METRICS": "Metrik Klasik dan Proyeksi Statis",
+    "INTERACTIVE_LATENT": "Ruang Laten Interaktif",
+    "PCA_3D": "PCA 3D",
+    "TSNE_3D": "t-SNE 3D",
+    "PCA_3D_INTERACTIVE": "PCA 3D Interaktif",
+    "TSNE_3D_INTERACTIVE": "t-SNE 3D Interaktif",
+    "RETRAIN": "Latih Ulang",
+    # M4 - Fire class labels
+    "FIRE": "Api",
+    "NO_FIRE": "Bukan-api",
+    "FIRE_CLASS": "Api",
+    "NO_FIRE_CLASS": "Bukan-api",
+    # M4 - UI Labels
+    "BASIC_STATS": "Statistik Dasar",
+    "PCA_LATENT": "Ruang Laten PCA",
+    "TSNE_LATENT": "Ruang Laten t-SNE",
+    "VIZ_OPTIONS": "Opsi Visualisasi",
+    "HYPERPARAMS_SECTION": "Hiperparameter (DNN)",
+    "LIVE_TRAINING": "Pelatihan Langsung",
+    "TRAINING_IN_PROGRESS": "Pelatihan berlangsung...",
+    "LIVE_TSNE_AUDIT": "Audit t-SNE Langsung (Ruang Laten)",
+    "ADD_TO_CANVAS": "Tambah ke Canvas",
+    "REMOVE_FROM_CANVAS": "Hapus dari Canvas",
+    "RELOAD_SAMPLES": "Muat ulang daftar sampel dari GCS",
+    # M4 - Analytics card labels
+    "LAYERS_LABEL": "Lapisan:",
+    "LR_ABBR": "LR:",
+    "SAMPLES_LABEL": "Sampel:",
+    "NO_COMMENTS": "Tidak ada komentar.",
+    "HIDE_ADVANCED": "Sembunyikan parameter lanjutan",
+    "SHOW_ALL_PARAMS": "Tampilkan semua parameter",
+    "TSNE_AXIS_1": "t-SNE 1",
+    "TSNE_AXIS_2": "t-SNE 2",
+    "TSNE_AXIS_3": "t-SNE 3",
 }
 
 SUPPORTED_LOCALES = {

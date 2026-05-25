@@ -5,7 +5,7 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import CacheManager, _get_fs
-from M_ui_components import PipelineStepUI, make_spinner, Layout, make_empty_state, make_sync_button, make_select_all_none, make_search_box
+from M_ui_components import PipelineStepUI, make_spinner, Layout, make_empty_state, make_sync_button, make_refresh_button, make_select_all_none, make_search_box
 from M_lang import L as Lang
 
 from M4_data_extractor import extract_pixels_from_gcs, list_sample_collections_gcs, list_campaigns_gcs
@@ -15,8 +15,8 @@ from M4_hub_manager import list_trained_models, _load_m4_metadata, _save_m4_meta
 class ModelTrainerUI(PipelineStepUI):
     def __init__(self):
         super().__init__(
-            title="M4 - Entrenador del Modelo (DNN)", 
-            description="Centro de Operaciones de Entrenamiento y Auditoría de Modelos."
+            title=f"M4 - {Lang.MODEL_TRAINER}", 
+            description=Lang.CANVAS_TITLE
         )
         self.trainer_instance = None
         self.chk_dict = {}
@@ -58,7 +58,7 @@ class ModelTrainerUI(PipelineStepUI):
         
         # --- WIDGETS DO CANVAS (CONTROLES GLOBAIS) ---
         self.w_global_slider = widgets.IntSlider(
-            value=0, min=0, max=10, description='Época:',
+            value=0, min=0, max=10, description=Lang.HP_EPOCHS,
             layout=widgets.Layout(width='98%', margin='5px 0 15px 0'),
             style={'description_width': 'initial'}
         )
@@ -136,7 +136,7 @@ class ModelTrainerUI(PipelineStepUI):
         self.w_canvas_search.observe(lambda c: self._on_canvas_search_change(c['new']), names='value')
         
         self.w_canvas_sort = widgets.Dropdown(
-            options=[('Acurácia', 'acc'), ('F1-Fire', 'f1'), ('ID', 'id')],
+            options=[(Lang.ACCURACY, 'acc'), (Lang.F1_SCORE, 'f1'), (Lang.ID, 'id')],
             value=self.canvas_sort_col,
             description=Lang.SORT_BY,
             layout=widgets.Layout(width='100%'),
@@ -147,7 +147,7 @@ class ModelTrainerUI(PipelineStepUI):
             self._refresh_canvas_hub()
         self.w_canvas_sort.observe(_on_sort_change, names='value')
 
-        btn_sync, _ = make_sync_button(Lang.REPO_SYNC, "refresh", lambda: self._sync_repository(show_loader=True, force_refresh=True), width='100%', button_style='primary')
+        btn_sync, _ = make_sync_button(Lang.REPO_SYNC, "refresh", lambda: self._sync_repository(show_loader=False, force_refresh=True), width='100%', button_style='primary', ui=self)
 
         btn_all_canvas = widgets.Button(description=Lang.ALL, icon="check-square", layout=widgets.Layout(width='48%'), button_style='info')
         btn_none_canvas = widgets.Button(description=Lang.CLEAR, icon="square-o", layout=widgets.Layout(width='48%'), button_style='warning')
@@ -194,64 +194,11 @@ class ModelTrainerUI(PipelineStepUI):
         # Agora o usuário clica em sincronizar ou os dados vêm do cache.
 
     def _build_guide_tab(self):
-        """Constrói uma interface de documentação interativa para o usuário."""
-        html = """
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #fdfdfd; color: #2c3e50; line-height: 1.6;">
-            <h1 style="color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px;">Guia de Uso de Operación: M4 Model Trainer</h1>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px;">
-                <!-- Seção 1: Fluxo de Trabalho -->
-                <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                    <h3 style="color: #3498db; margin-top:0;">Estructura de la Plataforma</h3>
-                    <ul style="padding-left: 20px; font-size:13px;">
-                        <li><b>Guia de Uso:</b> Esta pantalla de orientación y documentación.</li>
-                        <li><b>Novo Treino:</b> Configuración de nuevos experimentos, selección de muestras y bandas.</li>
-                        <li><b>Trenamientos:</b> Ranking histórico con métricas detalladas y gestión de modelos.</li>
-                        <li><b>Canvas:</b> Mesa de auditoría paralela para comparar múltiples modelos en profundidad.</li>
-                    </ul>
-                </div>
-
-                <!-- Seção 2: Conceptos Técnicos -->
-                <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                    <h3 style="color: #9b59b6; margin-top:0;">Conceptos Técnicos</h3>
-                    <ul style="padding-left: 20px; font-size:13px;">
-                        <li><b>TensorFlow:</b> Motor de IA de Google para cálculos matemáticos masivos.</li>
-                        <li><b>DNN (Deep Neural Network):</b> Red profunda que imita el aprendizaje humano.</li>
-                        <li><b>Neuronas:</b> Unidades que procesan señales y activan patrones de aprendizaje.</li>
-                    </ul>
-                </div>
-
-                <!-- Seção 3: Hiperparámetros -->
-                <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                    <h3 style="color: #e67e22; margin-top:0;">Hiperparámetros (DNN)</h3>
-                    <ul style="padding-left: 20px; font-size:13px;">
-                        <li><b>Layers:</b> Arquitectura de la red. Más capas captan detalles más finos.</li>
-                        <li><b>Learning Rate (LR):</b> Controla qué tan rápido se ajusta el modelo.</li>
-                        <li><b>Epochs:</b> Ciclos de entrenamiento completos sobre el set de muestras.</li>
-                        <li><b>Batch Size:</b> Bloques de datos procesados antes de cada actualización.</li>
-                    </ul>
-                </div>
-
-                <!-- Seção 4: Métricas de Calidad -->
-                <div style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                    <h3 style="color: #27ae60; margin-top:0;">Diccionario de Calidad</h3>
-                    <ul style="padding-left: 20px; font-size:13px;">
-                        <li><b>Accuracy:</b> Porcentaje total de aciertos globales.</li>
-                        <li><b>Precision:</b> Fidelidad: ¿Cuánto del fuego marcado es real? (Evita falsos).</li>
-                        <li><b>Recall:</b> Cobertura: ¿Cuánto del fuego real se encontró? (Evita omisiones).</li>
-                        <li><b>F1-Score:</b> Media armónica. El mejor balance entre Precision y Recall.</li>
-                        <li><b>Nota IA:</b> Auditoría automática que castiga severamente las omisiones.</li>
-                        <li><b>Nota Humana:</b> Evaluación subjetiva (1-5) sobre el Espacio Latente.</li>
-                    </ul>
-                </div>
-            </div>
-            
-            <div style="margin-top: 30px; padding: 15px; background: #e8f4fd; border-left: 5px solid #3498db; border-radius: 4px; font-size:14px;">
-                <b>[Dica] Pro-Tip del Auditor:</b> Use el <b>Canvas</b> para cargar un modelo antiguo (benchmark) y su modelo nuevo. Compare si la separación de clases en t-SNE 3D ha mejorado o si hay nuevas zonas de confusión.
-            </div>
-        </div>
-        """
-        return widgets.HTML(html)
+        return widgets.HTML(Lang.GUIDE_M4_HTML.format(
+            usage_guide=Lang.USAGE_GUIDE,
+            new_training=Lang.NEW_TRAINING,
+            trainings=Lang.TRAININGS
+        ))
 
     def _on_select_all_samples(self, _):
         """Seleciona apenas as amostras que estão visíveis pelo filtro."""
@@ -304,10 +251,12 @@ class ModelTrainerUI(PipelineStepUI):
             new_matrix = self._build_extraction_matrix()
             self.extraction_matrix_container.children = [new_matrix]
 
-    def _build_matrix_content(self):
+    def _build_matrix_content(self, force_gcs=False):
         """Constrói apenas a lista de linhas filtradas."""
         L = widgets.Layout
-        samples_available = list_sample_collections_gcs()
+        if force_gcs or not hasattr(self, '_cached_samples'):
+            self._cached_samples = list_sample_collections_gcs()
+        samples_available = self._cached_samples
         matrix_rows = []
         
         for s in samples_available:
@@ -327,7 +276,7 @@ class ModelTrainerUI(PipelineStepUI):
             matrix_rows.append(row)
             
         if not matrix_rows:
-            return make_empty_state('No se han encontrado resultados con este filtro.', padding='10px')
+            return make_empty_state(Lang.NO_SAMPLES, padding='10px')
             
         return widgets.VBox(matrix_rows)
 
@@ -361,20 +310,26 @@ class ModelTrainerUI(PipelineStepUI):
                 state['sample_collections'] = []
                 CacheManager._state = state
                 CacheManager.save()
-            # Refresh UI
-            self._refresh_samples_panes()
+            # Invalida cache local e refresh UI
+            if hasattr(self, '_cached_samples'):
+                del self._cached_samples
+            self._refresh_samples_panes(force_gcs=True)
             
         self.w_campaign.observe(_on_campaign_change, names='value')
 
         btn_all, btn_none, _ = make_select_all_none(self._on_select_all_samples, self._on_select_none_samples)
         
         self.txt_search_samples.layout.flex = '1'
+        reload_container, btn_reload_samples, _ = make_refresh_button(
+            'refresh', lambda: self._refresh_samples_panes(force_gcs=True),
+            tooltip=Lang.RELOAD_SAMPLES
+        )
         sample_toolbar = widgets.HBox([
-            widgets.HTML("<b style='margin-right:5px;'>Campanha:</b>"), 
+            widgets.HTML(f"<b style='margin-right:5px;'>{Lang.CAMPAIGN}:</b>"), 
             self.w_campaign, 
             widgets.HTML("<div style='width:10px'></div>"),
             self.txt_search_samples, 
-            btn_all, btn_none
+            reload_container, btn_all, btn_none
         ], layout=L(gap='4px', margin='0 0 5px 0', width='100%', align_items='center'))
 
         self.available_samples_container = widgets.VBox([], layout=L(
@@ -385,13 +340,13 @@ class ModelTrainerUI(PipelineStepUI):
         ))
 
         left_pane = widgets.VBox([
-            widgets.HTML("<b style='font-size:12px; color:#555;'> Muestras Disponibles</b>"),
+            widgets.HTML(f"<b style='font-size:12px; color:#555;'> {Lang.AVAILABLE}</b>"),
             sample_toolbar,
             self.available_samples_container
         ], layout=L(flex='1'))
 
         right_pane = widgets.VBox([
-            widgets.HTML("<b style='font-size:12px; color:#555;'>[OK] Muestras Seleccionadas</b>"),
+            widgets.HTML(f"<b style='font-size:12px; color:#555;'>[OK] {Lang.SELECTED}</b>"),
             widgets.HTML("<div style='height:42px;'></div>"), # Alinhador com a toolbar
             self.selected_samples_container
         ], layout=L(flex='1'))
@@ -402,9 +357,11 @@ class ModelTrainerUI(PipelineStepUI):
         
         return widgets.VBox([css, dual_pane])
 
-    def _refresh_samples_panes(self):
+    def _refresh_samples_panes(self, force_gcs=False):
         L = widgets.Layout
-        samples_available = list_sample_collections_gcs()
+        if force_gcs or not hasattr(self, '_cached_samples'):
+            self._cached_samples = list_sample_collections_gcs()
+        samples_available = self._cached_samples
         
         # Left Pane (Available)
         available_widgets = []
@@ -448,10 +405,10 @@ class ModelTrainerUI(PipelineStepUI):
             self._refresh_matrix_only()
             print(Lang.REPO_SCAN_DONE)
 
-        btn_sync, sync_out = make_sync_button(Lang.SYNC_CATALOG, "sync", _sync_body, width='220px', height='30px')
+        btn_sync, sync_out = make_sync_button(Lang.SYNC_CATALOG, "sync", _sync_body, width='220px', height='30px', ui=self)
         
         header = widgets.HBox([
-            widgets.HTML("<b style='font-size:14px; color:#2c3e50;'>2. Matriz de Extracción (Multisensor GCS)</b>"),
+            widgets.HTML(f"<b style='font-size:14px; color:#2c3e50;'>2. {Lang.EXTRACTION_TITLE}</b>"),
             widgets.HTML("<div style='width:20px;'></div>"),
             btn_sync,
             sync_out
@@ -513,7 +470,7 @@ class ModelTrainerUI(PipelineStepUI):
             }
 
         if not available_combos:
-            return make_empty_state('No se han encontrado COGs en el repositorio GCS.')
+            return make_empty_state(Lang.NO_COGS)
 
         self.band_chk_map = {} 
         matrix_rows = []
@@ -552,13 +509,13 @@ class ModelTrainerUI(PipelineStepUI):
 
     def _build_hp_section(self):
         L = widgets.Layout
-        self.w_iters = widgets.Text(value="7000", description='Iteraciones:', style={'description_width': '150px'}, layout=L(width='350px'))
-        self.w_batch = widgets.Text(value="1000", description='Tamaño de Lote:', style={'description_width': '150px'}, layout=L(width='350px'))
-        self.w_lr = widgets.Text(value="0.001", description='Tasa de Aprendizaje:', style={'description_width': '150px'}, layout=L(width='350px'))
-        self.w_layers = widgets.Text(value="7, 14, 7", description='Capas Ocultas:', style={'description_width': '150px'}, layout=L(width='350px'))
+        self.w_iters = widgets.Text(value="7000", description=Lang.ITERATIONS + ':', style={'description_width': '150px'}, layout=L(width='350px'))
+        self.w_batch = widgets.Text(value="1000", description=Lang.BATCH_SIZE + ':', style={'description_width': '150px'}, layout=L(width='350px'))
+        self.w_lr = widgets.Text(value="0.001", description=Lang.LEARNING_RATE + ':', style={'description_width': '150px'}, layout=L(width='350px'))
+        self.w_layers = widgets.Text(value="7, 14, 7", description=Lang.HIDDEN_LAYERS + ':', style={'description_width': '150px'}, layout=L(width='350px'))
         
         return widgets.VBox([
-            widgets.HTML("<b style='font-size:14px; color:#2c3e50;'> Hiperparámetros (DNN)</b>"),
+            widgets.HTML(f"<b style='font-size:14px; color:#2c3e50;'> {Lang.HYPERPARAMS_SECTION}</b>"),
             widgets.HBox([self.w_iters, self.w_batch], layout=L(gap='10px')),
             widgets.HBox([self.w_lr, self.w_layers], layout=L(gap='10px')),
         ], layout=L(padding='15px', border='1px solid #eee', border_radius='8px', margin='0 0 15px 0', flex='1'))
@@ -585,7 +542,7 @@ class ModelTrainerUI(PipelineStepUI):
         L = widgets.Layout
         next_id = self._suggest_next_id()
         self.w_training_id = widgets.Text(value=next_id, description=Lang.TRAINING_ID, style={'description_width': '120px'}, layout=L(width='300px'))
-        self.w_shortname = widgets.Text(value='peru_v1', description='Nome:', layout=L(width='200px'))
+        self.w_shortname = widgets.Text(value='peru_v1', description=Lang.SHORTNAME, layout=L(width='200px'))
         
         # Smart Naming Hook
         def _hook_smart_naming(change):
@@ -602,7 +559,7 @@ class ModelTrainerUI(PipelineStepUI):
         self.w_comment = widgets.Textarea(placeholder=Lang.COMMENTS, layout=L(width='98%', height='60px'))
         
         return widgets.VBox([
-            widgets.HTML("<b style='font-size:14px; color:#2c3e50;'>Destino de los Resultados</b>"),
+            widgets.HTML(f"<b style='font-size:14px; color:#2c3e50;'>{Lang.GCS_DEST}</b>"),
             widgets.HBox([self.w_training_id, self.w_shortname], layout=L(gap='15px')),
             self.w_comment,
         ], layout=L(padding='15px', border='1px solid #eee', border_radius='8px', margin='0 0 15px 0'))
@@ -615,7 +572,7 @@ class ModelTrainerUI(PipelineStepUI):
         return make_spinner(msg=msg)
 
     def _sync_repository(self, show_loader=False, force_refresh=False):
-        if show_loader: self.show_loader("Sincronizando Repositorio...")
+        if show_loader: self.show_loader(Lang.SYNCING)
         
         # list_trained_models e list_sample_collections_gcs agora respeitam o cache por padrão
         models = list_trained_models(force_refresh=force_refresh)
@@ -674,7 +631,7 @@ class ModelTrainerUI(PipelineStepUI):
             self._live_plots_out = widgets.Output()
             self.canvas_output.clear_output(wait=True)
             with self.canvas_output:
-                display(HTML("<h2 style='color:#2c3e50; border-bottom:3px solid #3498db; padding-bottom:5px; margin-bottom:15px;'>Entrenamiento en Vivo</h2>"))
+                display(HTML(f"<h2 style='color:#2c3e50; border-bottom:3px solid #3498db; padding-bottom:5px; margin-bottom:15px;'>{Lang.LIVE_TRAINING}</h2>"))
                 display(self._live_header_html)
                 display(self._live_plots_out)
             self._live_initialized = True
@@ -690,7 +647,7 @@ class ModelTrainerUI(PipelineStepUI):
             'sample_collections': samples, 'bands_input': sorted(b_cfg.keys()),
             'layers': self.w_layers.value, 'lr': self.w_lr.value,
             'sample_count': self.trainer_instance._sample_count, 'comment': self.w_comment.value,
-            'training_date': '[LIVE] Entrenamiento en curso...'
+            'training_date': Lang.TRAINING_IN_PROGRESS
         }
         
         if self.viz_config.get('title'): 
@@ -724,7 +681,7 @@ class ModelTrainerUI(PipelineStepUI):
             if self.selected_models:
                 display(HTML("<div style='margin:50px 0; border-top:3px solid #3498db;'></div>"))
                 for mid, info in self.selected_models.items():
-                    view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config)
+                    view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config, ui=self)
                     display(HTML("<div style='margin:40px 0; border-top:1px dashed #ccc;'></div>"))
 
     def _on_canvas_search_change(self, val):
@@ -800,12 +757,12 @@ class ModelTrainerUI(PipelineStepUI):
             is_selected = mid in self.selected_models
             
             # KPI string minimalista
-            kpi_str = f"Acc: {d['acc']:.1%} | F1: {d['f1']:.2f}" if d['acc'] > 0 else "Sin métricas"
+            kpi_str = f"Acc: {d['acc']:.1%} | F1: {d['f1']:.2f}" if d['acc'] > 0 else Lang.NO_METRICS
             
             # Botão de Ação
             btn = widgets.Button(
                 icon='plus' if not is_selected else 'times',
-                tooltip='Adicionar ao Canvas' if not is_selected else 'Remover do Canvas',
+                tooltip=Lang.ADD_TO_CANVAS if not is_selected else Lang.REMOVE_FROM_CANVAS,
                 layout=widgets.Layout(width='32px', height='32px', margin='0 5px 0 0'),
                 button_style='success' if not is_selected else 'danger'
             )
@@ -852,31 +809,29 @@ class ModelTrainerUI(PipelineStepUI):
 
     
     def _auto_generate_shortname(self, *_):
-        # Base format: [region]_[n]bands_[method]
-        # Example: peru_r1_4bands_minnbr
-        
         selected_samples = [name for name, chk in self.chk_dict.items() if chk.value]
         if not selected_samples:
             self.w_shortname.value = ""
             return
-            
-        first_sample = selected_samples[0]
-        region_part = first_sample.replace('_samples', '').replace('library_samples_', '')
-        if len(selected_samples) > 1:
-            region_part += f'_multi'
-            
+
+        if len(selected_samples) == 1:
+            first_sample = selected_samples[0]
+            region_part = first_sample.replace('_samples', '').replace('library_samples_', '')
+        else:
+            region_part = f"{len(selected_samples)}regions"
+
         methods = set()
         bands_count = 0
         for (s, m, p, b), chk in self.band_chk_map.items():
             if chk.value:
                 bands_count += 1
                 methods.add(m)
-                
+
         if bands_count == 0:
             return
-            
+
         method_part = list(methods)[0] if len(methods) == 1 else 'mixed'
-        
+
         new_name = f"{region_part}_{bands_count}bands_{method_part}"
         self.w_shortname.value = new_name
 
@@ -912,10 +867,10 @@ class ModelTrainerUI(PipelineStepUI):
                 widgets.HBox([chks[k] for k in keys], layout=L(flex_flow='row wrap'))
             ], layout=L(align_items='center', margin='2px 0'))
             
-        row1 = _make_row("Metadatos", ['title', 'scores'])
-        row2 = _make_row("Estatísticas Básicas", ['cm', 'history', 'prob', 'pr'])
-        row3 = _make_row("Espaço Latente PCA", ['pca2d', 'pca3d_static', 'pca3d'])
-        row4 = _make_row("Espaço Latente t-SNE", ['tsne3d_static', 'tsne3d'])
+        row1 = _make_row(Lang.VIZ_METADATA, ['title', 'scores'])
+        row2 = _make_row(Lang.BASIC_STATS, ['cm', 'history', 'prob', 'pr'])
+        row3 = _make_row(Lang.PCA_LATENT, ['pca2d', 'pca3d_static', 'pca3d'])
+        row4 = _make_row(Lang.TSNE_LATENT, ['tsne3d_static', 'tsne3d'])
         row5 = _make_row(Lang.VIZ_MANAGEMENT, ['management'])
         
         chk_container = widgets.VBox([row1, row2, row3, row4, row5])
@@ -929,7 +884,7 @@ class ModelTrainerUI(PipelineStepUI):
         btn_container = widgets.HBox([btn_all, btn_none, widgets.HTML("<div style='width:20px'></div>"), self.w_apply_btn], layout=L(margin='15px 0 0 0', align_items='center'))
         
         return widgets.VBox([
-            widgets.HTML("<h4 style='margin:0 0 10px 0; color:#34495e; border-bottom:1px solid #ddd; padding-bottom:5px;'>Opciones de Visualización</h4>"),
+            widgets.HTML(f"<h4 style='margin:0 0 10px 0; color:#34495e; border-bottom:1px solid #ddd; padding-bottom:5px;'>{Lang.VIZ_OPTIONS}</h4>"),
             chk_container,
             btn_container
         ], layout=L(margin='10px 0', padding='15px', background_color='#f8f9fa', border_radius='5px', border='1px solid #dee2e6'))
@@ -962,7 +917,7 @@ class ModelTrainerUI(PipelineStepUI):
                     border='1px solid #eee', padding='10px', border_radius='8px', background_color='#fff'
                 ))
                 with card_out:
-                    view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config, epoch_index=self.canvas_slider_val, hp_override=info.get('_hp_override'))
+                    view_analytics(info, out_widget=None, clear_before=False, viz_config=self.viz_config, epoch_index=self.canvas_slider_val, hp_override=info.get('_hp_override'), ui=self)
                 cards.append(card_out)
             
             # Grid responsivo: ocupa o espaço disponível, quebrando linhas conforme necessário
@@ -1069,7 +1024,7 @@ def start_training(ui):
         batch = int(ui.w_batch.value)
         lr = float(ui.w_lr.value)
     except ValueError as e:
-        print(f"Error: Valor inválido nos hiperparâmetros: {e}")
+        print(f"Error: Invalid hyperparameter value: {e}")
         return
     
     print(f"Extracting pixels from {len(selected_samples)} collections using Flexible Matrix ({len(bands_config)} bands). Please wait...")
@@ -1118,8 +1073,8 @@ def start_training(ui):
         import plotly.graph_objects as go
         from sklearn.manifold import TSNE
         try:
-            display(HTML("<h4 style='color:#2c3e50; margin-top:20px; font-weight:bold;'>[LIVE] Auditoría t-SNE (Espacio Latente Final)</h4>"))
-            display(HTML("<p style='font-size:11px; color:#666;'>Calculando proyección no-lineal para mejor visualización de clústeres...</p>"))
+            display(HTML(f"<h4 style='color:#2c3e50; margin-top:20px; font-weight:bold;'>{Lang.LIVE_TSNE_AUDIT}</h4>"))
+            display(HTML(f"<p style='font-size:11px; color:#666;'>{Lang.PROCESSING}</p>"))
             
             idx_v = np.random.choice(len(X_val), min(600, len(X_val)), replace=False)
             X_v_sub = X_val[idx_v]
@@ -1139,11 +1094,11 @@ def start_training(ui):
                 x=coords_tsne[:,0], y=coords_tsne[:,1], z=coords_tsne[:,2],
                 mode='markers',
                 marker=dict(size=4, color=prd_v.flatten(), colorscale='RdBu_r', opacity=0.8, showscale=True),
-                text=[f"Clase: {'Fuego' if l==1 else 'No-fuego'}<br>Pred: {p:.2%}" for l, p in zip(y_v_sub, prd_v.flatten())]
+                text=[f"{Lang.FIRE_CLASS if l==1 else Lang.NO_FIRE_CLASS}<br>Pred: {p:.2%}" for l, p in zip(y_v_sub, prd_v.flatten())]
             )])
             fig_tsne.update_layout(
                 margin=dict(l=0, r=0, b=0, t=30),
-                scene=dict(xaxis_title='t-SNE 1', yaxis_title='t-SNE 2', zaxis_title='t-SNE 3')
+                scene=dict(xaxis_title=Lang.TSNE_AXIS_1, yaxis_title=Lang.TSNE_AXIS_2, zaxis_title=Lang.TSNE_AXIS_3)
             )
             display(HTML(fig_tsne.to_html(include_plotlyjs=True, full_html=False)))
             print("[OK] t-SNE audit ready.")
