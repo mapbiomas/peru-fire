@@ -32,10 +32,13 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=
         fs = _get_fs()
 
     tiles_dir = gcs_full(classified_tiles_dir(model_id, campaign))
-    pattern = f"tile_{region}_"
+    match_prefix = f"tile_{region}_"
+    match_suffix = f"_{period}.tif"
     tile_paths = sorted([
         p for p in fs.glob(f"{tiles_dir}/*.tif")
-        if pattern in os.path.basename(p) and not p.endswith('.aux.xml')
+        if os.path.basename(p).startswith(match_prefix)
+        and os.path.basename(p).endswith(match_suffix)
+        and not p.endswith('.aux.xml')
     ])
 
     if not tile_paths:
@@ -291,10 +294,10 @@ def generate_region_thumbnail(region_name, size=64):
 
     bg = peru.style(**{'fillColor': 'f0f0f0', 'color': 'cccccc', 'width': 1})
     region_lines = all_regions.style(**{'color': '2980b9', 'width': 1, 'fillColor': '00000000'})
+    sel_fill = sel_region.style(**{'color': 'f39c12', 'width': 2, 'fillColor': 'f39c1260'})
     grid_lines = grid.style(**{'color': 'e0e0e0', 'width': 0.3, 'fillColor': '00000000'})
-    sel_fill = sel_region.style(**{'color': '2980b9', 'width': 1, 'fillColor': '2980b920'})
 
-    overlay = ee.ImageCollection([bg, grid_lines, region_lines, sel_fill]).mosaic()
+    overlay = ee.ImageCollection([bg, region_lines, sel_fill, grid_lines]).mosaic()
     bounds = peru.geometry().bounds(1, 'EPSG:4326')
     try:
         url = overlay.getThumbURL({'region': bounds, 'dimensions': size, 'format': 'png'})
@@ -304,13 +307,19 @@ def generate_region_thumbnail(region_name, size=64):
         return None
 
 
-def run_m6_publish(upload_gee=True, logger=None):
-    """Entry point M6: scan tiles, mosaic, stats, GEE upload."""
+def run_m6_publish(upload_gee=True, groups=None, logger=None):
+    """Entry point M6: mosaic, stats, GEE upload.
+    
+    groups: lista de (model_id, region, period, campaign). Se None, descobre todos.
+    """
     if logger is None:
         logger = print
 
     fs = _get_fs()
-    groups = discover_classified_groups(fs=fs, logger=logger)
+    if groups is None:
+        groups = discover_classified_groups(fs=fs, logger=logger)
+    else:
+        groups = list(groups)
 
     if not groups:
         logger("  No classified tiles found in GCS.")
