@@ -80,6 +80,9 @@ var L = (function () {
             opt_rgb_swir_alt: '[SWIR2/SWIR1/NIR]',
             cab_satellites: 'Satelite',
             cab_reference: 'Referencia',
+            short_guide: 'Guia',
+            short_import: 'Importar',
+            short_export: 'Exportar',
             loading: ''
         },
         pt: {
@@ -146,6 +149,9 @@ var L = (function () {
             opt_rgb_swir_alt: '[SWIR2/SWIR1/NIR]',
             cab_satellites: 'Satelite',
             cab_reference: 'Referencia',
+            short_guide: 'Guia',
+            short_import: 'Importar',
+            short_export: 'Exportar',
             loading: ''
         },
         en: {
@@ -212,6 +218,9 @@ var L = (function () {
             opt_rgb_swir_alt: '[SWIR2/SWIR1/NIR]',
             cab_satellites: 'Satellite',
             cab_reference: 'Reference',
+            short_guide: 'Guide',
+            short_import: 'Import',
+            short_export: 'Export',
             loading: ''
         }
     };
@@ -1107,10 +1116,10 @@ function user_interface() {
     var drawerExp = { panel: ui.Panel({ style: { shown: false, border: '1px solid #eee', margin: '2px' } }) };
 
     var drawerControl = createLayerDrawer('Dashboard', [
-        { id: 'inst', label: L.cab_instructions.split(' ')[1], value: false, onChange: function (v) { drawerInst.panel.style().set('shown', v); } },
-        { id: 'imp', label: L.tab_import.split(' ')[1], value: false, onChange: function (v) { drawerImp.panel.style().set('shown', v); } },
-        { id: 'amo', label: L.cab_samples.split(' ')[1], value: true, onChange: function (v) { drawerAmo.panel.style().set('shown', v); if (v) updateStats(); } },
-        { id: 'exp', label: L.tab_export.split(' ')[1], value: true, onChange: function (v) { drawerExp.panel.style().set('shown', v); if (v) { suggestNextVersion(); syncDateSelect(); } } }
+        { id: 'inst', label: L.short_guide, value: false, onChange: function (v) { drawerInst.panel.style().set('shown', v); } },
+        { id: 'imp', label: L.short_import, value: false, onChange: function (v) { drawerImp.panel.style().set('shown', v); } },
+        { id: 'amo', label: L.cab_samples, value: true, onChange: function (v) { drawerAmo.panel.style().set('shown', v); if (v) updateStats(); } },
+        { id: 'exp', label: L.short_export, value: true, onChange: function (v) { drawerExp.panel.style().set('shown', v); if (v) { suggestNextVersion(); syncDateSelect(); } } }
     ]);
     drawerExp.panel.style().set('shown', true);
     drawerAmo.panel.style().set('shown', true);
