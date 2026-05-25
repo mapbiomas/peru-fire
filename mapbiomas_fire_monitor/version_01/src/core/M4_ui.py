@@ -757,7 +757,7 @@ class ModelTrainerUI(PipelineStepUI):
             is_selected = mid in self.selected_models
             
             # KPI string minimalista
-            kpi_str = f"Acc: {d['acc']:.1%} | F1: {d['f1']:.2f}" if d['acc'] > 0 else Lang.NO_METRICS
+            kpi_str = f"{Lang.ACC_ABBR}: {d['acc']:.1%} | {Lang.F1_ABBR}: {d['f1']:.2f}" if d['acc'] > 0 else Lang.NO_METRICS
             
             # Botão de Ação
             btn = widgets.Button(
@@ -842,8 +842,8 @@ class ModelTrainerUI(PipelineStepUI):
         labels = {
             'title': Lang.VIZ_METADATA, 'scores': Lang.VIZ_KPIS, 'cm': Lang.VIZ_CONFUSION, 
             'history': Lang.VIZ_HISTORY, 'prob': Lang.VIZ_PROB, 'pr': Lang.VIZ_PR_CURVE, 
-            'pca2d': 'PCA 2D', 'pca3d_static': 'PCA 3D (Est)', 'pca3d': 'PCA 3D (Int)',
-            'tsne3d_static': 't-SNE 3D (Est)', 'tsne3d': 't-SNE 3D (Int)',
+            'pca2d': Lang.VIZ_PCA2D, 'pca3d_static': Lang.VIZ_PCA3D_STATIC, 'pca3d': Lang.VIZ_PCA3D_INTERACTIVE,
+            'tsne3d_static': Lang.VIZ_TSNE3D_STATIC, 'tsne3d': Lang.VIZ_TSNE3D_INTERACTIVE,
             'management': Lang.VIZ_MANAGEMENT
         }
         
@@ -973,7 +973,7 @@ def start_training(ui):
         selected_samples = [name for name, chk in ui.chk_dict.items() if chk.value]
 
     if not selected_samples:
-        print("Error: No samples selected.")
+        print(Lang.ERR_NO_SAMPLES)
         return
 
     # 3 Constrói o dicionário de configuração de bandas a partir da Matriz Dinâmica
@@ -992,7 +992,7 @@ def start_training(ui):
             sensors_used.add(s)
             
     if not bands_config:
-        print("Error: No bands selected in the Extraction Matrix.")
+        print(Lang.ERR_NO_BANDS)
         return
         
     # Atualiza o sensor global para refletir o que está sendo usado no treinamento

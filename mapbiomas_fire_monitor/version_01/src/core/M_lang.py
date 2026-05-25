@@ -79,6 +79,8 @@ class L:
     DISCARD_WORKPLAN = "Discard Workplan"
     GLOBAL_ACTIONS = "Global Actions"
     NO_PENDING_JOBS = "No pending jobs to classify."
+    ERR_NO_SAMPLES = "Error: No samples selected."
+    ERR_NO_BANDS = "Error: No bands selected in the Extraction Matrix."
     CARD_SAVED = "Saved \u2713"
     CARD_TEMP = "Temporary"
     CARD_SAVED_PARTIAL = "{s}/{t} Saved"
@@ -503,12 +505,18 @@ class L:
     PCA_LATENT = "PCA Latent Space"
     TSNE_LATENT = "t-SNE Latent Space"
     VIZ_OPTIONS = "Visualization Options"
+    VIZ_PCA2D = "PCA 2D"
+    VIZ_PCA3D_STATIC = "PCA 3D (Static)"
+    VIZ_PCA3D_INTERACTIVE = "PCA 3D (Interactive)"
+    VIZ_TSNE3D_STATIC = "t-SNE 3D (Static)"
+    VIZ_TSNE3D_INTERACTIVE = "t-SNE 3D (Interactive)"
     HYPERPARAMS_SECTION = "Hyperparameters (DNN)"
     LIVE_TRAINING = "Live Training"
     TRAINING_IN_PROGRESS = "Training in progress..."
     LIVE_TSNE_AUDIT = "Live t-SNE Audit (Latent Space)"
     ADD_TO_CANVAS = "Add to Canvas"
     REMOVE_FROM_CANVAS = "Remove from Canvas"
+    BTN_CLOSE = "X"
     RELOAD_SAMPLES = "Reload samples list from GCS"
 
     # ── M4 - Analytics card labels ────────────────────
@@ -521,6 +529,8 @@ class L:
     TSNE_AXIS_1 = "t-SNE 1"
     TSNE_AXIS_2 = "t-SNE 2"
     TSNE_AXIS_3 = "t-SNE 3"
+    ACC_ABBR = "Acc"
+    F1_ABBR = "F1"
 
 
 # ── Locale dictionaries ────────────────────────────────────
@@ -587,6 +597,8 @@ STRINGS_ES = {
     "DISCARD_WORKPLAN": "Descartar Plan de Trabajo",
     "GLOBAL_ACTIONS": "Acciones Globales",
     "NO_PENDING_JOBS": "No hay trabajos pendientes para clasificar.",
+    "ERR_NO_SAMPLES": "Error: No hay muestras seleccionadas.",
+    "ERR_NO_BANDS": "Error: No hay bandas seleccionadas en la Matriz de Extracción.",
     "CARD_SAVED": "Guardado \u2713",
     "CARD_TEMP": "Temporal",
     "CARD_SAVED_PARTIAL": "{s}/{t} Guardados",
@@ -959,12 +971,18 @@ STRINGS_ES = {
     "PCA_LATENT": "Espacio Latente PCA",
     "TSNE_LATENT": "Espacio Latente t-SNE",
     "VIZ_OPTIONS": "Opciones de Visualización",
+    "VIZ_PCA2D": "PCA 2D",
+    "VIZ_PCA3D_STATIC": "PCA 3D (Estático)",
+    "VIZ_PCA3D_INTERACTIVE": "PCA 3D (Interactivo)",
+    "VIZ_TSNE3D_STATIC": "t-SNE 3D (Estático)",
+    "VIZ_TSNE3D_INTERACTIVE": "t-SNE 3D (Interactivo)",
     "HYPERPARAMS_SECTION": "Hiperparámetros (DNN)",
     "LIVE_TRAINING": "Entrenamiento en Vivo",
     "TRAINING_IN_PROGRESS": "Entrenamiento en curso...",
     "LIVE_TSNE_AUDIT": "Auditoría t-SNE en Vivo (Espacio Latente)",
     "ADD_TO_CANVAS": "Agregar al Canvas",
     "REMOVE_FROM_CANVAS": "Retirar del Canvas",
+    "BTN_CLOSE": "X",
     "RELOAD_SAMPLES": "Recargar lista de muestras del GCS",
     # M4 - Analytics card labels
     "LAYERS_LABEL": "Capas:",
@@ -976,6 +994,8 @@ STRINGS_ES = {
     "TSNE_AXIS_1": "t-SNE 1",
     "TSNE_AXIS_2": "t-SNE 2",
     "TSNE_AXIS_3": "t-SNE 3",
+    "ACC_ABBR": "Prec",
+    "F1_ABBR": "F1",
 }
 
 STRINGS_PT = {
@@ -1040,6 +1060,8 @@ STRINGS_PT = {
     "DISCARD_WORKPLAN": "Descartar Plano de Trabalho",
     "GLOBAL_ACTIONS": "Ações Globais",
     "NO_PENDING_JOBS": "Nenhum trabalho pendente para classificar.",
+    "ERR_NO_SAMPLES": "Erro: Nenhuma amostra selecionada.",
+    "ERR_NO_BANDS": "Erro: Nenhuma banda selecionada na Matriz de Extração.",
     "CARD_SAVED": "Salvo \u2713",
     "CARD_TEMP": "Temporário",
     "CARD_SAVED_PARTIAL": "{s}/{t} Salvos",
@@ -1412,12 +1434,18 @@ STRINGS_PT = {
     "PCA_LATENT": "Espaço Latente PCA",
     "TSNE_LATENT": "Espaço Latente t-SNE",
     "VIZ_OPTIONS": "Opções de Visualização",
+    "VIZ_PCA2D": "PCA 2D",
+    "VIZ_PCA3D_STATIC": "PCA 3D (Estático)",
+    "VIZ_PCA3D_INTERACTIVE": "PCA 3D (Interativo)",
+    "VIZ_TSNE3D_STATIC": "t-SNE 3D (Estático)",
+    "VIZ_TSNE3D_INTERACTIVE": "t-SNE 3D (Interativo)",
     "HYPERPARAMS_SECTION": "Hiperparâmetros (DNN)",
     "LIVE_TRAINING": "Treinamento ao Vivo",
     "TRAINING_IN_PROGRESS": "Treinamento em andamento...",
     "LIVE_TSNE_AUDIT": "Auditoria t-SNE ao Vivo (Espaço Latente)",
     "ADD_TO_CANVAS": "Adicionar ao Canvas",
     "REMOVE_FROM_CANVAS": "Remover do Canvas",
+    "BTN_CLOSE": "X",
     "RELOAD_SAMPLES": "Recarregar lista de amostras do GCS",
     # M4 - Analytics card labels
     "LAYERS_LABEL": "Camadas:",
@@ -1429,6 +1457,8 @@ STRINGS_PT = {
     "TSNE_AXIS_1": "t-SNE 1",
     "TSNE_AXIS_2": "t-SNE 2",
     "TSNE_AXIS_3": "t-SNE 3",
+    "ACC_ABBR": "Acu",
+    "F1_ABBR": "F1",
 }
 
 STRINGS_FR = {
@@ -1493,6 +1523,8 @@ STRINGS_FR = {
     "DISCARD_WORKPLAN": "Abandonner le Plan de Travail",
     "GLOBAL_ACTIONS": "Actions Globales",
     "NO_PENDING_JOBS": "Aucun travail en attente à classer.",
+    "ERR_NO_SAMPLES": "Erreur : Aucun échantillon sélectionné.",
+    "ERR_NO_BANDS": "Erreur : Aucune bande sélectionnée dans la Matrice d'Extraction.",
     "CARD_SAVED": "Enregistré \u2713",
     "CARD_TEMP": "Temporaire",
     "CARD_SAVED_PARTIAL": "{s}/{t} Enregistrés",
@@ -1865,12 +1897,18 @@ STRINGS_FR = {
     "PCA_LATENT": "Espace Latent PCA",
     "TSNE_LATENT": "Espace Latent t-SNE",
     "VIZ_OPTIONS": "Options de Visualisation",
+    "VIZ_PCA2D": "PCA 2D",
+    "VIZ_PCA3D_STATIC": "PCA 3D (Statique)",
+    "VIZ_PCA3D_INTERACTIVE": "PCA 3D (Interactif)",
+    "VIZ_TSNE3D_STATIC": "t-SNE 3D (Statique)",
+    "VIZ_TSNE3D_INTERACTIVE": "t-SNE 3D (Interactif)",
     "HYPERPARAMS_SECTION": "Hyperparamètres (DNN)",
     "LIVE_TRAINING": "Entraînement en Direct",
     "TRAINING_IN_PROGRESS": "Entraînement en cours...",
     "LIVE_TSNE_AUDIT": "Audit t-SNE en Direct (Espace Latent)",
     "ADD_TO_CANVAS": "Ajouter au Canvas",
     "REMOVE_FROM_CANVAS": "Retirer du Canvas",
+    "BTN_CLOSE": "X",
     "RELOAD_SAMPLES": "Recharger la liste d'échantillons du GCS",
     # M4 - Analytics card labels
     "LAYERS_LABEL": "Couches:",
@@ -1882,6 +1920,8 @@ STRINGS_FR = {
     "TSNE_AXIS_1": "t-SNE 1",
     "TSNE_AXIS_2": "t-SNE 2",
     "TSNE_AXIS_3": "t-SNE 3",
+    "ACC_ABBR": "Préc",
+    "F1_ABBR": "F1",
 }
 
 STRINGS_ID = {
@@ -1946,6 +1986,8 @@ STRINGS_ID = {
     "DISCARD_WORKPLAN": "Buang Rencana Kerja",
     "GLOBAL_ACTIONS": "Aksi Global",
     "NO_PENDING_JOBS": "Tidak ada pekerjaan tertunda untuk diklasifikasikan.",
+    "ERR_NO_SAMPLES": "Error: Tidak ada sampel yang dipilih.",
+    "ERR_NO_BANDS": "Error: Tidak ada pita yang dipilih di Matriks Ekstraksi.",
     "CARD_SAVED": "Tersimpan \u2713",
     "CARD_TEMP": "Sementara",
     "CARD_SAVED_PARTIAL": "{s}/{t} Tersimpan",
@@ -2318,12 +2360,18 @@ STRINGS_ID = {
     "PCA_LATENT": "Ruang Laten PCA",
     "TSNE_LATENT": "Ruang Laten t-SNE",
     "VIZ_OPTIONS": "Opsi Visualisasi",
+    "VIZ_PCA2D": "PCA 2D",
+    "VIZ_PCA3D_STATIC": "PCA 3D (Statis)",
+    "VIZ_PCA3D_INTERACTIVE": "PCA 3D (Interaktif)",
+    "VIZ_TSNE3D_STATIC": "t-SNE 3D (Statis)",
+    "VIZ_TSNE3D_INTERACTIVE": "t-SNE 3D (Interaktif)",
     "HYPERPARAMS_SECTION": "Hiperparameter (DNN)",
     "LIVE_TRAINING": "Pelatihan Langsung",
     "TRAINING_IN_PROGRESS": "Pelatihan berlangsung...",
     "LIVE_TSNE_AUDIT": "Audit t-SNE Langsung (Ruang Laten)",
     "ADD_TO_CANVAS": "Tambah ke Canvas",
     "REMOVE_FROM_CANVAS": "Hapus dari Canvas",
+    "BTN_CLOSE": "X",
     "RELOAD_SAMPLES": "Muat ulang daftar sampel dari GCS",
     # M4 - Analytics card labels
     "LAYERS_LABEL": "Lapisan:",
@@ -2335,6 +2383,8 @@ STRINGS_ID = {
     "TSNE_AXIS_1": "t-SNE 1",
     "TSNE_AXIS_2": "t-SNE 2",
     "TSNE_AXIS_3": "t-SNE 3",
+    "ACC_ABBR": "Aku",
+    "F1_ABBR": "F1",
 }
 
 SUPPORTED_LOCALES = {

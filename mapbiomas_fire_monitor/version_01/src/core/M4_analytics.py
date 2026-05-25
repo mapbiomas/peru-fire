@@ -312,8 +312,8 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                                        layout=widgets.Layout(width='22px', height='22px', margin='0', padding='0'),
                                        style={'button_color': '#f1c40f' if i <= h_rating else '#fff'})
                     def _hnd_click(b, val=i):
-                        btn_ok = widgets.Button(description="OK", layout=widgets.Layout(width='35px', height='22px'), button_style='success')
-                        btn_no = widgets.Button(description="X", layout=widgets.Layout(width='25px', height='22px'), button_style='danger')
+                        btn_ok = widgets.Button(description=Lang.OK, layout=widgets.Layout(width='35px', height='22px'), button_style='success')
+                        btn_no = widgets.Button(description=Lang.BTN_CLOSE, layout=widgets.Layout(width='25px', height='22px'), button_style='danger')
                         def _do_ok(_):
                             user_stars_container.children = [widgets.HTML("<i class='fa fa-spinner fa-spin'></i>")]
                             if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
@@ -363,7 +363,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                     def _on_del_click(_):
                         import threading
                         btn_conf = widgets.Button(description=Lang.CONFIRM, button_style='warning', layout=widgets.Layout(width='100px'))
-                        btn_canc = widgets.Button(description="X", button_style='info', layout=widgets.Layout(width='30px'))
+                        btn_canc = widgets.Button(description=Lang.BTN_CLOSE, button_style='info', layout=widgets.Layout(width='30px'))
                         msg = widgets.HTML("<span style='color:red; font-size:10px; margin-left:5px;'>5s</span>")
                         del_out.clear_output()
                         with del_out: display(widgets.HBox([btn_conf, btn_canc, msg]))
