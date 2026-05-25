@@ -762,7 +762,7 @@ function user_interface() {
             if (totalAdded === 0) {
                 labelLoading.setValue('(sem modelos para esta regiao)');
             } else {
-                labelLoading.parent().remove(labelLoading);
+                drawerClassModels.panel.remove(labelLoading);
             }
         });
     }
