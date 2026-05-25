@@ -74,26 +74,22 @@ def _run_classification(plan, out, progress_callback=None, n_workers=None):
     total_groups = len(groups)
     
     # Calcula total de tiles em todos os grupos
-    import ee
-    authenticate = __import__('M0_auth_config', fromlist=['authenticate']).authenticate
-    authenticate()
-    
     total_tiles_all_groups = 0
     groups_cells_count = {}
     for (model_id, period), group_jobs in groups.items():
-        region_cells_map = {}
+        group_total = 0
         for job in group_jobs:
             region = job['region']
             try:
-                cim = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
-                region_cells = (cim.filter(ee.Filter.eq('region', region))
-                               .aggregate_array('name').getInfo() or [])
-                region_cells_map[region] = [{'name': c} for c in region_cells]
-            except:
-                region_cells_map[region] = []
-        group_total = sum(len(cells) for cells in region_cells_map.values())
+                cells = _get_region_cells(region)
+                group_total += len(cells)
+            except Exception as e:
+                with out:
+                    print(f"  [WARN] Tile count failed for {region}: {e}")
         groups_cells_count[(model_id, period)] = group_total
         total_tiles_all_groups += group_total
+    with out:
+        print(f"  Total tiles across all groups: {total_tiles_all_groups}")
     
     global_start_time = time.time()
     global_completed = 0
@@ -308,7 +304,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                     group_elapsed = now - _t0
                     pixels_per_sec = _pixels_processed / max(group_elapsed, 1)
                     pixels_remaining = max(0, (_avg_pixels_per_tile * (total_cells_group - _done))) if _avg_pixels_per_tile > 0 else 0
-                    group_remaining = pixels_remaining / (pixels_per_sec * max(n_workers, 1)) if pixels_per_sec > 0 else 0
+                    group_remaining = pixels_remaining / pixels_per_sec if pixels_per_sec > 0 else 0
                     group_total = group_elapsed + group_remaining
                     
                     # Calcula tempo global considerando TODOS os períodos
@@ -318,7 +314,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                         global_pixels_processed = (_avg_pixels_per_tile * global_completed) + _pixels_processed if _avg_pixels_per_tile > 0 else 0
                         global_pixels_per_sec = global_pixels_processed / max(global_elapsed, 1)
                         global_pixels_remaining = (_avg_pixels_per_tile * (total_tiles_all_groups - (global_completed + _done))) if _avg_pixels_per_tile > 0 else 0
-                        global_eta = global_pixels_remaining / (global_pixels_per_sec * max(n_workers, 1)) if global_pixels_per_sec > 0 else 0
+                        global_eta = global_pixels_remaining / global_pixels_per_sec if global_pixels_per_sec > 0 else 0
                         global_total = global_elapsed + global_eta
                         eta_str = f" | TOTAL GLOBAL ~{_fmt_time(global_total)} | remaining ~{_fmt_time(global_eta)}"
                     else:
@@ -339,7 +335,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                     group_elapsed = now - _t0
                     pixels_per_sec = _pixels_processed / max(group_elapsed, 1)
                     pixels_remaining = max(0, (_avg_pixels_per_tile * (total_cells_group - _done))) if _avg_pixels_per_tile > 0 else 0
-                    eta = pixels_remaining / (pixels_per_sec * max(n_workers, 1)) if pixels_per_sec > 0 else 0
+                    eta = pixels_remaining / pixels_per_sec if pixels_per_sec > 0 else 0
                     total_proj = group_elapsed + eta
                     
                     # Calcula tempo global
@@ -348,7 +344,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                         global_pixels_processed = (_avg_pixels_per_tile * global_completed) + _pixels_processed if _avg_pixels_per_tile > 0 else 0
                         global_pixels_per_sec = global_pixels_processed / max(global_elapsed, 1)
                         global_pixels_remaining = (_avg_pixels_per_tile * (total_tiles_all_groups - (global_completed + _done))) if _avg_pixels_per_tile > 0 else 0
-                        global_eta = global_pixels_remaining / (global_pixels_per_sec * max(n_workers, 1)) if global_pixels_per_sec > 0 else 0
+                        global_eta = global_pixels_remaining / global_pixels_per_sec if global_pixels_per_sec > 0 else 0
                         global_total = global_elapsed + global_eta
                         with out:
                             print(f"  > Group progress: {_done}/{total_cells_group} tiles ({_pixels_processed:,} px @ {int(pixels_per_sec):,} px/s) "
@@ -364,7 +360,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
             elapsed = time.time() - _t0
             pixels_per_sec = _pixels_processed / max(elapsed, 1)
             pixels_remaining = max(0, (_avg_pixels_per_tile * (total_cells_group - _done))) if _avg_pixels_per_tile > 0 else 0
-            eta = pixels_remaining / (pixels_per_sec * max(n_workers, 1)) if pixels_per_sec > 0 else 0
+            eta = pixels_remaining / pixels_per_sec if pixels_per_sec > 0 else 0
             total_proj = elapsed + eta
             
             # Calcula tempo global final
@@ -373,7 +369,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                 global_pixels_processed = (_avg_pixels_per_tile * global_completed) + _pixels_processed if _avg_pixels_per_tile > 0 else 0
                 global_pixels_per_sec = global_pixels_processed / max(global_elapsed, 1)
                 global_pixels_remaining = (_avg_pixels_per_tile * (total_tiles_all_groups - (global_completed + _done))) if _avg_pixels_per_tile > 0 else 0
-                global_eta = global_pixels_remaining / (global_pixels_per_sec * max(n_workers, 1)) if global_pixels_per_sec > 0 else 0
+                global_eta = global_pixels_remaining / global_pixels_per_sec if global_pixels_per_sec > 0 else 0
                 global_total = global_elapsed + global_eta
                 with out:
                     print(f"  > Group progress: {_done}/{total_cells_group} tiles ({_pixels_processed:,} px @ {int(pixels_per_sec):,} px/s) "
