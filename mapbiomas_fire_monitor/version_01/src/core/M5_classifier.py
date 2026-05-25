@@ -321,12 +321,12 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                         eta_str = f" | total ~{_fmt_time(group_total)} | remaining ~{_fmt_time(group_remaining)}"
                     
                     px_rate = f" [{int(pixels_per_sec):,} px/s]" if pixels_per_sec > 0 else ""
-                    _log(out, f"    [W{wid}] <<< {cell_id} done in {_fmt_time(tile_elapsed)} ({tile_pixels:,} px){px_rate}"
-                          f" | tile {completed_in_region}/{total}"
+                    _log(out, f"    [W{wid}] <<< {cell_id} done in {_fmt_time(tile_elapsed)} ({tile_pixels:,} px){px_rate}")
+                    _log(out, f"    [W{wid}]     tile {completed_in_region}/{total}"
                           f" | period {g_idx+1}/{total_groups}"
                           f" | region {job_idx+1}/{_total_cards}"
-                          f" | group {_done}/{total_cells_group}"
-                          f" | elapsed group {_fmt_time(group_elapsed)}"
+                          f" | group {_done}/{total_cells_group}")
+                    _log(out, f"    [W{wid}]     elapsed group {_fmt_time(group_elapsed)}"
                           + eta_str)
 
                 # ETA log every 5 tiles or on the last one
