@@ -532,7 +532,7 @@ class ModelTrainerUI(PipelineStepUI):
             band_widgets = []
             for b in sorted_bands:
                 chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
-                if s == 'sentinel2' and m == 'minnbr': chk.value = True
+                if s == 'sentinel2' and m == 'minnbr' and b in ('red', 'nir', 'swir1'): chk.value = True
                 
                 self.band_chk_map[(s, m, p, b)] = chk
                 
