@@ -719,7 +719,7 @@ function user_interface() {
         var selectedNames = getSelectedRegionNames();
         if (selectedNames.length === 0) return;
 
-        var collections = ee.data.listAssets({ parent: REGIONAL_FOLDER });
+        var collections = ee.data.listAssets(REGIONAL_FOLDER);
         var modelAssets = collections ? collections.assets : [];
 
         if (!modelAssets || modelAssets.length === 0) {
@@ -731,7 +731,7 @@ function user_interface() {
         modelAssets.forEach(function (c, idx) {
             var modelId = c.id.split('/').pop();
             var colPath = REGIONAL_FOLDER + '/' + modelId;
-            var images = ee.data.listAssets({ parent: colPath });
+            var images = ee.data.listAssets(colPath);
             if (!images || !images.assets) return;
 
             var imageNames = images.assets.map(function (i) { return i.id.split('/').pop(); });
