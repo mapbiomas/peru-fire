@@ -26,6 +26,20 @@ def _get_resolution_from_model(model_id):
     return 10
 
 
+def _gcs_exists(path, timeout=15):
+    """Check GCS existence via gsutil stat com timeout. Fallback fs.exists()."""
+    try:
+        ret = subprocess.run(['gsutil', '-q', 'stat', f"gs://{path}"],
+                             capture_output=True, timeout=timeout)
+        return ret.returncode == 0
+    except Exception:
+        fs = _get_fs()
+        try:
+            return fs.exists(path)
+        except Exception:
+            return False
+
+
 def _fmt_time(s):
     h, r = divmod(int(s), 3600)
     m, s = divmod(r, 60)
@@ -405,9 +419,7 @@ def compute_region_stats_from_tiles(model_id, region, period, fs=None, logger=No
 def stats_row_exists(model_id, region, period, campaign=None, fs=None):
     """Check if consolidated_stats.csv ja tem linha para (model, region, period)."""
     path = gcs_full(consolidated_stats_path(campaign))
-    gcs_uri = f"gs://{path}"
-    ret = subprocess.run(['gsutil', '-q', 'stat', gcs_uri], capture_output=True)
-    if ret.returncode != 0:
+    if not _gcs_exists(path):
         return False
     local_csv = os.path.join(get_temp_dir('stats'), "check_stats.csv")
     try:
@@ -528,29 +540,48 @@ def run_m6_publish(upload_gee=True, groups=None, ui=None, logger=None):
     
     groups: lista de (model_id, region, period, campaign). Se None, descobre todos.
     ui: M6WorkplanUI opcional. Se fornecido e groups=None, le os checkboxes da UI.
+    Se ui=None, tenta auto-detectar _M6_UI_INSTANCE.
     """
     if logger is None:
         logger = print
 
     fs = _get_fs()
-    if groups is None and ui is not None:
-        groups = [g for g, cb in ui._publish_checks.items() if cb.value]
-        logger(f"  Using {len(groups)} checked groups from UI.")
-    elif groups is None:
-        from M6_ui import _M6_DISCOVERY_CACHE
-        if _M6_DISCOVERY_CACHE is not None:
-            groups = _M6_DISCOVERY_CACHE['groups']
-            logger(f"  Using {len(groups)} groups from UI cache.")
-        else:
-            groups = discover_classified_groups(fs=fs, logger=logger)
-    else:
+
+    # --- Descobrir grupos: UI checkboxes > cache > scan GCS ---
+    if groups is not None:
         groups = list(groups)
+    else:
+        if ui is None:
+            try:
+                from M6_ui import _M6_UI_INSTANCE
+                ui = _M6_UI_INSTANCE
+            except Exception:
+                ui = None
+
+        if ui is not None and getattr(ui, '_publish_checks', None):
+            checked = [g for g, cb in ui._publish_checks.items() if cb.value]
+            if not checked:
+                logger("  Nenhum grupo marcado em 'To Publish'. Marque ao menos um card e tente novamente.")
+                return
+            groups = checked
+            logger(f"  Usando {len(groups)} grupos marcados na UI.")
+
+        if groups is None:
+            from M6_ui import _M6_DISCOVERY_CACHE
+            if _M6_DISCOVERY_CACHE is not None:
+                cached = _M6_DISCOVERY_CACHE
+                raw = cached['groups']
+                done = cached['mosaics'] & cached['stats_done'] & cached['gee_assets']
+                groups = [g for g in raw if g not in done]
+                logger(f"  Usando {len(groups)} grupos pendentes do cache ({len(raw)} total, {len(done)} completos).")
+            else:
+                groups = discover_classified_groups(fs=fs, logger=logger)
+                logger(f"  Descobertos {len(groups)} grupos via scan GCS.")
 
     if not groups:
-        logger("  No classified tiles found in GCS.")
+        logger("  Nenhum grupo para processar.")
         return
 
-    logger(f"  Found {len(groups)} classified groups.")
     groups = sorted(groups)
     _t0 = time.time()
 
@@ -558,11 +589,9 @@ def run_m6_publish(upload_gee=True, groups=None, ui=None, logger=None):
         campaign_str = f" [{campaign}]" if campaign else ""
         logger(f"\n  [{idx+1}/{len(groups)}] {model_id} | {region} | {period}{campaign_str}")
 
-        # 1. Mosaic (gsutil stat para evitar cache stale do gcsfs)
+        # 1. Mosaic
         mosaic_gcs = gcs_full(region_path(model_id, region, period, campaign))
-        mosaic_uri = f"gs://{mosaic_gcs}"
-        ret = subprocess.run(['gsutil', '-q', 'stat', mosaic_uri], capture_output=True)
-        mosaic_exists = (ret.returncode == 0)
+        mosaic_exists = _gcs_exists(mosaic_gcs)
         if mosaic_exists:
             logger(f"    Mosaic already exists.")
 

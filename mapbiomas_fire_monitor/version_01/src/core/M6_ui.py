@@ -16,10 +16,13 @@ L = widgets.Layout
 
 # Cache módulo: evita re-scan GEE/GCS entre refreshes no mesmo kernel
 _M6_DISCOVERY_CACHE = None
+_M6_UI_INSTANCE = None
 
 
 class M6WorkplanUI:
     def __init__(self):
+        global _M6_UI_INSTANCE
+        _M6_UI_INSTANCE = self
         self.fs = _get_fs()
         self._groups = []
         self._mosaics = set()
