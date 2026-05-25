@@ -684,7 +684,7 @@ function user_interface() {
                             .filter(ee.Filter.stringContains('system:index', dateStr));
                         var img = filtered.mosaic();
                         var clsImg = img.select([0], ['classification']).byte().selfMask().updateMask(spatialMask);
-                        var prbImg = img.select([1], ['probability']).multiply(255).byte().selfMask().updateMask(spatialMask);
+                        var prbImg = img.select([1], ['probability']).multiply(100).byte().selfMask().updateMask(spatialMask);
                         if (classBandCls) {
                             var lId = 'class_' + modelId + '_' + assetName + '_cls';
                             desiredLayerIds.push(lId);
@@ -698,7 +698,7 @@ function user_interface() {
                             desiredLayerIds.push(lId);
                             updateManagedLayer(lId,
                                 prbImg,
-                                { min: 0, max: 255, palette: PROB_PALETTE },
+                                { min: 0, max: 100, palette: PROB_PALETTE },
                                 modelId + ' prob ' + assetName);
                         }
                     });
