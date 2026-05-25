@@ -419,9 +419,9 @@ function user_interface() {
         if (maxMonth === 0) { maxMonth = 12; maxYear--; }
 
         if (period === 'anual') {
-            for (var y = 2019; y <= maxYear; y++) dates.push(y.toString());
+            for (var y = 2025; y <= maxYear; y++) dates.push(y.toString());
         } else {
-            for (var y = 2019; y <= maxYear; y++) {
+            for (var y = 2025; y <= maxYear; y++) {
                 var mEnd = (y === maxYear) ? maxMonth : 12;
                 for (var m = 1; m <= mEnd; m++) {
                     var mm = m < 10 ? '0' + m : m.toString();
@@ -1442,7 +1442,7 @@ function user_interface() {
         // ou deixar o usuário escolher. Aqui vamos apenas garantir que a ordem é inversa.
 
         // Meses
-        for (var y = maxYear; y >= 2019; y--) {
+        for (var y = maxYear; y >= 2025; y--) {
             var mEnd = (y === maxYear) ? Math.min(maxMonth, 12) : 12;
             for (var m = mEnd; m >= 1; m--) {
                 var mm = m < 10 ? '0' + m : m.toString();
@@ -1450,7 +1450,7 @@ function user_interface() {
             }
         }
         // Anos
-        for (var yr = maxYear; yr >= 2019; yr--) {
+        for (var yr = maxYear; yr >= 2025; yr--) {
             items.push({ label: '' + yr, value: '' + yr });
         }
         return items;
