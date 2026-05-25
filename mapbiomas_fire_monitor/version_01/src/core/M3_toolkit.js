@@ -282,7 +282,7 @@ var rawCheckboxes = {};
 
 var extraDatasets = {
     'mcd64a1': {
-        name: 'MODIS Burned Area',
+        name: L.ref_name_modis_ba,
         vis: { min: 0, max: 1, palette: ['fc6000'] },
         build: function (start, end, bounds, year, month) {
             return ee.ImageCollection('MODIS/061/MCD64A1')
@@ -291,7 +291,7 @@ var extraDatasets = {
         }
     },
     'gabam': {
-        name: 'GABAM',
+        name: L.ref_name_gabam,
         vis: { min: 0, max: 1, palette: ['b200ac'] },
         build: function (start, end, bounds, year, month) {
             return ee.ImageCollection('projects/sat-io/open-datasets/GABAM')
@@ -300,7 +300,7 @@ var extraDatasets = {
         }
     },
     'firms': {
-        name: 'FIRMS',
+        name: L.ref_name_firms,
         vis: { min: 0, max: 1, palette: ['823b15'] },
         build: function (start, end, bounds, year, month) {
             return ee.ImageCollection('FIRMS')
@@ -309,7 +309,7 @@ var extraDatasets = {
         }
     },
     'fire_cci': {
-        name: 'FIRE_CCI',
+        name: L.ref_name_fire_cci,
         vis: { min: 0, max: 1, palette: ['5149ba'] },
         build: function (start, end, bounds, year, month) {
             return ee.ImageCollection('ESA/CCI/FireCCI/5_1')
@@ -318,7 +318,7 @@ var extraDatasets = {
         }
     },
     'peru_ref': {
-        name: 'Cicatrizes Peru',
+        name: L.ref_cicatrizes_peru,
         vis: { min: 0, max: 1, palette: ['804000'] },
         build: function (start, end, bounds, year, month) {
             try {
@@ -330,7 +330,7 @@ var extraDatasets = {
         }
     },
     'buffer_inpe': {
-        name: 'Buffer Focos INPE',
+        name: L.ref_name_buffer_inpe,
         vis: { min: 0, max: 1, palette: ['ff0000'] },
         build: function (start, end, bounds, year, month) {
             var buffer = ee.ImageCollection("projects/workspace-ipam/assets/BUFFER-DOUBLE-MONTHLY-FOCUS-OF-INPE-SULAMERICA")
@@ -352,7 +352,7 @@ var extraDatasets = {
     //     }
     // },
     'hotspots_inpe': {
-        name: 'Hotspots INPE (Pontos)',
+        name: L.ref_name_hotspots_inpe,
         vis: { color: '0f03fc' },
         build: function (start, end, bounds, year, month) {
             if (!month) return ee.Image().select();
@@ -401,8 +401,8 @@ var classCheckboxes = {};
 var classBandCheckboxes = {};
 
 var regionCheckboxes = {};
-var layerAllRegions = ui.Map.Layer(ee.Image(), {}, 'All Regions');
-var layerSelectedRegion = ui.Map.Layer(ee.Image(), {}, 'Selected Region');
+var layerAllRegions = ui.Map.Layer(ee.Image(), {}, L.lbl_all_regions);
+var layerSelectedRegion = ui.Map.Layer(ee.Image(), {}, L.lbl_selected_region);
 
 // Layers are now dynamically managed via managedLayers and Map.layers().add/remove
 Map.layers().add(layerAllRegions);
@@ -735,7 +735,7 @@ function user_interface() {
         var selectedNames = getSelectedRegionNames();
         if (selectedNames.length === 0) return;
 
-        var labelLoading = ui.Label('(carregando...)', { fontSize: '10px', color: '#888' });
+        var labelLoading = ui.Label(L.loading, { fontSize: '10px', color: '#888' });
         drawerClassModels.panel.add(labelLoading);
 
         // Deffere listAssets para nao travar a UI antes do label renderizar
@@ -774,7 +774,7 @@ function user_interface() {
             });
 
             if (totalAdded === 0) {
-                labelLoading.setValue('(sem modelos para esta regiao)');
+                labelLoading.setValue(L.status_no_models_region);
             } else {
                 drawerClassModels.panel.remove(labelLoading);
             }
@@ -886,7 +886,7 @@ function user_interface() {
         stats.evaluate(function (s, err) {
             if (err) {
                 panel_stats.clear();
-                panel_stats.add(ui.Label('Error recalculando stats', { fontSize: '10px', color: 'red' }));
+                panel_stats.add(ui.Label('Error recalculating stats', { fontSize: '10px', color: 'red' }));
                 return;
             }
             if (!s) return;
@@ -908,14 +908,14 @@ function user_interface() {
                     widgets: [
                         ui.Label(label, { width: '55px', color: color, fontSize: fSize, fontWeight: 'bold' }),
                         ui.Label(isHeader ? count : count.toString(), { width: '30px', textAlign: 'right', fontSize: fSize, fontWeight: fw }),
-                        ui.Label(isHeader ? 'Qty%' : pctCount + '%', { width: '40px', textAlign: 'right', color: '#888', fontSize: fSize, fontWeight: fw }),
+                        ui.Label(isHeader ? L.lbl_qty_pct : pctCount + '%', { width: '40px', textAlign: 'right', color: '#888', fontSize: fSize, fontWeight: fw }),
                         ui.Label(isHeader ? area : area.toFixed(1), { width: '60px', textAlign: 'right', fontSize: fSize, fontWeight: fw }),
-                        ui.Label(isHeader ? 'Area%' : pctArea + '%', { width: '40px', textAlign: 'right', color: '#888', fontSize: fSize, fontWeight: fw })
+                        ui.Label(isHeader ? L.lbl_area_pct : pctArea + '%', { width: '40px', textAlign: 'right', color: '#888', fontSize: fSize, fontWeight: fw })
                     ]
                 });
             }
 
-            panel_stats.add(makeRow('CLASE', 'QTY', 'HA', '#333', true));
+            panel_stats.add(makeRow(L.lbl_class_col, L.lbl_count, L.lbl_area, '#333', true));
             panel_stats.add(makeRow(L.lbl_fire, s.fire_count, s.fire_area, '#d32f2f', false));
             panel_stats.add(makeRow(L.lbl_not_fire, s.notFire_count, s.notFire_area, '#1a73e8', false));
             panel_stats.add(ui.Label('──────────────────────────────', { margin: '0px', color: '#ccc' }));
@@ -944,10 +944,10 @@ function user_interface() {
 
         var header = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: { margin: '0px', padding: '0px', backgroundColor: '#f0f0f0' } });
 
-        var titleLabel = ui.Label('Regiones', { fontSize: '11px', fontWeight: 'bold', margin: '4px', backgroundColor: '#f0f0f0' });
+        var titleLabel = ui.Label(L.lbl_regions, { fontSize: '11px', fontWeight: 'bold', margin: '4px', backgroundColor: '#f0f0f0' });
 
         var btt_all_regions = ui.Button({
-            label: '[ All ]',
+            label: L.btn_all_regions,
             style: { margin: '0px', padding: '0px', fontSize: '10px' },
             onClick: function () {
                 var anyUnchecked = Object.keys(regionCheckboxes).some(function (k) { return !regionCheckboxes[k].getValue(); });
@@ -1049,7 +1049,7 @@ function user_interface() {
             var items = sample_list ? sample_list.map(function (obj) { return { label: obj.id.split('/').slice(-1)[0], value: obj.id }; }) : [];
             select_address.items().reset(items);
             if (items.length > 0) {
-                select_address.setPlaceholder('Elija muestra antigua...');
+                select_address.setPlaceholder(L.placeholder_asset);
             } else {
                 select_address.setPlaceholder('Sin muestras en la campaña');
             }
@@ -1192,14 +1192,14 @@ function user_interface() {
     // 1. Define sub-drawers for Reference
     var extraCheckboxes = {};
     var drawerAQ = createLayerDrawer(L.lbl_burned, [
-        { id: 'mcd64a1', label: 'MODIS MCD64A1', value: false },
+        { id: 'mcd64a1', label: L.ref_modis_mcd64a1, value: false },
         { id: 'gabam', label: 'GABAM', value: false },
         { id: 'fire_cci', label: 'FIRE_CCI', value: false },
-        { id: 'peru_ref', label: 'Cicatrizes Peru', value: false }
+        { id: 'peru_ref', label: L.ref_cicatrizes_peru, value: false }
     ]);
     var drawerFocos = createLayerDrawer(L.lbl_hotspots, [
-        { id: 'buffer_inpe', label: 'Buffer Focos', value: false },
-        { id: 'hotspots_inpe', label: 'Hotspots INPE', value: false }
+        { id: 'buffer_inpe', label: L.ref_buffer_focos, value: false },
+        { id: 'hotspots_inpe', label: L.ref_hotspots_inpe, value: false }
     ]);
     drawerAQ.panel.style().set('shown', true); drawerFocos.panel.style().set('shown', true);
     subCabRef.content.add(drawerAQ.panel).add(drawerFocos.panel);
@@ -1223,7 +1223,7 @@ function user_interface() {
 
     var drawerAsset = createLayerDrawer(L.lbl_asset_mosaics, [
         { id: 'sentinel2', label: 'Sentinel2', value: false },
-        { id: 'sentinel2_buffer', label: 'Sentinel2 Buffer', value: true }
+        { id: 'sentinel2_buffer', label: L.sat_sentinel2_buffer, value: true }
     ]);
     var assetCheckboxes = drawerAsset.checkboxes;
 
@@ -1246,10 +1246,10 @@ function user_interface() {
     var subCabClass = createCabinet(L.cab_classifications, false, '2px 2px 2px 10px');
     cabLayers.content.add(subCabClass.panel);
 
-    var drawerClassToggle = createLayerDrawer('Bandas', [
-        { id: 'cls', label: 'classification', value: true, onChange: function () { debouncedUpdateMosaic(); } },
-        { id: 'prb', label: 'probability', value: false, onChange: function () { debouncedUpdateMosaic(); } },
-        { id: 'doy', label: 'dayOfYear', value: false, onChange: function () { debouncedUpdateMosaic(); } }
+    var drawerClassToggle = createLayerDrawer(L.lbl_bands, [
+        { id: 'cls', label: L.lbl_band_classification, value: true, onChange: function () { debouncedUpdateMosaic(); } },
+        { id: 'prb', label: L.lbl_band_probability, value: false, onChange: function () { debouncedUpdateMosaic(); } },
+        { id: 'doy', label: L.lbl_band_dayofyear, value: false, onChange: function () { debouncedUpdateMosaic(); } }
     ]);
     classBandCheckboxes = drawerClassToggle.checkboxes;
     subCabClass.content.add(drawerClassToggle.panel);
@@ -1267,7 +1267,7 @@ function user_interface() {
     var drawerAmo = { panel: ui.Panel({ style: { shown: false, border: '1px solid #eee', margin: '2px' } }) };
     var drawerExp = { panel: ui.Panel({ style: { shown: false, border: '1px solid #eee', margin: '2px' } }) };
 
-    var drawerControl = createLayerDrawer('Dashboard', [
+    var drawerControl = createLayerDrawer(L.lbl_dashboard, [
         { id: 'inst', label: L.short_guide, value: false, onChange: function (v) { drawerInst.panel.style().set('shown', v); } },
         { id: 'imp', label: L.short_import, value: false, onChange: function (v) { drawerImp.panel.style().set('shown', v); } },
         { id: 'amo', label: L.cab_samples, value: true, onChange: function (v) { drawerAmo.panel.style().set('shown', v); if (v) updateStats(); } },
@@ -1280,7 +1280,7 @@ function user_interface() {
     function makeCampaignSelector() {
         return ui.Select({
             items: [SAMPLING_CAMPAIGN],
-            placeholder: 'Campaña...',
+            placeholder: L.placeholder_campaign,
             value: SAMPLING_CAMPAIGN,
             onChange: function (v) {
                 SAMPLING_CAMPAIGN = v;
@@ -1323,10 +1323,10 @@ function user_interface() {
         }
     }
 
-    var btnFire = ui.Button({ label: 'Fire', style: { color: '#d32f2f', margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { setLayerMode('fire'); } });
-    var btnNotFire = ui.Button({ label: 'Not Fire', style: { color: '#1a73e8', margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { setLayerMode('notFire'); } });
-    var btnHand = ui.Button({ label: 'Hand', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { Map.drawingTools().setShape(null); } });
-    var btnClear = ui.Button({ label: 'Delete', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: clearDrawingTools });
+    var btnFire = ui.Button({ label: L.btn_fire, style: { color: '#d32f2f', margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { setLayerMode('fire'); } });
+    var btnNotFire = ui.Button({ label: L.btn_not_fire, style: { color: '#1a73e8', margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { setLayerMode('notFire'); } });
+    var btnHand = ui.Button({ label: L.btn_hand, style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { Map.drawingTools().setShape(null); } });
+    var btnClear = ui.Button({ label: L.btn_delete, style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: clearDrawingTools });
     var btnCenter = ui.Button({ label: 'C', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: centerDrawingTools });
 
     rowDraw.add(btnFire).add(btnNotFire).add(btnHand).add(btnClear).add(btnCenter);
@@ -1380,7 +1380,7 @@ function user_interface() {
     });
 
     var row_imp = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row });
-    row_imp.add(ui.Label('Campana:', { fontSize: '10px', margin: '5px 2px' }));
+    row_imp.add(ui.Label(L.lbl_campaign, { fontSize: '10px', margin: '5px 2px' }));
     row_imp.add(select_campaign_imp);
     row_imp.add(select_address).add(btt_import_action);
     drawerImp.panel.add(row_imp);
@@ -1623,7 +1623,7 @@ function user_interface() {
     });
 
     // --- Montar o panel_export ---
-    drawerExp.panel.add(ui.Label('Seleccionar Campana:', { fontSize: '11px', fontWeight: 'bold', margin: '4px 2px 2px 2px' }));
+    drawerExp.panel.add(ui.Label(L.lbl_select_campaign, { fontSize: '11px', fontWeight: 'bold', margin: '4px 2px 2px 2px' }));
     drawerExp.panel.add(select_campaign_exp);
     drawerExp.panel.add(ui.Label(L.lbl_version, styles.label));
     var rowVer = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row });

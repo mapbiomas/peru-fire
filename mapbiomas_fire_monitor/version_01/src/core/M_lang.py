@@ -504,6 +504,8 @@ class L:
     M3_SOURCE = "Source code (GitHub)"
     M3_EDITOR = "Direct access (GEE Editor)"
     M3_DOCS = "Documentation and usage guidelines"
+    M3_INTRO_LINE1 = "The sample collection stage is carried out exclusively"
+    M3_INTRO_LINE2 = "through the JavaScript interface in Google Earth Engine."
 
     # ── M4 - Analytics / KPIs ──────────────────────────
     ACCURACY = "Accuracy"
@@ -1006,6 +1008,8 @@ STRINGS_ES = {
     "M3_SOURCE": "Acceso al codigo fuente (GitHub)",
     "M3_EDITOR": "Acceso directo (Editor GEE)",
     "M3_DOCS": "Documentación y normas de uso",
+    "M3_INTRO_LINE1": "La colecta de muestras se realiza exclusivamente",
+    "M3_INTRO_LINE2": "a través de la interfaz JavaScript en Google Earth Engine.",
     # M4 - Analytics / KPIs
     "ACCURACY": "Precisión",
     "PRECISION": "Precisión",
@@ -1502,6 +1506,8 @@ STRINGS_PT = {
     "M3_SOURCE": "Acesso ao código fonte (GitHub)",
     "M3_EDITOR": "Acesso direto (Editor GEE)",
     "M3_DOCS": "Documentação e normas de uso",
+    "M3_INTRO_LINE1": "A coleta de amostras é realizada exclusivamente",
+    "M3_INTRO_LINE2": "através da interface JavaScript no Google Earth Engine.",
     # M4 - Analytics / KPIs
     "ACCURACY": "Acurácia",
     "PRECISION": "Precisão",
@@ -1998,6 +2004,8 @@ STRINGS_FR = {
     "M3_SOURCE": "Code source (GitHub)",
     "M3_EDITOR": "Accès direct (Éditeur GEE)",
     "M3_DOCS": "Documentation et normes d'utilisation",
+    "M3_INTRO_LINE1": "La collecte d'échantillons est effectuée exclusivement",
+    "M3_INTRO_LINE2": "via l'interface JavaScript dans Google Earth Engine.",
     # M4 - Analytics / KPIs
     "ACCURACY": "Précision",
     "PRECISION": "Précision",
@@ -2494,6 +2502,8 @@ STRINGS_ID = {
     "M3_SOURCE": "Kode sumber (GitHub)",
     "M3_EDITOR": "Akses langsung (Editor GEE)",
     "M3_DOCS": "Dokumentasi dan panduan penggunaan",
+    "M3_INTRO_LINE1": "Pengumpulan sampel dilakukan secara eksklusif",
+    "M3_INTRO_LINE2": "melalui antarmuka JavaScript di Google Earth Engine.",
     # M4 - Analytics / KPIs
     "ACCURACY": "Akurasi",
     "PRECISION": "Presisi",
