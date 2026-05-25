@@ -18,6 +18,14 @@ from M_regions import REGION_NAME_PROPERTY
 from M_cache import CacheManager
 
 
+def _get_resolution_from_model(model_id):
+    """Extrai resolução em metros a partir do model_id (ex: 'sentinel2' → 10, 'landsat' → 30)."""
+    model_lower = model_id.lower()
+    if 'landsat' in model_lower:
+        return 30
+    return 10
+
+
 def _fmt_time(s):
     h, r = divmod(int(s), 3600)
     m, s = divmod(r, 60)
@@ -114,7 +122,7 @@ def compute_region_stats_from_mosaic(model_id, region, period, fs=None, logger=N
     burned_mask = class_band > 0.5
     n_burned = int(burned_mask.sum())
 
-    resolution_m = 10
+    resolution_m = _get_resolution_from_model(model_id)
     pixel_area_m2 = resolution_m ** 2
     burned_area_km2 = n_burned * pixel_area_m2 / 1_000_000
     total_area_km2 = total_valid * pixel_area_m2 / 1_000_000 if total_valid else 0
@@ -372,8 +380,10 @@ def compute_region_stats_from_tiles(model_id, region, period, fs=None, logger=No
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
-    burned_area_ha = total_burned / 100
-    total_area_ha = total_valid / 100 if total_valid else 0
+    resolution_m = _get_resolution_from_model(model_id)
+    pixel_area_m2 = resolution_m ** 2
+    burned_area_ha = total_burned * pixel_area_m2 / 10000
+    total_area_ha = total_valid * pixel_area_m2 / 10000 if total_valid else 0
     mean_conf = sum_conf / total_burned if total_burned > 0 else 0.0
 
     row = {
