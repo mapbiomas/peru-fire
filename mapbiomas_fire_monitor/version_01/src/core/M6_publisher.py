@@ -29,7 +29,7 @@ def _fmt_time(s):
 
 
 def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=None):
-    """Streaming mosaic via GDAL /vsigs/ — sem download local dos tiles."""
+    """Junta todos os tiles de uma regiao em um mosaico regional."""
     if fs is None:
         fs = _get_fs()
 
@@ -53,13 +53,17 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=
 
     out_gcs = gcs_full(region_path(model_id, region, period, campaign))
     tmpdir = os.path.join(get_temp_dir('mosaics'), f"merge_{model_id}_{region}_{period}_{int(time.time())}")
+    os.makedirs(tmpdir, exist_ok=True)
 
     try:
-        # /vsigs/ paths — GDAL le direto do GCS, sem download
-        vsigs_paths = [tp.replace('gs://', '/vsigs/') for tp in tile_paths]
+        local_tiles = []
+        for i, tp in enumerate(tile_paths):
+            local = os.path.join(tmpdir, f"tile_{i:04d}.tif")
+            _gcs_download(tp, local)
+            local_tiles.append(local)
 
         vrt_path = os.path.join(tmpdir, "mosaic.vrt")
-        gdal.BuildVRT(vrt_path, vsigs_paths,
+        gdal.BuildVRT(vrt_path, local_tiles,
             options=gdal.BuildVRTOptions(resampleAlg='nearest'))
 
         mosaic_local = os.path.join(tmpdir, "mosaic.tif")
@@ -68,10 +72,13 @@ def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=
                 creationOptions=['COMPRESS=LZW', 'BIGTIFF=YES']))
 
         # Nomeia as bandas no GeoTIFF — GEE respeita BandDescription
-        ds = gdal.Open(mosaic_local, gdal.GA_Update)
-        ds.GetRasterBand(1).SetDescription('classification')
-        ds.GetRasterBand(2).SetDescription('probability')
-        ds = None
+        try:
+            ds = gdal.Open(mosaic_local, 1)
+            ds.GetRasterBand(1).SetDescription('classification')
+            ds.GetRasterBand(2).SetDescription('probability')
+            ds = None
+        except Exception:
+            pass
 
         _gcs_upload(mosaic_local, out_gcs)
 
