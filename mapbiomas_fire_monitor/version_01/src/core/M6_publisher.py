@@ -186,7 +186,14 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
 
     img = ee.Image.loadGeoTIFF(gcs_uri)
 
-    parent = f"{CONFIG['asset_monitor_base']}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
+    base = CONFIG['asset_monitor_base']
+    for sub in ['LIBRARY_CLASSIFICATIONS', 'LIBRARY_CLASSIFICATIONS/REGIONAL']:
+        try:
+            ee.data.createAsset({'type': 'Folder'}, f"{base}/{sub}")
+        except Exception:
+            pass
+
+    parent = f"{base}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
     try:
         ee.data.createAsset({'type': 'ImageCollection'}, parent)
     except Exception:
