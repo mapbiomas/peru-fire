@@ -110,6 +110,20 @@ class ModelTrainerUI(PipelineStepUI):
         for cb in [self.cb_retrain, self.cb_reextract, self.cb_borrar_retrain]:
             cb.observe(self._on_intent_cb_change, names='value')
 
+    def _on_intent_cb_change(self, change):
+        """Ensures exclusivity between retraining intent checkboxes."""
+        if not change['new']: return
+        owner = change['owner']
+        for cb in [self.cb_retrain, self.cb_reextract, self.cb_borrar_retrain]:
+            if cb != owner:
+                cb.unobserve(self._on_intent_cb_change, names='value')
+                cb.value = False
+                cb.observe(self._on_intent_cb_change, names='value')
+        mode = 'retrain' if self.cb_retrain.value else \
+               're-extract' if self.cb_reextract.value else \
+               'borrar' if self.cb_borrar_retrain.value else None
+        self.retrain_intent['mode'] = mode
+
     def display(self):
         # Ensure locale matches GLOBAL_OPTS
         lang = GLOBAL_OPTS.get('LANGUAGE', 'en')
