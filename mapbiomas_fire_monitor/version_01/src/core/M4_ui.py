@@ -530,10 +530,11 @@ class ModelTrainerUI(PipelineStepUI):
             # Só baixa metadados se for novo OU se pedirmos refresh total
             if m_id not in metadata_cache or force_refresh:
                 try:
-                    from M0_auth_config import CONFIG
+                    from M0_auth_config import CONFIG, gcs_models_path
                     import urllib.parse
                     m_path = cache.get('meta', {}).get(m_id, {}).get('path', '')
-                    if not m_path: continue
+                    if not m_path:
+                        m_path = f"{gcs_models_path()}/{m_id}"
                     clean_path = urllib.parse.unquote(m_path)
                     gs_prefix = f'gs://{CONFIG["bucket"]}/'
                     if clean_path.startswith(gs_prefix):
