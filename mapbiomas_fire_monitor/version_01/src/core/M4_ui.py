@@ -450,17 +450,22 @@ class ModelTrainerUI(PipelineStepUI):
     def _build_dest_section(self):
         L = widgets.Layout
         next_id = self._suggest_next_id()
-        self.w_training_id = widgets.Text(value=next_id, description=Lang.TRAINING_ID, style={'description_width': '120px'}, layout=L(width='300px'))
-        self.w_shortname = widgets.Text(value='peru_v1', description=Lang.SHORTNAME, layout=L(width='200px'))
-        
-        # Smart Naming Hook
-        def _hook_smart_naming(change):
-            self._auto_generate_shortname()
-            
-        # Bind to bands
-        for chk in self.band_chk_map.values():
-            chk.observe(_hook_smart_naming, names='value')
 
+        def _suggest_shortname():
+            sel = sorted(self._selected_samples)
+            if not sel:
+                return 'peru_v1'
+            regions = set()
+            for s in sel:
+                parts = s.split('_peru_')
+                if len(parts) > 1:
+                    regions.add(parts[1].rsplit('_', 1)[0])
+            return '_'.join(sorted(regions)) if regions else 'peru_v1'
+
+        self.w_training_id = widgets.Text(value=next_id, description=Lang.TRAINING_ID,
+            style={'description_width': '120px'}, layout=L(width='300px'))
+        self.w_shortname = widgets.Text(value=_suggest_shortname(), description=Lang.SHORTNAME,
+            layout=L(width='300px'))
         self.w_comment = widgets.Textarea(placeholder=Lang.COMMENTS, layout=L(width='98%', height='60px'))
         
         return widgets.VBox([
