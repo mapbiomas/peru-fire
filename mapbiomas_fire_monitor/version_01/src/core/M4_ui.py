@@ -51,8 +51,8 @@ class ModelTrainerUI(PipelineStepUI):
         self.viz_config = {
             'title': True, 'scores': True, 'cm': True, 'history': True, 
             'prob': True, 'pr': True, 
-            'pca2d': False, 'pca3d': False, 'tsne3d': False,
-            'pca3d_static': False, 'tsne3d_static': False,
+            'pca2d': False, 'pca3d': False,
+            'pca3d_static': False,
             'management': False
         }
         

@@ -19,7 +19,7 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
     viz_config: dict com flags de visibilidade.
     """
     if viz_config is None:
-        viz_config = {k: True for k in ['cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d', 'pca3d_static', 'tsne3d_static']}
+        viz_config = {k: True for k in ['cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d', 'pca3d_static']}
     from sklearn.metrics import confusion_matrix, precision_recall_curve, average_precision_score
     from sklearn.decomposition import PCA
 
@@ -40,7 +40,7 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
         if viz_config.get(k): active_plots.append(k)
     
     # Expandir para 4 ângulos estáticos se solicitado
-    for k in ['pca3d_static', 'tsne3d_static']:
+    for k in ['pca3d_static']:
         if viz_config.get(k):
             for i in range(4): active_plots.append(f"{k}_{i}")
     
@@ -203,9 +203,9 @@ def render_model_card_html(hp, metrics, only_header=False):
                 <p class="meta-text"><span class="meta-label">{Lang.ITERATIONS}:</span> {n_iters} | <b>{Lang.BATCH_SIZE}:</b> {batch}</p>
                 <p class="meta-text"><span class="meta-label">{Lang.ACCURACY}:</span> {acc} | <b>{Lang.F1_SCORE}:</b> {f1}</p>
                 <p class="meta-text"><span class="meta-label">{Lang.SAMPLES_LABEL}</span> {', '.join(hp.get('sample_collections', []))}</p>
-                <div style="margin-top:8px; padding:8px; background:#fff3cd; border-radius:4px; border:1px solid #ffeeba;">
+                <div style="margin-top:8px; padding:8px; background:#fff3cd; border-radius:4px; border:1px solid #ffeeba;" id="comment_section_{_uid}">
                     <p class="meta-text" style="color:#856404; font-weight:bold; margin-bottom:3px;">{Lang.COMMENTS}:</p>
-                    <p class="meta-text" style="color:#856404; font-style:italic;">{hp.get('comment', Lang.NO_COMMENTS)}</p>
+                    <p class="meta-text" style="color:#856404; font-style:italic;" id="comment_text_{_uid}">{hp.get('comment', Lang.NO_COMMENTS)}</p>
                 </div>
             </div>
         </div>
@@ -235,7 +235,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
     hp_override: dict opcional com metadados para evitar leitura do GCS (pós-treino).
     """
     if viz_config is None:
-        viz_config = {k: True for k in ['title', 'scores', 'cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d', 'tsne3d']}
+        viz_config = {k: True for k in ['title', 'scores', 'cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d']}
     
     fs = _get_fs()
     from M0_auth_config import CONFIG, gcs_models_path
@@ -305,54 +305,59 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                 pca_coords_final = pca_tmp.fit_transform(embeds_step)
                 tsne_coords_final = None # t-SNE é muito lento para recalcular no slider
             
-            # --- KPI BUILDER ---
-            def make_kpi_card(title, value, color, icon=None):
-                icon_html = f"<i class='fa fa-{icon}' style='margin-right:5px; opacity:0.5;'></i>" if icon else ""
+            # --- KPI BUILDER (compact, 2x3 grid) ---
+            def make_kpi_card(title, value, color):
                 return widgets.HTML(f"""
-                <div class="kpi-box" style="border-left: 5px solid {color}; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); flex: 1; min-width: 120px;">
-                    <div style="font-size: 10px; color: #7f8c8d; text-transform: uppercase; font-weight: bold; margin-bottom: 2px;">{title}</div>
-                    <div style="font-size: 18px; font-weight: bold; color: #2c3e50;">{icon_html}{value}</div>
+                <div style="border-left:4px solid {color}; padding:6px 8px; background:white; border-radius:3px; box-shadow:0 1px 2px rgba(0,0,0,0.06); flex:1; min-width:100px;">
+                    <div style="font-size:9px; color:#7f8c8d; text-transform:uppercase; font-weight:bold; margin-bottom:1px;">{title}</div>
+                    <div style="font-size:16px; font-weight:bold; color:#2c3e50;">{value}</div>
                 </div>
                 """)
 
-            kpi_acc = make_kpi_card(Lang.ACCURACY, f"{rep.get('accuracy', 0):.1%}", "#2c3e50", icon="crosshairs")
-            kpi_prec = make_kpi_card(Lang.PRECISION, f"{rep.get('1', {}).get('precision', 0):.1%}", "#8e44ad", icon="bullseye")
-            kpi_rec = make_kpi_card(Lang.RECALL, f"{rep.get('1', {}).get('recall', 0):.1%}", "#e67e22", icon="search-plus")
-            kpi_f1 = make_kpi_card(Lang.F1_SCORE, f"{rep.get('1', {}).get('f1-score', 0):.1%}", "#16a085", icon="balance-scale")
-            kpi_auto = make_kpi_card(Lang.AI_NOTE, f"{a_rating}/5", "#34495e", icon="flash")
+            kpi_acc  = make_kpi_card(Lang.ACCURACY, f"{rep.get('accuracy', 0):.1%}", "#2c3e50")
+            kpi_prec = make_kpi_card(Lang.PRECISION, f"{rep.get('1', {}).get('precision', 0):.1%}", "#8e44ad")
+            kpi_rec  = make_kpi_card(Lang.RECALL, f"{rep.get('1', {}).get('recall', 0):.1%}", "#e67e22")
+            kpi_f1   = make_kpi_card(Lang.F1_SCORE, f"{rep.get('1', {}).get('f1-score', 0):.1%}", "#16a085")
+            kpi_auto = make_kpi_card(Lang.AUTO_RATING, f"{a_rating}/5", "#34495e")
 
-            # Nota Humana Interativa no KPI
-            user_stars_container = widgets.HBox([], layout=widgets.Layout(margin='0', align_items='center'))
+            # Human rating with visible clickable stars
+            user_stars_container = widgets.HBox([], layout=widgets.Layout(margin='0'))
+            _stars_uid = hashlib.md5(str(hp.get('training_id','')+'stars').encode()).hexdigest()[:6]
             def _show_stars():
                 btns = []
                 for i in range(1, 6):
-                    btn = widgets.Button(description="" if i <= h_rating else "", 
-                                       layout=widgets.Layout(width='22px', height='22px', margin='0', padding='0'),
-                                       style={'button_color': '#f1c40f' if i <= h_rating else '#fff'})
+                    filled = i <= hp.get('rating', h_rating)
+                    btn = widgets.Button(description="★" if filled else "☆",
+                                       layout=widgets.Layout(width='28px', height='26px', margin='0', padding='0', font_size='18px'),
+                                       style={'button_color': '#f1c40f' if filled else '#eee', 'text_color': '#ffaa00' if filled else '#aaa'})
                     def _hnd_click(b, val=i):
-                        btn_ok = widgets.Button(description=Lang.OK, layout=widgets.Layout(width='35px', height='22px'), button_style='success')
-                        btn_no = widgets.Button(description=Lang.BTN_CLOSE, layout=widgets.Layout(width='25px', height='22px'), button_style='danger')
-                        def _do_ok(_):
-                            user_stars_container.children = [widgets.HTML("<i class='fa fa-spinner fa-spin'></i>")]
+                        btn_save = widgets.Button(description="★ Save", layout=widgets.Layout(width='70px', height='26px'), button_style='success')
+                        btn_cancel = widgets.Button(description=Lang.BTN_CLOSE, layout=widgets.Layout(width='30px', height='26px'), button_style='danger')
+                        def _do_save(_):
+                            user_stars_container.children = [widgets.HTML("<i>saving...</i>")]
                             if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
+                                hp['rating'] = val
                                 if ui: ui._refresh_canvas_hub()
-                                hp['rating'] = val; _show_stars()
-                            else: _show_stars()
-                        btn_ok.on_click(_do_ok); btn_no.on_click(lambda _: _show_stars())
-                        user_stars_container.children = [btn_no, btn_ok]
+                            _show_stars()
+                        btn_save.on_click(_do_save); btn_cancel.on_click(lambda _: _show_stars())
+                        user_stars_container.children = [btn_save, btn_cancel]
                     btn.on_click(_hnd_click); btns.append(btn)
                 user_stars_container.children = btns
-
             _show_stars()
-            kpi_human_box = widgets.VBox([
-                widgets.HTML(f"<div style='font-size: 10px; color: #7f8c8d; text-transform: uppercase; font-weight: bold; margin-bottom: 2px;'>{Lang.HUMAN_NOTE}</div>"),
-                user_stars_container
-            ], layout=widgets.Layout(background='white', padding='10px', border_left='5px solid #f1c40f', border_radius='4px', box_shadow='0 2px 4px rgba(0,0,0,0.08)', flex='1.5'))
 
-            unified_grid = widgets.HBox(
-                [kpi_acc, kpi_prec, kpi_rec, kpi_f1, kpi_auto, kpi_human_box],
-                layout=widgets.Layout(gap='8px', margin='10px 0', width='100%', flex_wrap='wrap')
-            )
+            kpi_human = widgets.VBox([
+                widgets.HTML(f"<div style='font-size:9px; color:#7f8c8d; text-transform:uppercase; font-weight:bold; margin-bottom:2px;'>{Lang.HUMAN_NOTE}</div>"),
+                user_stars_container
+            ], layout=widgets.Layout(border_left='4px solid #f1c40f', padding='6px 8px', background='white', border_radius='3px', box_shadow='0 1px 2px rgba(0,0,0,0.06)', flex='1.2', min_width='100px'))
+
+            row1 = widgets.HBox([kpi_acc, kpi_prec, kpi_rec], layout=widgets.Layout(gap='6px', margin='0 0 4px 0', width='100%'))
+            row2 = widgets.HBox([kpi_f1, kpi_auto, kpi_human], layout=widgets.Layout(gap='6px', margin='0', width='100%'))
+
+            # METRICS label + grid
+            unified_grid = widgets.VBox([
+                widgets.HTML(f"<div style='font-size:10px; color:#7f8c8d; text-transform:uppercase; font-weight:bold; margin-bottom:4px;'>{Lang.METRICS}</div>"),
+                row1, row2
+            ], layout=widgets.Layout(margin='8px 0'))
 
             # --- CARD HEADER & BODY ---
             display(HTML(render_model_card_html(hp, metrics, only_header=True)))
@@ -408,9 +413,36 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                 display(widgets.HBox([btn_retrain, widgets.HTML("<div style='width:20px'></div>"), del_out], 
                                     layout=widgets.Layout(margin='5px 0 15px 0', align_items='center')))
 
-            # --- GRUPOS DE GRÁFICOS ---
-            # 1. MÉTRICAS CLÁSSICAS (Incluindo Estáticas 3D)
-            classic_keys = ['cm', 'history', 'prob', 'pr', 'pca3d_static', 'tsne3d_static']
+                # Comment editor
+                comment_out = widgets.Output()
+                def _show_comment_ui():
+                    comment_out.clear_output()
+                    with comment_out:
+                        current = hp.get('comment', '')
+                        w_comment = widgets.Textarea(value=current, placeholder=Lang.NO_COMMENTS,
+                            layout=widgets.Layout(width='100%', height='60px', margin='4px 0'))
+                        btn_save_c = widgets.Button(description=Lang.COMMENTS_SAVE, button_style='success', layout=widgets.Layout(width='60px', height='24px'))
+                        btn_cancel_c = widgets.Button(description=Lang.COMMENTS_CANCEL, button_style='', layout=widgets.Layout(width='60px', height='24px'))
+                        def _do_save_comment(_):
+                            new_val = w_comment.value
+                            comment_out.clear_output()
+                            with comment_out: display(widgets.HTML("<i>saving...</i>"))
+                            if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'comment': new_val}):
+                                hp['comment'] = new_val
+                                if ui: ui._refresh_canvas_hub()
+                            comment_out.clear_output()
+                        btn_save_c.on_click(_do_save_comment)
+                        btn_cancel_c.on_click(lambda _: comment_out.clear_output())
+                        display(widgets.VBox([w_comment, widgets.HBox([btn_save_c, btn_cancel_c])]))
+
+                btn_edit_comment = widgets.Button(description=f"{Lang.COMMENTS_EDIT}...", button_style='info',
+                    layout=widgets.Layout(width='auto', height='24px'))
+                btn_edit_comment.on_click(lambda _: _show_comment_ui())
+                display(widgets.HBox([btn_edit_comment, comment_out], layout=widgets.Layout(margin='0 0 10px 0', align_items='center')))
+
+            # --- GRUPOS DE GRAFICOS ---
+            # 1. METRICAS CLASSICAS (incluindo estaticas 3D)
+            classic_keys = ['cm', 'history', 'prob', 'pr', 'pca3d_static']
             if any(viz_config.get(k) for k in classic_keys):
                 display(HTML(f"<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px;'> {Lang.CLASSIC_METRICS}</h4>"))
                 
@@ -425,34 +457,21 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                                           coords_override=tsne_coords_final if viz_config.get('tsne3d_static') else (pca_coords_final if viz_config.get('pca3d_static') or viz_config.get('pca2d') else None), 
                                           viz_config=viz_config)
 
-            # 2. ESPAÇO LATENTE (INTERATIVO SIDE-BY-SIDE)
-            latent_keys = ['pca3d', 'tsne3d']
-            if any(viz_config.get(k) for k in latent_keys):
-                display(HTML(f"<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'> {Lang.INTERACTIVE_LATENT}</h4>"))
+            # 2. PCA 3D INTERATIVO
+            if viz_config.get('pca3d') and pca_coords_final is not None and len(pca_coords_final) > 0:
+                display(HTML(f"<h4 style='color:#7f8c8d; border-bottom:1px solid #eee; padding-bottom:5px; margin-top:20px;'> {Lang.PCA_3D_INTERACTIVE}</h4>"))
                 import plotly.graph_objects as go
                 fire_colorscale = [[0, '#2c3e50'], [0.5, '#bdc3c7'], [1, '#e67e22']]
                 
-                out_pca = widgets.Output(layout=widgets.Layout(width='50%'))
-                out_tsne = widgets.Output(layout=widgets.Layout(width='50%'))
-                display(widgets.HBox([out_pca, out_tsne], layout=widgets.Layout(width='100%')))
-
-                if viz_config.get('pca3d') and pca_coords_final is not None and len(pca_coords_final) > 0:
-                    fig_pca = go.Figure(data=[go.Scatter3d(
-                        x=pca_coords_final[:,0], y=pca_coords_final[:,1], z=pca_coords_final[:,2], mode='markers',
-                        marker=dict(size=3, color=preds_final, colorscale=fire_colorscale, opacity=0.7),
-                        text=[f"{l}<br>Pred: {p:.2%}" for l, p in zip(y_true_final, preds_final)]
-                    )])
-                    fig_pca.update_layout(title=Lang.PCA_3D_INTERACTIVE, margin=dict(l=0, r=0, b=0, t=30), height=400)
-                    with out_pca: display(HTML(fig_pca.to_html(include_plotlyjs=True, full_html=False)))
-
-                if viz_config.get('tsne3d') and tsne_coords_final is not None and len(tsne_coords_final) > 0:
-                    fig_tsne = go.Figure(data=[go.Scatter3d(
-                        x=tsne_coords_final[:,0], y=tsne_coords_final[:,1], z=tsne_coords_final[:,2], mode='markers',
-                        marker=dict(size=3, color=preds_final, colorscale=fire_colorscale, opacity=0.7),
-                        text=[f"{l}<br>Pred: {p:.2%}" for l, p in zip(y_true_final, preds_final)]
-                    )])
-                    fig_tsne.update_layout(title=Lang.TSNE_3D_INTERACTIVE, margin=dict(l=0, r=0, b=0, t=30), height=400)
-                    with out_tsne: display(HTML(fig_tsne.to_html(include_plotlyjs=True, full_html=False)))
+                n = min(500, len(preds_final))
+                fig_pca = go.Figure(data=[go.Scatter3d(
+                    x=pca_coords_final[:n,0], y=pca_coords_final[:n,1], z=pca_coords_final[:n,2], mode='markers',
+                    marker=dict(size=3, color=preds_final[:n], colorscale=fire_colorscale, opacity=0.8, colorbar=dict(title='Prob')),
+                    hovertemplate='Prob: %{marker.color:.3f}<extra></extra>'
+                )])
+                fig_pca.update_layout(title=Lang.PCA_3D_INTERACTIVE, margin=dict(l=0, r=0, b=0, t=30), height=400,
+                    scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3'))
+                display(HTML(fig_pca.to_html(include_plotlyjs=True, full_html=False)))
 
             # --- TENSORBOARD PROJECTOR ---
             # (Opcional: Adicionar links se necessário)

@@ -512,9 +512,14 @@ class L:
     PRECISION = "Precision"
     RECALL = "Recall"
     F1_SCORE = "F1-Score"
-    AI_NOTE = "AI Note"
-    HUMAN_NOTE = "Human Note"
+    AUTO_RATING = "Auto Rating"
+    HUMAN_NOTE = "Your Rating"
     NO_METRICS = "No metrics"
+    METRICS = "Metrics"
+    SAVE_RATING = "Save"
+    COMMENTS_EDIT = "Edit"
+    COMMENTS_SAVE = "Save"
+    COMMENTS_CANCEL = "Cancel"
     CONFUSION_MATRIX = "Confusion Matrix (%)"
     HISTORICAL_EVOLUTION = "Historical Evolution"
     PROB_DISTRIBUTION = "Probability Distribution"
@@ -1016,7 +1021,7 @@ STRINGS_ES = {
     "PRECISION": "Precisión",
     "RECALL": "Exhaustividad",
     "F1_SCORE": "F1-Score",
-    "AI_NOTE": "Nota IA",
+    "AUTO_RATING": "Nota Automatica",
     "HUMAN_NOTE": "Nota Humana",
     "NO_METRICS": "Sin métricas",
     "CONFUSION_MATRIX": "Matriz de Confusión (%)",
@@ -1515,7 +1520,7 @@ STRINGS_PT = {
     "PRECISION": "Precisão",
     "RECALL": "Recall",
     "F1_SCORE": "F1-Score",
-    "AI_NOTE": "Nota IA",
+    "AUTO_RATING": "Nota Automatica",
     "HUMAN_NOTE": "Nota Humana",
     "NO_METRICS": "Sem métricas",
     "CONFUSION_MATRIX": "Matriz de Confusão (%)",
