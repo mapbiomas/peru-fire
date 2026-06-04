@@ -123,15 +123,15 @@ class ModelTrainerUI(PipelineStepUI):
         self.extraction_area = self._build_extraction_matrix()
         
         self.new_training_tab = widgets.VBox([
-            widgets.HTML(f"<h2 style='color:#2c3e50;'> 1. {Lang.SAMPLE_SELECTION}</h2>"),
+            widgets.HTML(f"<h2 style='color:#2c3e50; margin-bottom:5px;'> 1. {Lang.SAMPLE_SELECTION}</h2>"),
             self.samples_area,
-            widgets.HTML(f"<br><h2 style='color:#2c3e50;'> 2. {Lang.EXTRACTION_TITLE}</h2>"),
+            widgets.HTML(f"<h2 style='color:#2c3e50; margin-top:10px; margin-bottom:5px;'> 2. {Lang.EXTRACTION_TITLE}</h2>"),
             self.extraction_area,
-            widgets.HTML(f"<br><h2 style='color:#2c3e50;'> 3. {Lang.MODEL_CONFIG}</h2>"),
+            widgets.HTML(f"<h2 style='color:#2c3e50; margin-top:10px; margin-bottom:5px;'> 3. {Lang.MODEL_CONFIG}</h2>"),
             hp_sec,
-            widgets.HTML(f"<br><h2 style='color:#2c3e50;'> 4. {Lang.GCS_DEST}</h2>"),
+            widgets.HTML(f"<h2 style='color:#2c3e50; margin-top:10px; margin-bottom:5px;'> 4. {Lang.GCS_DEST}</h2>"),
             dest_sec,
-        ], layout=widgets.Layout(padding='20px', background_color='white'))
+        ], layout=widgets.Layout(padding='10px', background_color='white'))
         
         # 2. CANVAS (Visualização + Ranking Sidebar)
         # --- SIDEBAR (ESQUERDA) ---
@@ -335,29 +335,27 @@ class ModelTrainerUI(PipelineStepUI):
         ], layout=L(gap='4px', margin='0 0 5px 0', width='100%', align_items='center'))
 
         self.available_samples_container = widgets.VBox([], layout=L(
-            border='1px solid #ddd', height='300px', overflow_y='auto', padding='0'
+            border='1px solid #ddd', height='150px', overflow_y='auto', padding='0'
         ))
         self.selected_samples_container = widgets.VBox([], layout=L(
-            border='1px solid #ddd', height='300px', overflow_y='auto', padding='0'
+            border='1px solid #ddd', height='150px', overflow_y='auto', padding='0'
         ))
 
         left_pane = widgets.VBox([
             widgets.HTML(f"<b style='font-size:12px; color:#555;'> {Lang.AVAILABLE}</b>"),
-            sample_toolbar,
             self.available_samples_container
         ], layout=L(flex='1'))
 
         right_pane = widgets.VBox([
             widgets.HTML(f"<b style='font-size:12px; color:#555;'>[OK] {Lang.SELECTED}</b>"),
-            widgets.HTML("<div style='height:42px;'></div>"), # Alinhador com a toolbar
             self.selected_samples_container
         ], layout=L(flex='1'))
 
-        dual_pane = widgets.HBox([left_pane, right_pane], layout=L(gap='20px', padding='10px'))
+        dual_pane = widgets.HBox([left_pane, right_pane], layout=L(gap='20px', padding='5px 10px 10px 10px'))
         
         self._refresh_samples_panes()
         
-        return widgets.VBox([css, dual_pane])
+        return widgets.VBox([css, sample_toolbar, dual_pane])
 
     def _refresh_samples_panes(self, force_gcs=False):
         L = widgets.Layout

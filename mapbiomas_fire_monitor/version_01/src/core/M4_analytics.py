@@ -245,8 +245,16 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
         if not m_path:
             m_path = f"{gcs_models_path()}/{model_info['training_id']}"
         m_path = urllib.parse.unquote(m_path)
-        clean_path = m_path.replace('gs://', '').replace(f"{CONFIG['bucket']}/", '').lstrip('/')
-        if 'b/' in clean_path and '/o/' in clean_path: clean_path = clean_path.split('/o/')[-1]
+        clean_path = m_path
+        # Handle gs://bucket/ prefix
+        gs_prefix = f'gs://{CONFIG["bucket"]}/'
+        if clean_path.startswith(gs_prefix):
+            clean_path = clean_path[len(gs_prefix):]
+        # Handle gcsfs internal path: b/<bucket>/o/<path>
+        elif '/o/' in clean_path:
+            idx = clean_path.find('/o/')
+            clean_path = clean_path[idx + 3:]
+        clean_path = clean_path.lstrip('/')
 
         # clean_path pode ser o dir do modelo ou ja apontar para metadata.json
         meta_suffix = '/metadata.json'
