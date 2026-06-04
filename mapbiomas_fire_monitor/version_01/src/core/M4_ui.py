@@ -427,7 +427,8 @@ class ModelTrainerUI(PipelineStepUI):
             background_color='#fff', border_radius='4px', max_height='400px', 
             overflow_y='auto', overflow_x='auto'
         ))
-        
+
+        header = widgets.HTML(f"<b style='font-size:14px; color:#2c3e50;'>{Lang.EXTRACTION_TITLE}</b>")
         return widgets.VBox([header, matrix_vbox])
 
     def _build_hp_section(self):
@@ -512,11 +513,6 @@ class ModelTrainerUI(PipelineStepUI):
             self._sync_repository(show_loader=False, force_refresh=True)
         except Exception as e:
             print(f"  [WARN] Repo sync: {e}")
-        try:
-            if hasattr(self, '_matrices'):
-                self._refresh_matrix_only()
-        except Exception:
-            pass
         print(Lang.REPO_SCAN_DONE)
 
     def _sync_repository(self, show_loader=False, force_refresh=False):
