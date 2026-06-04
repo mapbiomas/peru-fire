@@ -113,7 +113,7 @@ class ModelTrainerUI(PipelineStepUI):
     def display(self):
         # Ensure locale matches GLOBAL_OPTS
         lang = GLOBAL_OPTS.get('LANGUAGE', 'en')
-        L.load_locale(lang)
+        Lang.load_locale(lang)
         # 1. NOVO TREINO (Fluxo Completo)
         hp_sec = self._build_hp_section()
         dest_sec = self._build_dest_section()
