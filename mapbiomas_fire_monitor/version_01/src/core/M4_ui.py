@@ -19,7 +19,8 @@ class ModelTrainerUI(PipelineStepUI):
             description=Lang.CANVAS_TITLE
         )
         self.trainer_instance = None
-        self.chk_dict = {}
+        self.chk_dict = {}  # legacy
+        self._selected_samples = set()
         self.search_query_samples = ""
         self.search_query_models = "" 
         self.sort_column = "acc"      
@@ -88,8 +89,7 @@ class ModelTrainerUI(PipelineStepUI):
         
         # Muestras
         sc = hp.get('sample_collections', [])
-        for name, chk in self.chk_dict.items():
-            chk.value = name in sc
+        self._selected_samples = set(sc)
             
         # Bandas
         b_cfg = hp.get('bands_config', {})
@@ -212,192 +212,112 @@ class ModelTrainerUI(PipelineStepUI):
             trainings=Lang.TRAININGS
         ))
 
-    def _on_select_all_samples(self, _):
-        """Seleciona apenas as amostras que estão visíveis pelo filtro."""
-        visible_keys = [s for s in self.chk_dict.keys() if self.search_query_samples.lower() in s.lower()]
-        for k in visible_keys:
-            self.chk_dict[k].value = True
-
-    def _on_select_none_samples(self, _):
-        """Deselect all samples."""
-        for k in self.chk_dict:
-            self.chk_dict[k].value = False
-
-    def _on_search_samples_change(self, change):
-        self.search_query_samples = change['new']
-        self._refresh_samples_panes()
-
-    def _on_search_models_change(self, change):
-        self.canvas_search_query = change['new']
-        self._refresh_canvas_hub()
-
-    def _on_sort_change(self, change):
-        if change['name'] == 'value':
-            self.canvas_sort_col = change['new']
-            self._refresh_canvas_hub()
-            
-    def _on_sort_order_change(self, change):
-        self.canvas_sort_asc = not self.canvas_sort_asc
-        self._refresh_canvas_hub()
-
-    def _on_intent_cb_change(self, change):
-        """Ensures exclusivity between retraining intent checkboxes."""
-        if not change['new']: return
-        owner = change['owner']
-        for cb in [self.cb_retrain, self.cb_reextract, self.cb_borrar_retrain]:
-            if cb != owner:
-                cb.unobserve(self._on_intent_cb_change, names='value')
-                cb.value = False
-                cb.observe(self._on_intent_cb_change, names='value')
-        
-        # Update retrain_intent mode
-        mode = 'retrain' if self.cb_retrain.value else \
-               're-extract' if self.cb_reextract.value else \
-               'borrar' if self.cb_borrar_retrain.value else None
-        self.retrain_intent['mode'] = mode
-
-    def _refresh_matrix_only(self):
-        """Atualiza especificamente a seção da matriz de extração."""
-        if hasattr(self, 'extraction_matrix_container'):
-            new_matrix = self._build_extraction_matrix()
-            self.extraction_matrix_container.children = [new_matrix]
-
-    def _build_matrix_content(self, force_gcs=False):
-        """Constrói apenas a lista de linhas filtradas."""
-        L = widgets.Layout
-        if force_gcs or not hasattr(self, '_cached_samples'):
-            self._cached_samples = list_sample_collections_gcs()
-        samples_available = self._cached_samples
-        matrix_rows = []
-        
-        for s in samples_available:
-            if self.search_query_samples and self.search_query_samples.lower() not in s.lower():
-                continue
-                
-            if s not in self.chk_dict:
-                self.chk_dict[s] = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
-            
-            chk = self.chk_dict[s]
-            status_cell = PipelineStepUI.make_status_cell(chk, 'OK', 'mfm-ok', width='120px')
-            
-            row = widgets.HBox([
-                widgets.HTML(f'<div style="width:350px;font-family:monospace;">{s}</div>'),
-                status_cell
-            ], layout=L(align_items='center', margin='2px 0', border_bottom='1px solid #dee2e6'))
-            matrix_rows.append(row)
-            
-        if not matrix_rows:
-            return make_empty_state(Lang.NO_SAMPLES, padding='10px')
-            
-        return widgets.VBox(matrix_rows)
-
     def _build_matrix(self):
         L = widgets.Layout
         css = PipelineStepUI.get_status_css()
-        
-        # BARRA DE BUSCA E SELETOR DE CAMPANHA
-        self.txt_search_samples = widgets.Text(
-            value=self.search_query_samples,
-            placeholder=Lang.SEARCH_SAMPLES,
-            layout=L(width='100%')
-        )
-        self.txt_search_samples.observe(self._on_search_samples_change, names='value')
 
+        # State: simple sets
+        if not hasattr(self, '_selected_samples'):
+            self._selected_samples = set()
+        if not hasattr(self, '_available_samples'):
+            self._available_samples = set()
+
+        def _load_samples():
+            self._available_samples = set(list_sample_collections_gcs())
+
+        if not self._available_samples:
+            _load_samples()
+
+        # Campaign dropdown
         self.w_campaign = widgets.Dropdown(
             options=list_campaigns_gcs(),
             value=self.sampling_campaign,
-            layout=L(width='150px'),
-            style={'description_width': 'initial'}
+            layout=L(width='150px')
         )
-        
         def _on_campaign_change(change):
-            from M0_auth_config import GLOBAL_OPTS, CONFIG
-            new_c = change['new']
-            CONFIG['campaign'] = new_c
-            self.sampling_campaign = new_c
-            # Limpa cache de sample_collections para forçar refresh real
+            self.sampling_campaign = change['new']
+            CONFIG['campaign'] = change['new']
             state = CacheManager.get_state()
             if state.get('sample_collections'):
                 state['sample_collections'] = []
                 CacheManager._state = state
                 CacheManager.save()
-            # Invalida cache local e refresh UI
-            if hasattr(self, '_cached_samples'):
-                del self._cached_samples
-            self._refresh_samples_panes(force_gcs=True)
-            
+            if hasattr(self, '_cached_samples'): del self._cached_samples
+            _load_samples()
+            self._refresh_panes()
         self.w_campaign.observe(_on_campaign_change, names='value')
 
-        btn_all, btn_none, _ = make_select_all_none(self._on_select_all_samples, self._on_select_none_samples)
-        
-        self.txt_search_samples.layout.flex = '1'
-        sample_toolbar = widgets.HBox([
-            widgets.HTML(f"<b style='margin-right:5px;'>{Lang.CAMPAIGN}:</b>"), 
-            self.w_campaign, 
-            widgets.HTML("<div style='width:10px'></div>"),
-            self.txt_search_samples, 
-            btn_all, btn_none
+        # Search + All/Clear buttons
+        self.txt_search_samples = widgets.Text(placeholder=Lang.SEARCH_SAMPLES, layout=L(width='200px'))
+        self.txt_search_samples.observe(lambda c: self._refresh_panes(), names='value')
+
+        btn_all = widgets.Button(description=Lang.ALL, icon='check-square',
+            button_style='info', layout=L(width='60px'))
+        btn_all.on_click(lambda _: [self._selected_samples.add(s) for s in self._get_filtered_available()] or self._refresh_panes())
+
+        btn_clear = widgets.Button(description=Lang.CLEAR, icon='square-o',
+            button_style='warning', layout=L(width='60px'))
+        btn_clear.on_click(lambda _: self._selected_samples.clear() or self._refresh_panes())
+
+        # Available pane
+        self.available_pane = widgets.VBox([], layout=L(
+            border='1px solid #ddd', height='150px', overflow_y='auto', padding='0'))
+
+        # Selected pane
+        self.selected_pane = widgets.VBox([], layout=L(
+            border='1px solid #ddd', height='150px', overflow_y='auto', padding='0'))
+
+        def _refresh_panes():
+            q = (self.txt_search_samples.value or '').lower()
+            available = sorted([s for s in self._available_samples if q in s.lower() and s not in self._selected_samples])
+            selected = sorted(self._selected_samples)
+
+            avail_btns = []
+            for s in available:
+                btn = widgets.Button(description=s, layout=L(width='100%', min_height='26px', margin='1px 0'),
+                    style={'button_color': '#f8f9fa'})
+                btn.on_click(lambda _, name=s: (self._selected_samples.add(name), _refresh_panes()))
+                avail_btns.append(btn)
+            self.available_pane.children = avail_btns
+
+            sel_btns = []
+            for s in selected:
+                btn = widgets.Button(description=s, layout=L(width='100%', min_height='26px', margin='1px 0'),
+                    style={'button_color': '#e3f2fd'})
+                btn.on_click(lambda _, name=s: (self._selected_samples.discard(name), _refresh_panes()))
+                sel_btns.append(btn)
+            self.selected_pane.children = sel_btns
+
+        self._refresh_panes = _refresh_panes
+
+        def _get_filtered_available(self=None):
+            q = (self.txt_search_samples.value or '').lower()
+            return [s for s in self._available_samples if q in s.lower() and s not in self._selected_samples]
+        self._get_filtered_available = _get_filtered_available
+
+        # Toolbar
+        toolbar = widgets.HBox([
+            widgets.HTML(f"<b style='margin-right:5px;'>{Lang.CAMPAIGN}:</b>"),
+            self.w_campaign,
+            widgets.HTML("<div style='width:10px;'></div>"),
+            self.txt_search_samples,
+            btn_all, btn_clear
         ], layout=L(gap='4px', margin='0 0 5px 0', width='100%', align_items='center'))
 
-        self.available_samples_container = widgets.VBox([], layout=L(
-            border='1px solid #ddd', height='150px', overflow_y='auto', padding='0'
-        ))
-        self.selected_samples_container = widgets.VBox([], layout=L(
-            border='1px solid #ddd', height='150px', overflow_y='auto', padding='0'
-        ))
-
+        # Dual pane
         left_pane = widgets.VBox([
-            widgets.HTML(f"<b style='font-size:12px; color:#555;'> {Lang.AVAILABLE}</b>"),
-            self.available_samples_container
+            widgets.HTML(f"<b style='font-size:12px; color:#555;'>{Lang.AVAILABLE}</b>"),
+            self.available_pane
         ], layout=L(flex='1'))
-
         right_pane = widgets.VBox([
             widgets.HTML(f"<b style='font-size:12px; color:#555;'>[OK] {Lang.SELECTED}</b>"),
-            self.selected_samples_container
+            self.selected_pane
         ], layout=L(flex='1'))
 
         dual_pane = widgets.HBox([left_pane, right_pane], layout=L(gap='20px', padding='5px 10px 10px 10px'))
-        
-        self._refresh_samples_panes()
-        
-        return widgets.VBox([css, sample_toolbar, dual_pane])
 
-    def _refresh_samples_panes(self, force_gcs=False):
-        L = widgets.Layout
-        if force_gcs or not hasattr(self, '_cached_samples'):
-            self._cached_samples = list_sample_collections_gcs()
-        samples_available = self._cached_samples
-        
-        # Left Pane (Available)
-        available_widgets = []
-        for s in samples_available:
-            if self.search_query_samples and self.search_query_samples.lower() not in s.lower():
-                continue
-            if s in self.chk_dict and self.chk_dict[s].value:
-                continue # Already selected
-                
-            btn = widgets.Button(description=f"{Lang.PLUS}{s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#f8f9fa'})
-            def _add(b, name=s):
-                if name not in self.chk_dict: self.chk_dict[name] = widgets.Checkbox(value=False)
-                self.chk_dict[name].value = True
-                self._refresh_samples_panes()
-            btn.on_click(_add)
-            available_widgets.append(btn)
-        
-        self.available_samples_container.children = available_widgets
-
-        # Right Pane (Selected)
-        selected_widgets = []
-        for s, chk in self.chk_dict.items():
-            if chk.value:
-                btn = widgets.Button(description=f" {s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#e3f2fd'})
-                def _remove(b, name=s):
-                    self.chk_dict[name].value = False
-                    self._refresh_samples_panes()
-                btn.on_click(_remove)
-                selected_widgets.append(btn)
-        
-        self.selected_samples_container.children = selected_widgets
+        _refresh_panes()
+        return widgets.VBox([css, toolbar, dual_pane])
 
     def _build_extraction_matrix(self):
         """Constrói a matriz dinâmica priorizando o cache local 'state.json'."""
@@ -537,10 +457,6 @@ class ModelTrainerUI(PipelineStepUI):
         def _hook_smart_naming(change):
             self._auto_generate_shortname()
             
-        # Bind to samples
-        for chk in self.chk_dict.values():
-            chk.observe(_hook_smart_naming, names='value')
-            
         # Bind to bands
         for chk in self.band_chk_map.values():
             chk.observe(_hook_smart_naming, names='value')
@@ -568,7 +484,9 @@ class ModelTrainerUI(PipelineStepUI):
         except Exception as e:
             print(f"  [WARN] Cache sync: {e}")
         try:
-            self._refresh_samples_panes(force_gcs=True)
+            self._available_samples = set(list_sample_collections_gcs())
+            if hasattr(self, '_refresh_panes') and self._refresh_panes:
+                self._refresh_panes()
         except Exception as e:
             print(f"  [WARN] Samples sync: {e}")
         try:
@@ -820,7 +738,7 @@ class ModelTrainerUI(PipelineStepUI):
 
     
     def _auto_generate_shortname(self, *_):
-        selected_samples = [name for name, chk in self.chk_dict.items() if chk.value]
+        selected_samples = sorted(self._selected_samples)
         if not selected_samples:
             self.w_shortname.value = ""
             return
@@ -989,7 +907,7 @@ def start_training(ui):
     
     # 2 Get parameters from UI
     if not intent.get('mode') or not hp:
-        selected_samples = [name for name, chk in ui.chk_dict.items() if chk.value]
+        selected_samples = sorted(ui._selected_samples)
 
     if not selected_samples:
         print(Lang.ERR_NO_SAMPLES)
