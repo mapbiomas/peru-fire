@@ -8,7 +8,7 @@ from datetime import datetime
 import numpy as np
 import rasterio
 from osgeo import gdal
-from M0_auth_config import CONFIG, _get_fs, _gcs_download, _gcs_upload, get_temp_dir
+from M0_auth_config import CONFIG, _get_fs, _gcs_download, _gcs_upload, get_temp_dir, gcs_classifications_path
 from M5_workplan import (
     classified_tiles_dir, classified_region_dir, region_path,
     consolidated_stats_path, classifications_base,
@@ -217,7 +217,7 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
     if logger:
         logger(f"    Setting up GEE folders...")
 
-    base = CONFIG['asset_monitor_base']
+    base = CONFIG['gee_campaigns_prefix']
     campaign = CONFIG.get('campaign', 'MONITOR_01')
     for sub in [f'{campaign}/LIBRARY_CLASSIFICATIONS', f'{campaign}/LIBRARY_CLASSIFICATIONS/REGIONAL']:
         try:
@@ -293,7 +293,7 @@ def gee_asset_exists(model_id, region, period, campaign=None):
     """Check if GEE asset ja existe."""
     import ee
     camp = campaign or CONFIG.get('campaign', 'MONITOR_01')
-    parent = f"{CONFIG['asset_monitor_base']}/{camp}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
+    parent = f"{CONFIG['gee_campaigns_prefix']}/{camp}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
     asset_id = f"{parent}/{region}_{period}"
     try:
         ee.data.getAsset(asset_id)
@@ -306,7 +306,7 @@ def load_gee_assets(model_id):
     """Retorna set de region_period que ja existem no GEE para este modelo. 1 chamada GEE."""
     import ee
     camp = CONFIG.get('campaign', 'MONITOR_01')
-    parent = f"{CONFIG['asset_monitor_base']}/{camp}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
+    parent = f"{CONFIG['gee_campaigns_prefix']}/{camp}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
     assets = set()
     try:
         result = ee.data.listAssets({'parent': parent})
@@ -484,7 +484,7 @@ def cleanup_old_m5_stats(fs=None, logger=print):
     from M_gcs import rm as gcs_rm, exists as gcs_exists
     if fs is None:
         fs = _get_fs()
-    base = f"{CONFIG['bucket']}/{CONFIG['gcs_library_classifications']}"
+    base = f"{CONFIG['bucket']}/{gcs_classifications_path()}"
 
     for model_dir in fs.glob(f"{base}/*/"):
         stats_dir = f"{model_dir.rstrip('/')}/STATS"

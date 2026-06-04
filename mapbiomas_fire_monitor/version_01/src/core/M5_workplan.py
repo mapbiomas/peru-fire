@@ -2,7 +2,7 @@ import os
 import json
 import time
 import datetime
-from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs
+from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs, gcs_classifications_path, gcs_models_path
 
 # --- Stale lock cleanup on startup ---
 _lock_path_stale = os.path.join(
@@ -90,9 +90,9 @@ def new_job(model, region, period, task_name=''):
 
 def classifications_base(model_id, campaign=None):
     if campaign is None or campaign == CONFIG.get('campaign', 'MONITOR_01'):
-        base = CONFIG['gcs_library_classifications']
+        base = gcs_classifications_path()
     else:
-        base = f"{CONFIG['gcs_catalog_prefix']}/{campaign}/LIBRARY_CLASSIFICATIONS"
+        base = gcs_classifications_path(campaign)
     return f"{base}/{model_id}" if model_id else f"{base}/"
 
 def classified_tiles_dir(model_id, campaign=None):
@@ -187,8 +187,8 @@ def list_tareas(fs=None):
 # --- GCS WORKPLAN (PENDING / ARCHIVED POR MODELO) ---
 
 def _workplan_dir(model_id):
-    """GCS relativo: LIBRARY_MODELS/<model_id>/workplan/"""
-    return f"{CONFIG['gcs_library_models']}/{model_id}/workplan"
+    """GCS relativo: {campaign}/LIBRARY_MODELS/<model_id>/workplan/"""
+    return f"{gcs_models_path()}/{model_id}/workplan"
 
 def _pending_dir(model_id):
     return f"{_workplan_dir(model_id)}/pending"
@@ -327,7 +327,7 @@ def load_all_pending_from_gcs(fs=None):
     if fs is None:
         fs = _get_fs()
     # Ex: gs://bucket/sudamerica/peru/CATALOG_01/LIBRARY_MODELS/*/workplan/pending/*.json
-    pattern = gcs_full(CONFIG['gcs_library_models']) + '/*/workplan/pending/*.json'
+    pattern = gcs_full(gcs_models_path()) + '/*/workplan/pending/*.json'
     results = {}
     try:
         files = fs.glob(pattern)

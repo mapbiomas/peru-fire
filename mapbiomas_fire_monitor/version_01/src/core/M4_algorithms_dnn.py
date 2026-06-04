@@ -4,7 +4,7 @@ import numpy as np
 from datetime import datetime
 TF_AVAILABLE = None
 TF_ERROR = None
-from M0_auth_config import CONFIG, GLOBAL_OPTS, model_path
+from M0_auth_config import CONFIG, GLOBAL_OPTS, model_path, gcs_samples_path
 from M_cache import _get_fs
 
 from M4_data_extractor import compute_normalizer, normalize
@@ -431,7 +431,7 @@ class ModelTrainer:
         collections = getattr(self, '_sample_collections', [])
         for coll in collections:
             campaign = CONFIG.get('campaign', 'MONITOR_01')
-            src = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{coll}.csv"
+            src = f"{CONFIG['bucket']}/{gcs_samples_path()}/{coll}.csv"
             dest = f"{CONFIG['bucket']}/{base_path}/samples/{coll}.csv"
             try:
                 copy(src, dest)

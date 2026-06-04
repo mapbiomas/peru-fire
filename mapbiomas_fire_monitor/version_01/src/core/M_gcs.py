@@ -63,12 +63,11 @@ def _get_fs():
     except ImportError:
         from M0_auth_config import CONFIG
         _GCS_CREDENTIALS = None
-    project = CONFIG.get('gcs_project', 'mapbiomas-fire-485203')
     if _GCS_CREDENTIALS is not None:
         return gcsfs.GCSFileSystem(
-            project=project, token=_GCS_CREDENTIALS, requests_timeout=60
+            token=_GCS_CREDENTIALS, requests_timeout=60
         )
-    return gcsfs.GCSFileSystem(project=project, requests_timeout=60)
+    return gcsfs.GCSFileSystem(requests_timeout=60)
 
 
 # ─── public API ─────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ from M0_auth_config import (
     CONFIG, mosaic_name, _get_fs,
     monthly_chunk_path, monthly_mosaic_path, monthly_cog_path,
     yearly_chunk_path, yearly_mosaic_path, yearly_cog_path,
-    gcs_chunks_prefix, get_temp_dir, check_command_exists
+    get_temp_dir, check_command_exists
 )
 from M_gcs import upload
 

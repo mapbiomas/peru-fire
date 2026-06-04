@@ -2,7 +2,7 @@ import os
 import base64
 from IPython.display import display, HTML, clear_output
 import ipywidgets as widgets
-from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs
+from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs, gcs_models_path
 from M5_workplan import load_workplan, save_workplan, make_job_id, new_job, gcs_full, classified_tiles_dir, \
     tarea_path, save_tarea, delete_tarea, list_tareas, \
     save_pending_job_to_gcs, delete_pending_job_gcs, \
@@ -694,7 +694,7 @@ class M5WorkplanUI:
             return self._model_meta_cache[model_name]
         try:
             fs = _get_fs()
-            meta_path = f"gs://{CONFIG['bucket']}/{CONFIG['gcs_library_models']}/{model_name}/metadata.json"
+            meta_path = f"gs://{CONFIG['bucket']}/{gcs_models_path()}/{model_name}/metadata.json"
             if fs.exists(meta_path):
                 with fs.open(meta_path, 'r') as f:
                     meta = json.load(f)

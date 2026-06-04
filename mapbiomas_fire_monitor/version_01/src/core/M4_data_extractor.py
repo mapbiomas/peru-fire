@@ -6,7 +6,7 @@ import geopandas as gpd
 from shapely.geometry import shape
 import rasterio
 from rasterio.mask import mask
-from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
+from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path, gcs_samples_path
 from M_cache import CacheManager, _get_fs
 
 
@@ -21,7 +21,7 @@ def list_sample_collections_gcs(force_refresh=False):
     try:
         from M0_auth_config import CONFIG, GLOBAL_OPTS
         fs = _get_fs()
-        path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}"
+        path = f"{CONFIG['bucket']}/{gcs_samples_path()}"
 
         if not fs.exists(path):
             return []
@@ -42,7 +42,7 @@ def list_campaigns_gcs():
     try:
         from M0_auth_config import CONFIG
         fs = _get_fs()
-        path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}"
+        path = f"{CONFIG['bucket']}/{gcs_samples_path()}"
         if not fs.exists(path):
             return ['monitor_01']
         
@@ -74,7 +74,7 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
     
     dfs = []
     for group in sample_groups:
-        sample_path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{group}.csv"
+        sample_path = f"{CONFIG['bucket']}/{gcs_samples_path()}/{group}.csv"
         if logger: logger(f"Leyendo muestras: {group}.csv", "info")
         try:
             with fs.open(sample_path, 'r') as f:

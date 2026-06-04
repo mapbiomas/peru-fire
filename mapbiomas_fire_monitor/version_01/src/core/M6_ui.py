@@ -5,7 +5,7 @@ import time
 import base64
 from IPython.display import display, HTML, clear_output
 import ipywidgets as widgets
-from M0_auth_config import CONFIG, _get_fs
+from M0_auth_config import CONFIG, _get_fs, gcs_classifications_path
 from M5_workplan import gcs_full, consolidated_stats_path, region_path
 from M6_publisher import discover_classified_groups, gee_asset_exists, stats_row_exists, load_gee_assets, load_stats_done
 from M_cache import CacheManager
@@ -29,7 +29,7 @@ class M6WorkplanUI:
         self._gee_assets = set()
         self._stats_done = set()
         self._stats_data = []
-        self.lc_base = CONFIG['gcs_library_classifications']
+        self.lc_base = gcs_classifications_path()
         self._thumbnails = {}
         self._publish_checks = {}
 
