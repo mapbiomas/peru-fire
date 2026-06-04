@@ -538,6 +538,11 @@ class ModelTrainerUI(PipelineStepUI):
                         if clean_path.startswith(bucket_prefix):
                             clean_path = clean_path[len(bucket_prefix):]
                     clean_path = clean_path.lstrip('/')
+                    # Strip trailing filename if present (gcsfs paths include it)
+                    if clean_path.endswith('/metadata.json'):
+                        clean_path = clean_path[:-len('/metadata.json')]
+                    elif clean_path.endswith('/metrics.json'):
+                        clean_path = clean_path[:-len('/metrics.json')]
                     with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f:
                         meta = json.load(f)
                     try:
