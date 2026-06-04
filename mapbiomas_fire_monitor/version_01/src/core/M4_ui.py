@@ -521,9 +521,20 @@ class ModelTrainerUI(PipelineStepUI):
             if m_id not in metadata_cache or force_refresh:
                 try:
                     from M0_auth_config import CONFIG
+                    import urllib.parse
                     m_path = cache.get('meta', {}).get(m_id, {}).get('path', '')
                     if not m_path: continue
-                    clean_path = m_path.replace('gs://', '').replace(f"{CONFIG['bucket']}/", '').lstrip('/')
+                    clean_path = urllib.parse.unquote(m_path)
+                    gs_prefix = f'gs://{CONFIG["bucket"]}/'
+                    if clean_path.startswith(gs_prefix):
+                        clean_path = clean_path[len(gs_prefix):]
+                    elif '/o/' in clean_path:
+                        idx = clean_path.find('/o/')
+                        clean_path = clean_path[idx + 3:]
+                        bucket_prefix = f"{CONFIG['bucket']}/"
+                        if clean_path.startswith(bucket_prefix):
+                            clean_path = clean_path[len(bucket_prefix):]
+                    clean_path = clean_path.lstrip('/')
                     with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f:
                         meta = json.load(f)
                     try:

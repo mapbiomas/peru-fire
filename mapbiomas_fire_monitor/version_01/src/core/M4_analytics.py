@@ -250,10 +250,13 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
         gs_prefix = f'gs://{CONFIG["bucket"]}/'
         if clean_path.startswith(gs_prefix):
             clean_path = clean_path[len(gs_prefix):]
-        # Handle gcsfs internal path: b/<bucket>/o/<path>
+        # Handle gcsfs internal path: b/<bucket>/o/<bucket>/<path>
         elif '/o/' in clean_path:
             idx = clean_path.find('/o/')
             clean_path = clean_path[idx + 3:]
+            bucket_prefix = f"{CONFIG['bucket']}/"
+            if clean_path.startswith(bucket_prefix):
+                clean_path = clean_path[len(bucket_prefix):]
         clean_path = clean_path.lstrip('/')
 
         # clean_path pode ser o dir do modelo ou ja apontar para metadata.json
