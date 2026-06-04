@@ -1,5 +1,6 @@
 import os, io
 import json
+import hashlib
 import numpy as np
 import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML, Image
@@ -154,7 +155,6 @@ def render_model_card_html(hp, metrics, only_header=False):
     only_header=True: apenas o cabeçalho.
     only_header=False: card principal + card colapsável com todos os parâmetros.
     """
-    import hashlib
     _uid = hashlib.md5(str(hp.get('training_id', '')).encode()).hexdigest()[:8]
     style = """
     <style>
