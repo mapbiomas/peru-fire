@@ -231,10 +231,12 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
         viz_config = {k: True for k in ['title', 'scores', 'cm', 'history', 'prob', 'pr', 'pca2d', 'pca3d', 'tsne3d']}
     
     fs = _get_fs()
-    from M0_auth_config import CONFIG
+    from M0_auth_config import CONFIG, gcs_models_path
     try:
         import urllib.parse
-        m_path = model_info['path']
+        m_path = model_info.get('path')
+        if not m_path:
+            m_path = f"{gcs_models_path()}/{model_info['training_id']}"
         m_path = urllib.parse.unquote(m_path)
         clean_path = m_path.replace('gs://', '').replace(f"{CONFIG['bucket']}/", '').lstrip('/')
         if 'b/' in clean_path and '/o/' in clean_path: clean_path = clean_path.split('/o/')[-1]
