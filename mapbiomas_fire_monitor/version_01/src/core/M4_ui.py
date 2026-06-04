@@ -914,6 +914,10 @@ class ModelTrainerUI(PipelineStepUI):
                 if 'steps' in h and len(h['steps']) > 0:
                     max_steps = max(max_steps, len(h['steps']))
             self.w_global_slider.max = max_steps - 1
+            self.w_global_slider.unobserve(self._on_global_slider_change, names='value')
+            self.w_global_slider.value = max_steps - 1
+            self.canvas_slider_val = max_steps - 1
+            self.w_global_slider.observe(self._on_global_slider_change, names='value')
             
             # --- CONSTRUÇÃO DOS CARDS ---
             cards = []
