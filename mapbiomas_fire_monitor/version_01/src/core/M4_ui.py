@@ -787,7 +787,6 @@ class ModelTrainerUI(PipelineStepUI):
             'title': Lang.VIZ_METADATA, 'scores': Lang.VIZ_KPIS, 'cm': Lang.VIZ_CONFUSION, 
             'history': Lang.VIZ_HISTORY, 'prob': Lang.VIZ_PROB, 'pr': Lang.VIZ_PR_CURVE, 
             'pca2d': Lang.VIZ_PCA2D, 'pca3d_static': Lang.VIZ_PCA3D_STATIC, 'pca3d': Lang.VIZ_PCA3D_INTERACTIVE,
-            'tsne3d_static': Lang.VIZ_TSNE3D_STATIC, 'tsne3d': Lang.VIZ_TSNE3D_INTERACTIVE,
             'management': Lang.VIZ_MANAGEMENT
         }
         
@@ -814,10 +813,9 @@ class ModelTrainerUI(PipelineStepUI):
         row1 = _make_row(Lang.VIZ_METADATA, ['title', 'scores'])
         row2 = _make_row(Lang.BASIC_STATS, ['cm', 'history', 'prob', 'pr'])
         row3 = _make_row(Lang.PCA_LATENT, ['pca2d', 'pca3d_static', 'pca3d'])
-        row4 = _make_row(Lang.TSNE_LATENT, ['tsne3d_static', 'tsne3d'])
-        row5 = _make_row(Lang.VIZ_MANAGEMENT, ['management'])
+        row4 = _make_row(Lang.VIZ_MANAGEMENT, ['management'])
         
-        chk_container = widgets.VBox([row1, row2, row3, row4, row5])
+        chk_container = widgets.VBox([row1, row2, row3, row4])
         
         # 3. Botões de Ação na parte inferior
         btn_all = widgets.Button(description=Lang.ALL, layout=L(width='70px'), button_style='info')
