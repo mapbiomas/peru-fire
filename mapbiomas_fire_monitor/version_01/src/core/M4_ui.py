@@ -213,9 +213,8 @@ class ModelTrainerUI(PipelineStepUI):
         self.main_area.children = [sync_header, self.tab]
         super().display()
 
-        # Auto-sync after render
-        import threading
-        threading.Timer(0.5, self._sync_all).start()
+        # Sync on startup (synchronous, after render)
+        self._sync_all()
 
     def _build_guide_tab(self):
         return widgets.HTML(Lang.GUIDE_M4_HTML.format(
