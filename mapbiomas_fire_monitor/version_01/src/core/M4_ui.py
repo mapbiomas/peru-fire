@@ -481,6 +481,13 @@ class ModelTrainerUI(PipelineStepUI):
             CacheManager.clear()
         except Exception:
             pass
+        # Delete stale local caches
+        for f in ['m4_ranking_cache.json', 'state.json']:
+            try:
+                if os.path.exists(f):
+                    os.remove(f)
+            except Exception:
+                pass
         try:
             CacheManager.build_full_cache()
         except Exception as e:
