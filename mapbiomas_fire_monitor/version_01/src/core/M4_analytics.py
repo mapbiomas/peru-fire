@@ -240,24 +240,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
     fs = _get_fs()
     from M0_auth_config import CONFIG, gcs_models_path
     try:
-        import urllib.parse
-        m_path = model_info.get('path')
-        if not m_path:
-            m_path = f"{gcs_models_path()}/{model_info['training_id']}"
-        m_path = urllib.parse.unquote(m_path)
-        clean_path = m_path
-        # Handle gs://bucket/ prefix
-        gs_prefix = f'gs://{CONFIG["bucket"]}/'
-        if clean_path.startswith(gs_prefix):
-            clean_path = clean_path[len(gs_prefix):]
-        # Handle gcsfs internal path: b/<bucket>/o/<bucket>/<path>
-        elif '/o/' in clean_path:
-            idx = clean_path.find('/o/')
-            clean_path = clean_path[idx + 3:]
-            bucket_prefix = f"{CONFIG['bucket']}/"
-            if clean_path.startswith(bucket_prefix):
-                clean_path = clean_path[len(bucket_prefix):]
-        clean_path = clean_path.lstrip('/')
+        clean_path = f"{gcs_models_path()}/{model_info['training_id']}"
 
         # clean_path pode ser o dir do modelo ou ja apontar para metadata.json
         meta_suffix = '/metadata.json'

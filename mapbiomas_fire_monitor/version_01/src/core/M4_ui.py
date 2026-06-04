@@ -531,26 +531,7 @@ class ModelTrainerUI(PipelineStepUI):
             if m_id not in metadata_cache or force_refresh:
                 try:
                     from M0_auth_config import CONFIG, gcs_models_path
-                    import urllib.parse
-                    m_path = cache.get('meta', {}).get(m_id, {}).get('path', '')
-                    if not m_path:
-                        m_path = f"{gcs_models_path()}/{m_id}"
-                    clean_path = urllib.parse.unquote(m_path)
-                    gs_prefix = f'gs://{CONFIG["bucket"]}/'
-                    if clean_path.startswith(gs_prefix):
-                        clean_path = clean_path[len(gs_prefix):]
-                    elif '/o/' in clean_path:
-                        idx = clean_path.find('/o/')
-                        clean_path = clean_path[idx + 3:]
-                        bucket_prefix = f"{CONFIG['bucket']}/"
-                        if clean_path.startswith(bucket_prefix):
-                            clean_path = clean_path[len(bucket_prefix):]
-                    clean_path = clean_path.lstrip('/')
-                    # Strip trailing filename if present (gcsfs paths include it)
-                    if clean_path.endswith('/metadata.json'):
-                        clean_path = clean_path[:-len('/metadata.json')]
-                    elif clean_path.endswith('/metrics.json'):
-                        clean_path = clean_path[:-len('/metrics.json')]
+                    clean_path = f"{gcs_models_path()}/{m_id}"
                     with fs.open(f"{CONFIG['bucket']}/{clean_path}/metadata.json", 'r') as f:
                         meta = json.load(f)
                     try:
@@ -561,16 +542,6 @@ class ModelTrainerUI(PipelineStepUI):
                         pass  # metrics.json é opcional
                     
                     metadata_cache[m_id] = meta
-                    # Normalize path before caching (strip gcsfs /o/ prefix)
-                    raw = cache.get('meta', {}).get(m_id, {}).get('path', '')
-                    if '/o/' in raw:
-                        try:
-                            norm = raw.split('/o/', 1)[-1]
-                            norm = urllib.parse.unquote(norm)
-                            if norm.startswith(f"{CONFIG['bucket']}/"):
-                                norm = norm[len(CONFIG['bucket'])+1:]
-                            cache['meta'][m_id]['path'] = norm
-                        except: pass
                     updated_cache = True
                 except Exception as e:
                     print(f"[WARN] Erro ao carregar metadados de {m_id}: {e}")
@@ -683,9 +654,8 @@ class ModelTrainerUI(PipelineStepUI):
             f1 = rep.get('1', {}).get('f1-score', 0)
             
             full_data.append({
-                'id': mid, 'acc': acc, 'f1': f1, 'meta': meta,
-                'shortname': meta.get('shortname', ''),
-                'path': meta.get('path', '')
+                'id': mid, 'training_id': mid, 'acc': acc, 'f1': f1, 'meta': meta,
+                'shortname': meta.get('shortname', '')
             })
             # Atualiza histórico local
             if mid not in self.canvas_history: self.canvas_history[mid] = meta
