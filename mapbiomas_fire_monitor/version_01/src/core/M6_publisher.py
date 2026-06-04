@@ -218,13 +218,14 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
         logger(f"    Setting up GEE folders...")
 
     base = CONFIG['asset_monitor_base']
-    for sub in ['LIBRARY_CLASSIFICATIONS', 'LIBRARY_CLASSIFICATIONS/REGIONAL']:
+    campaign = CONFIG.get('campaign', 'MONITOR_01')
+    for sub in [f'{campaign}/LIBRARY_CLASSIFICATIONS', f'{campaign}/LIBRARY_CLASSIFICATIONS/REGIONAL']:
         try:
             ee.data.createAsset({'type': 'Folder'}, f"{base}/{sub}")
         except Exception:
             pass
 
-    parent = f"{base}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
+    parent = f"{base}/{campaign}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
     try:
         ee.data.createAsset({'type': 'ImageCollection'}, parent)
     except Exception:
@@ -291,7 +292,8 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
 def gee_asset_exists(model_id, region, period, campaign=None):
     """Check if GEE asset ja existe."""
     import ee
-    parent = f"{CONFIG['asset_monitor_base']}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
+    camp = campaign or CONFIG.get('campaign', 'MONITOR_01')
+    parent = f"{CONFIG['asset_monitor_base']}/{camp}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
     asset_id = f"{parent}/{region}_{period}"
     try:
         ee.data.getAsset(asset_id)
@@ -303,7 +305,8 @@ def gee_asset_exists(model_id, region, period, campaign=None):
 def load_gee_assets(model_id):
     """Retorna set de region_period que ja existem no GEE para este modelo. 1 chamada GEE."""
     import ee
-    parent = f"{CONFIG['asset_monitor_base']}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
+    camp = CONFIG.get('campaign', 'MONITOR_01')
+    parent = f"{CONFIG['asset_monitor_base']}/{camp}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
     assets = set()
     try:
         result = ee.data.listAssets({'parent': parent})
@@ -442,8 +445,7 @@ def discover_classified_groups(fs=None, logger=None):
 
     base = gcs_full(classifications_base('', '')).rstrip('/')
     patterns = [
-        f"{base}/*/*/CLASSIFIED_TILES/tile_*.tif",
-        f"{base}/*/CLASSIFIED_TILES/tile_*.tif",
+        f"{base}*/CLASSIFIED_TILES/tile_*.tif",
     ]
 
     groups = set()
@@ -471,8 +473,7 @@ def discover_classified_groups(fs=None, logger=None):
                 region = '_'.join(parts[:-2]) if len(parts) >= 2 else parts[0]
             model_dir = tp.split('/CLASSIFIED_TILES')[0]
             model_id = os.path.basename(model_dir)
-            parent = os.path.basename(os.path.dirname(model_dir))
-            campaign = '' if parent == 'LIBRARY_CLASSIFICATIONS' else parent
+            campaign = CONFIG.get('campaign', 'MONITOR_01')
             groups.add((model_id, region, period, campaign))
 
     return groups

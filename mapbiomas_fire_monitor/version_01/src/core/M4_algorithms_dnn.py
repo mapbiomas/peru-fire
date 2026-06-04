@@ -344,7 +344,7 @@ class ModelTrainer:
                     'sensor': GLOBAL_OPTS['SENSOR'],
                     'periodicity': GLOBAL_OPTS['PERIODICITY'],
                     'mosaic_methods': CONFIG['mosaic_methods'],
-                    'sampling_campaign': GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', ''),
+                    'sampling_campaign': CONFIG.get('campaign', 'MONITOR_01'),
                     'language': GLOBAL_OPTS.get('LANGUAGE', 'en'),
                 },
             }
@@ -430,8 +430,8 @@ class ModelTrainer:
         if logger: logger("Copiar archivos CSV de las muestras para su almacenamiento...", "info")
         collections = getattr(self, '_sample_collections', [])
         for coll in collections:
-            campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
-            src = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{campaign}/{coll}.csv"
+            campaign = CONFIG.get('campaign', 'MONITOR_01')
+            src = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{coll}.csv"
             dest = f"{CONFIG['bucket']}/{base_path}/samples/{coll}.csv"
             try:
                 copy(src, dest)

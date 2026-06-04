@@ -242,7 +242,7 @@ class M5WorkplanUI:
         # Campaign dropdown
         try:
             campaigns = list_campaigns_gcs()
-            current = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+            current = CONFIG.get('campaign', 'MONITOR_01')
             val = current if current in campaigns else (campaigns[0] if campaigns else '')
             self.w_campaign.options = campaigns
             self.w_campaign.value = val
@@ -280,7 +280,7 @@ class M5WorkplanUI:
             clear_output(wait=True)
             display(HTML("<i>⏳ Salvando no GCS...</i>"))
         fs = _get_fs()
-        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+        campaign = CONFIG.get('campaign', 'MONITOR_01')
         for r in regions:
             for period in periods:
                 job_id = make_job_id(model, r, period, campaign)
@@ -324,7 +324,7 @@ class M5WorkplanUI:
     def _on_campaign_change(self, change):
         campaign = change['new']
         if campaign and campaign != 'carregando...':
-            GLOBAL_OPTS['SAMPLING_CAMPAIGN'] = campaign
+            CONFIG['campaign'] = campaign
             self._refresh_ui()
 
     # --- DELECAO ---
@@ -449,7 +449,7 @@ class M5WorkplanUI:
             btn_cargar.button_style = 'success'
             def _make_cargar(m, regs, pers):
                 def _h():
-                    campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+                    campaign = CONFIG.get('campaign', 'MONITOR_01')
                     self.plan = load_workplan()
                     added = 0
                     skipped = 0
@@ -553,7 +553,7 @@ class M5WorkplanUI:
     def _render_pending(self):
         try:
             self.plan = load_workplan()
-            campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+            campaign = CONFIG.get('campaign', 'MONITOR_01')
             all_jobs = [j for j in self.plan if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)]
             filtered = self._apply_search_filter(all_jobs, self.f_pend_search)
 
@@ -972,7 +972,7 @@ class M5WorkplanUI:
 
     def _render_publish(self):
         self.plan = load_workplan()
-        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+        campaign = CONFIG.get('campaign', 'MONITOR_01')
         jobs = [j for j in self.plan if j['status'] == 'COMPLETED' and (not campaign or j.get('campaign', '') == campaign)]
         filter_box = widgets.HBox([self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task], layout=L(margin='0 0 15px 0'))
         filtered = self._apply_filters(jobs, self.f_pub_model, self.f_pub_region, self.f_pub_year, self.f_pub_task)
@@ -1094,7 +1094,7 @@ class M5WorkplanUI:
 
     def _render_mapa(self):
         self.plan = load_workplan()
-        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+        campaign = CONFIG.get('campaign', 'MONITOR_01')
         filter_box = widgets.HBox([self.f_mapa_model, self.f_mapa_region, self.f_mapa_year, self.btn_mapa_refresh_container], layout=L(margin='0 0 15px 0'))
 
         try:
@@ -1134,7 +1134,7 @@ class M5WorkplanUI:
             scale_html = self._build_scale_bar(img_w, bounds_info)
 
             # grid counts table
-            campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+            campaign = CONFIG.get('campaign', 'MONITOR_01')
             region_names = sorted(set(j['region'] for j in self.plan if not campaign or j.get('campaign', '') == campaign))
             if not region_names:
                 try:
@@ -1174,7 +1174,7 @@ class M5WorkplanUI:
 
     def _render_done(self):
         self.plan = load_workplan()
-        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+        campaign = CONFIG.get('campaign', 'MONITOR_01')
         jobs = [j for j in self.plan if j['status'] == 'FINISHED' and (not campaign or j.get('campaign', '') == campaign)]
         filter_box = widgets.HBox([self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task], layout=L(margin='0 0 15px 0'))
         filtered = self._apply_filters(jobs, self.f_done_model, self.f_done_region, self.f_done_year, self.f_done_task)
@@ -1294,7 +1294,7 @@ class M5WorkplanUI:
             else:
                 f.value = new_ops[0]
 
-        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+        campaign = CONFIG.get('campaign', 'MONITOR_01')
         # Mapa filters
         filtered_plan = [j for j in self.plan if not campaign or j.get('campaign', '') == campaign]
         all_models = sorted(set(j['model'] for j in filtered_plan))
@@ -1334,7 +1334,7 @@ class M5WorkplanUI:
         self.tabs.set_title(0, Lang.TAB_GUIDE)
         self.tabs.set_title(1, Lang.TAB_REGISTER)
 
-        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+        campaign = CONFIG.get('campaign', 'MONITOR_01')
         n_pend = len([j for j in self.plan if j['status'] in ('PENDING', 'RUNNING') and (not campaign or j.get('campaign', '') == campaign)])
         self.tabs.set_title(2, f"{Lang.TAB_PENDING} ({n_pend})")
         self.tabs.set_title(3, Lang.TAB_MAP)

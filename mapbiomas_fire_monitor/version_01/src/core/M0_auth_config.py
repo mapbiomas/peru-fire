@@ -17,7 +17,7 @@ logging.getLogger("fsspec").setLevel(logging.CRITICAL)
 
 def _make_config(country='peru', bucket='mapbiomas-fire', gcs_project='mapbiomas-fire-485203',
                   version='version_01', gee_project='mapbiomas-peru',
-                  gcs_catalog_prefix=None, gee_asset_repo=None):
+                  gcs_catalog_prefix=None, gee_asset_repo=None, campaign='MONITOR_01'):
     """Build the CONFIG dict from project-level parameters."""
     if gcs_catalog_prefix is None:
         gcs_catalog_prefix = f"sudamerica/{country}/CATALOG_01"
@@ -32,13 +32,14 @@ def _make_config(country='peru', bucket='mapbiomas-fire', gcs_project='mapbiomas
         'gee_project': gee_project,
         'gee_asset_repo': gee_asset_repo,
         'gcs_catalog_prefix': gcs_catalog_prefix,
+        'campaign': campaign,
         'mosaic_methods': ['minnbr'],
 
         # --- GCS paths (derived) ---
         'gcs_library_images': f"{gcs_catalog_prefix}/LIBRARY_IMAGES",
-        'gcs_library_samples': f"{gcs_catalog_prefix}/LIBRARY_SAMPLES",
-        'gcs_library_models': f"{gcs_catalog_prefix}/LIBRARY_MODELS",
-        'gcs_library_classifications': f"{gcs_catalog_prefix}/LIBRARY_CLASSIFICATIONS",
+        'gcs_library_samples': f"{gcs_catalog_prefix}/{campaign}/LIBRARY_SAMPLES",
+        'gcs_library_models': f"{gcs_catalog_prefix}/{campaign}/LIBRARY_MODELS",
+        'gcs_library_classifications': f"{gcs_catalog_prefix}/{campaign}/LIBRARY_CLASSIFICATIONS",
         'gcs_cache': f"{gcs_catalog_prefix}/.CACHE",
         'gcs_chunks': f"{gcs_catalog_prefix}/CHUNKS",
 
@@ -69,7 +70,6 @@ GLOBAL_OPTS = {
     'PERIODICITY': ['yearly'],
     'MOSAIC_METHOD': 'minnbr',
     'PERSONAL_TASK_FLAG': 'CATALOG',
-    'SAMPLING_CAMPAIGN': 'monitor_01',
     'FIRE_POTENTIAL_FILTER': False,
 }
 
@@ -151,7 +151,7 @@ def set_global_opts(
     sensor=['sentinel2'],           # ['sentinel2', 'landsat', 'hls', 'modis']
     periodicity=['monthly'],        # ['monthly', 'yearly']
     personal_task_flag='MONITOR',   # prefix for GEE task names (e.g. MONITOR, TEST)
-    sampling_campaign='monitor_01', # campaign folder in LIBRARY_SAMPLES (GCS)
+    campaign=None,                  # campaign name e.g. 'MONITOR_01', 'COLLECTION_01'
     clean_cache=False,              # True = reset local + GCS cache at startup
     language='en',                  # 'en', 'es', 'pt', 'fr', 'id'
     mosaic_methods=None,            # None = keep current, or list e.g. ['minnbr','minnbr_buffer']
@@ -168,7 +168,7 @@ def set_global_opts(
 
     # Rebuild CONFIG if any project-level param is provided
     needs_rebuild = any(x is not None for x in [country, gee_project, gee_asset_repo,
-                                                 gcs_bucket, gcs_project, gcs_catalog_prefix])
+                                                 gcs_bucket, gcs_project, gcs_catalog_prefix, campaign])
     if needs_rebuild:
         CONFIG = _make_config(
             country=country or CONFIG['country'],
@@ -177,12 +177,12 @@ def set_global_opts(
             gee_project=gee_project or CONFIG.get('gee_project', CONFIG['country']),
             gcs_catalog_prefix=gcs_catalog_prefix,
             gee_asset_repo=gee_asset_repo,
+            campaign=campaign or CONFIG.get('campaign', 'MONITOR_01'),
         )
 
     GLOBAL_OPTS['SENSOR'] = sensor if isinstance(sensor, list) else [sensor]
     GLOBAL_OPTS['PERIODICITY'] = periodicity if isinstance(periodicity, list) else [periodicity]
     GLOBAL_OPTS['PERSONAL_TASK_FLAG'] = personal_task_flag
-    GLOBAL_OPTS['SAMPLING_CAMPAIGN'] = sampling_campaign
     GLOBAL_OPTS['LANGUAGE'] = language
 
     # Aplica filtro de métodos de mosaico se passado
@@ -197,7 +197,7 @@ def set_global_opts(
     mosaics_str = ', '.join(CONFIG['mosaic_methods'])
     sensor_str = ', '.join(s.upper() if isinstance(s, str) else str(s).upper() for s in sensor)
     period_str = ', '.join(p.upper() if isinstance(p, str) else str(p).upper() for p in periodicity)
-    print(f"Global options: Sensor(s): {sensor_str} | Period(s): {period_str} | Mosaics: {mosaics_str} | Campaign: {sampling_campaign} | Task Flag: {personal_task_flag}")
+    print(f"Global options: Sensor(s): {sensor_str} | Period(s): {period_str} | Mosaics: {mosaics_str} | Campaign: {CONFIG.get('campaign', 'MONITOR_01')} | Task Flag: {personal_task_flag}")
 
     if clean_cache:
         try:
@@ -424,13 +424,11 @@ def sample_asset_name(temporal_id, version_id):
 
 def get_asset_samples(temporal_id, version_id):
     asset = sample_asset_name(temporal_id, version_id)
-    campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
-    return f"{CONFIG['asset_monitor_base']}/LIBRARY_SAMPLES/{campaign}/{asset}"
+    return f"{CONFIG['asset_monitor_base']}/{CONFIG['campaign']}/LIBRARY_SAMPLES/{asset}"
 
 def get_gcs_samples(temporal_id, version_id):
     asset = sample_asset_name(temporal_id, version_id)
-    campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
-    return f"{CONFIG['gcs_library_samples']}/{campaign}/{asset}"
+    return f"{CONFIG['gcs_library_samples']}/{asset}"
 
 def get_asset_regional(region_id, training_id, temporal_id):
     """Retorna o path do GEE para classificações regionais."""
@@ -555,4 +553,4 @@ def print_config():
     print(f"GCS Project: {CONFIG['gcs_project']}")
     print(f"GCS Catalog: {CONFIG['gcs_catalog_prefix']}")
     print(f"Version: {CONFIG['version']}")
-    print(f"Sensor(s): {sensor_str} | Period(s): {period_str} | Task Flag: {GLOBAL_OPTS['PERSONAL_TASK_FLAG']} | Campaign: {GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'N/A')}")
+    print(f"Sensor(s): {sensor_str} | Period(s): {period_str} | Task Flag: {GLOBAL_OPTS['PERSONAL_TASK_FLAG']} | Campaign: {CONFIG.get('campaign', 'MONITOR_01')}")

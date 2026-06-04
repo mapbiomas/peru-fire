@@ -74,7 +74,7 @@ def make_job_id(model, region, period, campaign=None):
     return " | ".join(parts)
 
 def new_job(model, region, period, task_name=''):
-    campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', '')
+    campaign = CONFIG.get('campaign', 'MONITOR_01')
     return {
         'id': make_job_id(model, region, period, campaign),
         'model': model,
@@ -88,12 +88,12 @@ def new_job(model, region, period, task_name=''):
         'progress': '0%'
     }
 
-def _campaign(campaign):
-    return f"{campaign}/" if campaign else ""
-
-
 def classifications_base(model_id, campaign=None):
-    return f"{CONFIG['gcs_library_classifications']}/{_campaign(campaign)}{model_id}"
+    if campaign is None or campaign == CONFIG.get('campaign', 'MONITOR_01'):
+        base = CONFIG['gcs_library_classifications']
+    else:
+        base = f"{CONFIG['gcs_catalog_prefix']}/{campaign}/LIBRARY_CLASSIFICATIONS"
+    return f"{base}/{model_id}" if model_id else f"{base}/"
 
 def classified_tiles_dir(model_id, campaign=None):
     return f"{classifications_base(model_id, campaign)}/CLASSIFIED_TILES"

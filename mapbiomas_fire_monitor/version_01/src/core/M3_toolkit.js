@@ -8,7 +8,8 @@ v10: Exclusive Tool for Sample Collection and Export (Vectors)
 
 // ─── GLOBAL CONFIGURATION ───────────────────────────────────────────────────
 var PERSONAL_TASK_FLAG = 'CATALOG';
-var SAMPLING_CAMPAIGN = 'monitor_01';
+var CAMPAIGN = 'MONITOR_01';
+var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
 
 // ─── LANGUAGE CONFIGURATION ─────────────────────────────────────────────────
 // Change APP_LANG to switch the interface language: 'es', 'pt', 'en'
@@ -84,6 +85,11 @@ var L = (function () {
             short_guide: 'Guia',
             short_import: 'Importar',
             short_export: 'Exportar',
+            btn_fire: 'Fuego',
+            btn_not_fire: 'No Fuego',
+            btn_hand: 'Mano',
+            btn_delete: 'Borrar',
+            btn_center: 'Centrar',
             loading: ''
         },
         pt: {
@@ -154,6 +160,11 @@ var L = (function () {
             short_guide: 'Guia',
             short_import: 'Importar',
             short_export: 'Exportar',
+            btn_fire: 'Fogo',
+            btn_not_fire: 'Nao Fogo',
+            btn_hand: 'Mao',
+            btn_delete: 'Deletar',
+            btn_center: 'Centralizar',
             loading: ''
         },
         en: {
@@ -224,6 +235,11 @@ var L = (function () {
             short_guide: 'Guide',
             short_import: 'Import',
             short_export: 'Export',
+            btn_fire: 'Fire',
+            btn_not_fire: 'Not Fire',
+            btn_hand: 'Hand',
+            btn_delete: 'Delete',
+            btn_center: 'Center',
             loading: ''
         }
     };
@@ -249,10 +265,11 @@ var countryConfigs = {
     // },
     'Peru': {
         asset_regions: 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
-        asset_samples: 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01/LIBRARY_SAMPLES',
         bucket: 'mapbiomas-fire',
-        gcs_samples: 'sudamerica/peru/CATALOG_01/LIBRARY_SAMPLES',
-        property: 'region_nam'
+        property: 'region_nam',
+        getAssetSamples: function() { return CATALOG_ROOT + '/' + CAMPAIGN + '/LIBRARY_SAMPLES'; },
+        getGcsSamples: function() { return 'sudamerica/peru/CATALOG_01/' + CAMPAIGN + '/LIBRARY_SAMPLES'; },
+        getRegionalFolder: function() { return CATALOG_ROOT + '/' + CAMPAIGN + '/LIBRARY_CLASSIFICATIONS/REGIONAL'; }
     }
 };
 
@@ -378,7 +395,7 @@ var extraDatasets = {
 };
 
 // ─── CLASSIFICAÇÕES REGIONAIS ─────────────────────────────────────────────────
-var REGIONAL_FOLDER = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01/LIBRARY_CLASSIFICATIONS/REGIONAL';
+var REGIONAL_FOLDER = countryConfigs['Peru'].getRegionalFolder();
 
 var CLASS_PALETTE = [
     '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
@@ -960,9 +977,9 @@ function user_interface() {
             }
         });
 
-        // Botão Centralizar
+        // Botao Centralizar
         var btt_center_icon = ui.Button({
-            label: 'C',
+            label: L.btn_center,
             style: { margin: '0px', padding: '0px' },
             onClick: function () {
                 var selectedNames = [];
@@ -1015,27 +1032,11 @@ function user_interface() {
         // Atualiza a gaveta de períodos
         updatePeriodDrawer();
 
-        // Atualiza as Campanhas Disponíveis em ambos os seletores
-        try {
-            var sampleRoot = conf.asset_samples;
-            var rootList = ee.data.listAssets(sampleRoot);
-            var folders = rootList ? rootList.assets.filter(function (a) { return a.type === 'FOLDER'; }) : [];
-            var campaignItems = folders.map(function (f) { return f.id.split('/').slice(-1)[0]; });
-
-            if (campaignItems.indexOf(SAMPLING_CAMPAIGN) === -1) campaignItems.push(SAMPLING_CAMPAIGN);
-
-            var sortedItems = campaignItems.sort();
-            select_campaign_imp.items().reset(sortedItems);
-            select_campaign_exp.items().reset(sortedItems);
-            
-            select_campaign_imp.setValue(SAMPLING_CAMPAIGN, false);
-            select_campaign_exp.setValue(SAMPLING_CAMPAIGN, false);
-        } catch (e) {
-            select_campaign_imp.items().reset([SAMPLING_CAMPAIGN]);
-            select_campaign_exp.items().reset([SAMPLING_CAMPAIGN]);
-            select_campaign_imp.setValue(SAMPLING_CAMPAIGN, false);
-            select_campaign_exp.setValue(SAMPLING_CAMPAIGN, false);
-        }
+        // Atualiza Campanhas (fixo: MONITOR_01)
+        select_campaign_imp.items().reset([CAMPAIGN]);
+        select_campaign_exp.items().reset([CAMPAIGN]);
+        select_campaign_imp.setValue(CAMPAIGN, false);
+        select_campaign_exp.setValue(CAMPAIGN, false);
 
         updateImportList(conf);
         updateClassificationsDrawer();
@@ -1044,7 +1045,7 @@ function user_interface() {
     function updateImportList(conf) {
         // Atualiza a lista de amostras no Asset para a aba IMPORTAR
         try {
-            var campaignPath = conf.asset_samples + '/' + SAMPLING_CAMPAIGN;
+            var campaignPath = conf.getAssetSamples();
             var assetList = ee.data.listAssets(campaignPath);
             var sample_list = assetList ? assetList.assets : [];
             var items = sample_list ? sample_list.map(function (obj) { return { label: obj.id.split('/').slice(-1)[0], value: obj.id }; }) : [];
@@ -1280,20 +1281,9 @@ function user_interface() {
     // --- CAMPAIGN SELECTORS (Synced) ---
     function makeCampaignSelector() {
         return ui.Select({
-            items: [SAMPLING_CAMPAIGN],
+            items: [CAMPAIGN],
             placeholder: L.placeholder_campaign,
-            value: SAMPLING_CAMPAIGN,
-            onChange: function (v) {
-                SAMPLING_CAMPAIGN = v;
-                // Sincroniza ambos os seletores
-                select_campaign_imp.setValue(v, false);
-                select_campaign_exp.setValue(v, false);
-                // Atualiza as listas
-                suggestNextVersion();
-                syncDateSelect();
-                var conf = countryConfigs[getSelectedCountry()];
-                updateImportList(conf);
-            },
+            value: CAMPAIGN,
             style: { margin: '2px', stretch: 'horizontal' }
         });
     }
@@ -1328,7 +1318,7 @@ function user_interface() {
     var btnNotFire = ui.Button({ label: L.btn_not_fire, style: { color: '#1a73e8', margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { setLayerMode('notFire'); } });
     var btnHand = ui.Button({ label: L.btn_hand, style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: function () { Map.drawingTools().setShape(null); } });
     var btnClear = ui.Button({ label: L.btn_delete, style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: clearDrawingTools });
-    var btnCenter = ui.Button({ label: 'C', style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: centerDrawingTools });
+    var btnCenter = ui.Button({ label: L.btn_center, style: { margin: '1px', padding: '0px', stretch: 'horizontal' }, onClick: centerDrawingTools });
 
     rowDraw.add(btnFire).add(btnNotFire).add(btnHand).add(btnClear).add(btnCenter);
 
@@ -1399,7 +1389,7 @@ function user_interface() {
         var conf = countryConfigs[getSelectedCountry()];
 
         try {
-            var campaignPath = conf.asset_samples + '/' + SAMPLING_CAMPAIGN;
+            var campaignPath = conf.getAssetSamples();
             var assetList = ee.data.listAssets(campaignPath);
             var assets = assetList ? assetList.assets : [];
 
@@ -1610,13 +1600,13 @@ function user_interface() {
             Export.table.toAsset({
                 collection: vec,
                 description: PERSONAL_TASK_FLAG + '_ASSET_' + desc,
-                assetId: conf.asset_samples + '/' + SAMPLING_CAMPAIGN + '/' + desc
+                assetId: conf.getAssetSamples() + '/' + desc
             });
             Export.table.toCloudStorage({
                 collection: vec,
                 description: PERSONAL_TASK_FLAG + '_GCS_' + desc,
                 bucket: conf.bucket,
-                fileNamePrefix: conf.gcs_samples + '/' + SAMPLING_CAMPAIGN + '/' + desc,
+                fileNamePrefix: conf.getGcsSamples() + '/' + desc,
                 fileFormat: 'CSV'
             });
             print(L.task_created + desc + L.task_hint);

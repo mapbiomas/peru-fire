@@ -21,8 +21,7 @@ def list_sample_collections_gcs(force_refresh=False):
     try:
         from M0_auth_config import CONFIG, GLOBAL_OPTS
         fs = _get_fs()
-        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
-        path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{campaign}"
+        path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}"
 
         if not fs.exists(path):
             return []
@@ -75,8 +74,7 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
     
     dfs = []
     for group in sample_groups:
-        campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
-        sample_path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{campaign}/{group}.csv"
+        sample_path = f"{CONFIG['bucket']}/{CONFIG['gcs_library_samples']}/{group}.csv"
         if logger: logger(f"Leyendo muestras: {group}.csv", "info")
         try:
             with fs.open(sample_path, 'r') as f:

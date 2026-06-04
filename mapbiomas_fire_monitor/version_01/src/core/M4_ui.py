@@ -24,7 +24,7 @@ class ModelTrainerUI(PipelineStepUI):
         self.search_query_models = "" 
         self.sort_column = "acc"      
         self.sort_ascending = False   
-        self.sampling_campaign = GLOBAL_OPTS.get('SAMPLING_CAMPAIGN', 'monitor_01')
+        self.sampling_campaign = CONFIG.get('campaign', 'MONITOR_01')
         
         # --- INTENÇÃO DE RETREINAMENTO ---
         self.retrain_intent = {'mode': None, 'hp': None} # Guarda a intenção atual de re-treinamento
@@ -300,9 +300,9 @@ class ModelTrainerUI(PipelineStepUI):
         )
         
         def _on_campaign_change(change):
-            from M0_auth_config import GLOBAL_OPTS
+            from M0_auth_config import GLOBAL_OPTS, CONFIG
             new_c = change['new']
-            GLOBAL_OPTS['SAMPLING_CAMPAIGN'] = new_c
+            CONFIG['campaign'] = new_c
             self.sampling_campaign = new_c
             # Limpa cache de sample_collections para forçar refresh real
             state = CacheManager.get_state()
