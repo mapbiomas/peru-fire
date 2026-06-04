@@ -266,24 +266,6 @@ class ModelTrainerUI(PipelineStepUI):
         self._available_samples = set(list_sample_collections_gcs())
 
         # Campaign dropdown
-        self.w_campaign = widgets.Dropdown(
-            options=list_campaigns_gcs(),
-            value=self.sampling_campaign,
-            layout=L(width='150px')
-        )
-        def _on_campaign_change(change):
-            self.sampling_campaign = change['new']
-            CONFIG['campaign'] = change['new']
-            state = CacheManager.get_state()
-            if state.get('sample_collections'):
-                state['sample_collections'] = []
-                CacheManager._state = state
-                CacheManager.save()
-            if hasattr(self, '_cached_samples'): del self._cached_samples
-            self._available_samples = set(list_sample_collections_gcs())
-            self._refresh_panes()
-        self.w_campaign.observe(_on_campaign_change, names='value')
-
         # Search + All/Clear buttons
         self.txt_search_samples = widgets.Text(placeholder=Lang.SEARCH_SAMPLES, layout=L(width='200px'))
         self.txt_search_samples.observe(lambda c: self._refresh_panes(), names='value')
@@ -304,9 +286,6 @@ class ModelTrainerUI(PipelineStepUI):
 
         # Toolbar
         toolbar = widgets.HBox([
-            widgets.HTML(f"<b style='margin-right:5px;'>{Lang.CAMPAIGN}:</b>"),
-            self.w_campaign,
-            widgets.HTML("<div style='width:10px;'></div>"),
             self.txt_search_samples,
             btn_all, btn_clear
         ], layout=L(gap='4px', margin='0 0 5px 0', width='100%', align_items='center'))
