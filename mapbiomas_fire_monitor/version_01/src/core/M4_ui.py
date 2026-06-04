@@ -436,9 +436,9 @@ class ModelTrainerUI(PipelineStepUI):
         next_id = self._suggest_next_id()
 
         def _suggest_shortname():
-            sel = sorted(self._selected_samples)
+            sel = sorted(getattr(self, '_selected_samples', set()))
             if not sel:
-                return 'peru_v1'
+                return CONFIG.get('campaign', 'MONITOR_01').lower()
             regions = set()
             for s in sel:
                 parts = s.split('_peru_')
