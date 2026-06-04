@@ -472,7 +472,7 @@ class ModelTrainerUI(PipelineStepUI):
         except Exception as e:
             print(f"  [WARN] Cache sync: {e}")
         try:
-        self._available_samples = set(list_sample_collections_gcs(force_refresh=True))
+            self._available_samples = set(list_sample_collections_gcs(force_refresh=True))
             if hasattr(self, '_refresh_panes') and self._refresh_panes:
                 self._refresh_panes()
         except Exception as e:
