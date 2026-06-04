@@ -5,7 +5,7 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import CacheManager, _get_fs
-from M_ui_components import PipelineStepUI, make_spinner, Layout, make_empty_state, make_sync_button, make_refresh_button, make_select_all_none, make_search_box
+from M_ui_components import PipelineStepUI, make_spinner, Layout, make_empty_state, make_select_all_none, make_search_box
 from M_lang import L as Lang
 
 from M4_data_extractor import extract_pixels_from_gcs, list_sample_collections_gcs, list_campaigns_gcs
@@ -150,8 +150,6 @@ class ModelTrainerUI(PipelineStepUI):
             self._refresh_canvas_hub()
         self.w_canvas_sort.observe(_on_sort_change, names='value')
 
-        btn_sync, _ = make_sync_button(Lang.REPO_SYNC, "cloud-upload", lambda: self._sync_repository(show_loader=False, force_refresh=True), width='100%', button_style='primary', ui=self)
-
         btn_all_canvas = widgets.Button(description=Lang.ALL, icon="check-square", layout=widgets.Layout(width='48%'), button_style='info')
         btn_none_canvas = widgets.Button(description=Lang.CLEAR, icon="square-o", layout=widgets.Layout(width='48%'), button_style='warning')
         btn_all_canvas.on_click(lambda _: self._on_canvas_batch_action('all'))
@@ -161,7 +159,6 @@ class ModelTrainerUI(PipelineStepUI):
             widgets.HTML(f"<b style='font-size:13px; color:#2c3e50;'> {Lang.REPO_TITLE}</b>"),
             self.w_canvas_search,
             self.w_canvas_sort,
-            btn_sync,
             self.canvas_available_box,
             widgets.HBox([btn_all_canvas, btn_none_canvas], layout=widgets.Layout(justify_content='space-between', margin='5px 0')),
             widgets.HTML(f"<b style='font-size:13px; color:#2c3e50; margin-top:10px;'> {Lang.SELECTED_CANVAS}</b>"),
@@ -190,11 +187,23 @@ class ModelTrainerUI(PipelineStepUI):
         self.tab.set_title(2, f' {Lang.TRAININGS}')
         
         self.tab.selected_index = 0
-        self.main_area.children = [self.tab]
-        super().display()
+
+        # Global sync header
+        btn_sync_all = widgets.Button(description=Lang.REPO_SYNC, icon="cloud-upload",
+            button_style='primary', layout=widgets.Layout(width='auto', height='28px'))
+        btn_sync_all.on_click(lambda _: self._sync_all())
+        sync_header = widgets.HBox([
+            widgets.HTML(f"<b style='font-size:16px; color:#2c3e50;'>M4 — Model Trainer</b>"),
+            widgets.HTML("<div style='flex:1;'></div>"),
+            btn_sync_all
+        ], layout=widgets.Layout(align_items='center', margin='0 0 5px 0'))
         
-        # REMOVIDO: Sincronização automática no display() para evitar travamento.
-        # Agora o usuário clica em sincronizar ou os dados vêm do cache.
+        self.main_area.children = [sync_header, self.tab]
+        super().display()
+
+        # Auto-sync after render
+        import threading
+        threading.Timer(0.5, self._sync_all).start()
 
     def _build_guide_tab(self):
         return widgets.HTML(Lang.GUIDE_M4_HTML.format(
@@ -322,16 +331,12 @@ class ModelTrainerUI(PipelineStepUI):
         btn_all, btn_none, _ = make_select_all_none(self._on_select_all_samples, self._on_select_none_samples)
         
         self.txt_search_samples.layout.flex = '1'
-        reload_container, btn_reload_samples, _ = make_refresh_button(
-            'refresh', lambda: self._refresh_samples_panes(force_gcs=True),
-            description=Lang.RELOAD_SAMPLES, tooltip=Lang.RELOAD_SAMPLES
-        )
         sample_toolbar = widgets.HBox([
             widgets.HTML(f"<b style='margin-right:5px;'>{Lang.CAMPAIGN}:</b>"), 
             self.w_campaign, 
             widgets.HTML("<div style='width:10px'></div>"),
             self.txt_search_samples, 
-            reload_container, btn_all, btn_none
+            btn_all, btn_none
         ], layout=L(gap='4px', margin='0 0 5px 0', width='100%', align_items='center'))
 
         self.available_samples_container = widgets.VBox([], layout=L(
@@ -398,22 +403,6 @@ class ModelTrainerUI(PipelineStepUI):
         """Constrói a matriz dinâmica priorizando o cache local 'state.json'."""
         L = widgets.Layout
         
-        # --- CABEÇALHO COM BOTÃO DE SYNC ---
-        def _sync_body():
-            print(Lang.REPO_SCANNING)
-            CacheManager.build_cache_from_gcs()
-            self._refresh_matrix_only()
-            print(Lang.REPO_SCAN_DONE)
-
-        btn_sync, sync_out = make_sync_button(Lang.SYNC_CATALOG, "sync", _sync_body, width='220px', height='30px', ui=self)
-        
-        header = widgets.HBox([
-            widgets.HTML(f"<b style='font-size:14px; color:#2c3e50;'>2. {Lang.EXTRACTION_TITLE}</b>"),
-            widgets.HTML("<div style='width:20px;'></div>"),
-            btn_sync,
-            sync_out
-        ], layout=L(align_items='center', margin='10px 0'))
-
         available_combos = {} # (sensor, mosaic, period) -> set(bands)
         
         try:
@@ -570,6 +559,28 @@ class ModelTrainerUI(PipelineStepUI):
 
     def make_spinner(self, msg=Lang.LOADING):
         return make_spinner(msg=msg)
+
+    def _sync_all(self):
+        """Sync all M4 data: models, samples, extraction cache."""
+        print(Lang.REPO_SCANNING)
+        try:
+            CacheManager.build_full_cache()
+        except Exception as e:
+            print(f"  [WARN] Cache sync: {e}")
+        try:
+            self._refresh_samples_panes(force_gcs=True)
+        except Exception as e:
+            print(f"  [WARN] Samples sync: {e}")
+        try:
+            self._sync_repository(show_loader=False, force_refresh=True)
+        except Exception as e:
+            print(f"  [WARN] Repo sync: {e}")
+        try:
+            if hasattr(self, '_matrices'):
+                self._refresh_matrix_only()
+        except Exception:
+            pass
+        print(Lang.REPO_SCAN_DONE)
 
     def _sync_repository(self, show_loader=False, force_refresh=False):
         if show_loader: self.show_loader(Lang.SYNCING)
@@ -1142,7 +1153,7 @@ def start_training(ui):
         
         ui.live_training_info = None  # Remove o status de LIVE após conclusão
         ui._live_initialized = False
-        ui._sync_repository(show_loader=False, force_refresh=True)
+        ui._sync_all()
         ui._update_canvas()  # Pinta o card final!
         
     except Exception as e:
