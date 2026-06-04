@@ -436,15 +436,26 @@ class ModelTrainerUI(PipelineStepUI):
         next_id = self._suggest_next_id()
 
         def _suggest_shortname():
+            import re
             sel = sorted(getattr(self, '_selected_samples', set()))
             if not sel:
                 return CONFIG.get('campaign', 'MONITOR_01').lower()
+            # Extract region codes from sample names (e.g. _r1_, _r5_, _r9_)
             regions = set()
             for s in sel:
-                parts = s.split('_peru_')
-                if len(parts) > 1:
-                    regions.add(parts[1].rsplit('_', 1)[0])
-            return '_'.join(sorted(regions)) if regions else 'peru_v1'
+                m = re.search(r'_r(\d+)_', s)
+                if m:
+                    regions.add(f"r{m.group(1)}")
+            if not regions:
+                return 'peru_v1'
+            region_part = '_'.join(sorted(regions)) if len(regions) == 1 else 'multiregion'
+            # Count selected bands (default 4: red, nir, swir1, swir2)
+            n_bands = 4
+            if hasattr(self, 'band_chk_map') and self.band_chk_map:
+                n_bands = sum(1 for chk in self.band_chk_map.values() if chk.value)
+                if n_bands == 0:
+                    n_bands = 4
+            return f"{region_part}_{n_bands}b"
 
         self.w_training_id = widgets.Text(value=next_id, description=Lang.TRAINING_ID,
             style={'description_width': '120px'}, layout=L(width='300px'))
