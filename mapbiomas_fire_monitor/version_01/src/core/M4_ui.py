@@ -180,7 +180,6 @@ class ModelTrainerUI(PipelineStepUI):
         ], layout=widgets.Layout(width='320px', padding='10px', background_color='#fcfcfc', border_right='2px solid #eee'))
 
         main_canvas_vbox = widgets.VBox([
-            widgets.HTML(f"<h3 style='color:#2c3e50; margin:0 0 10px 0;'> {Lang.CANVAS_TITLE}</h3>"),
             self._build_viz_toolbar(), 
             self.w_global_slider,      
             self.canvas_output         
@@ -421,8 +420,7 @@ class ModelTrainerUI(PipelineStepUI):
             overflow_y='auto', overflow_x='auto'
         ))
 
-        header = widgets.HTML(f"<b style='font-size:14px; color:#2c3e50;'>{Lang.EXTRACTION_TITLE}</b>")
-        return widgets.VBox([header, matrix_vbox])
+        return matrix_vbox
 
     def _build_hp_section(self):
         L = widgets.Layout
@@ -432,7 +430,6 @@ class ModelTrainerUI(PipelineStepUI):
         self.w_layers = widgets.Text(value="7, 14, 7", description=Lang.HIDDEN_LAYERS + ':', style={'description_width': '150px'}, layout=L(width='350px'))
         
         return widgets.VBox([
-            widgets.HTML(f"<b style='font-size:14px; color:#2c3e50;'> {Lang.HYPERPARAMS_SECTION}</b>"),
             widgets.HBox([self.w_iters, self.w_batch], layout=L(gap='10px')),
             widgets.HBox([self.w_lr, self.w_layers], layout=L(gap='10px')),
         ], layout=L(padding='15px', border='1px solid #eee', border_radius='8px', margin='0 0 15px 0', flex='1'))
@@ -477,7 +474,6 @@ class ModelTrainerUI(PipelineStepUI):
         self.w_comment = widgets.Textarea(placeholder=Lang.COMMENTS, layout=L(width='98%', height='60px'))
         
         return widgets.VBox([
-            widgets.HTML(f"<b style='font-size:14px; color:#2c3e50;'>{Lang.GCS_DEST}</b>"),
             widgets.HBox([self.w_training_id, self.w_shortname], layout=L(gap='15px')),
             self.w_comment,
         ], layout=L(padding='15px', border='1px solid #eee', border_radius='8px', margin='0 0 15px 0'))
