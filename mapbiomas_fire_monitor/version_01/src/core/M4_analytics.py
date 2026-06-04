@@ -1,8 +1,8 @@
-import os
+import os, io
 import json
 import numpy as np
 import ipywidgets as widgets
-from IPython.display import display, clear_output, HTML
+from IPython.display import display, clear_output, HTML, Image
 from matplotlib.figure import Figure
 import time
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
@@ -136,7 +136,11 @@ def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=
 
     fig.tight_layout()
     if not save_path:
-        display(fig)
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+        buf.seek(0)
+        display(Image(buf.getvalue(), format='png'))
+        plt.close(fig)
 
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)

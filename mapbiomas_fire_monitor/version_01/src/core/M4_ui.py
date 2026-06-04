@@ -677,7 +677,7 @@ class ModelTrainerUI(PipelineStepUI):
                 self.w_global_slider.value = current_step
                 self.w_global_slider.observe(self._on_global_slider_change, names='value')
 
-            render_diagnostic_dashboard(history, embeds, preds, y_true, viz_config=self.viz_config)
+            render_diagnostic_dashboard(history, None, None, None, viz_config={'history': True})
             
             # 2. MODELOS DO RANKING (Comparação em Tempo Real)
             if self.selected_models:
@@ -902,11 +902,15 @@ class ModelTrainerUI(PipelineStepUI):
                 display(HTML(f"<div style='padding:100px; text-align:center; background:white; border-radius:8px;'> <span style='font-size:50px;'></span><br><h3 style='color:#999;'>{Lang.CANVAS_EMPTY}</h3><p style='color:#ccc;'>{Lang.CANVAS_HINT}</p></div>"))
                 return
             
-            # --- AJUSTE DINÂMICO DO SLIDER GLOBAL ---
+            # --- AJUSTE DINAMICO DO SLIDER GLOBAL ---
             max_steps = 1
             for mid, info in self.selected_models.items():
                 hp_override = info.get('_hp_override')
-                h = hp_override.get('history', {}) if hp_override else info.get('history', {})
+                if hp_override:
+                    h = hp_override.get('history', {})
+                else:
+                    meta = info.get('meta', {})
+                    h = meta.get('history', {})
                 if 'steps' in h and len(h['steps']) > 0:
                     max_steps = max(max_steps, len(h['steps']))
             self.w_global_slider.max = max_steps - 1
