@@ -3,6 +3,9 @@ import json
 import numpy as np
 import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML, Image
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 import time
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
