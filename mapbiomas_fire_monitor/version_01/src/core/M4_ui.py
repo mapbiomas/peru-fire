@@ -111,6 +111,9 @@ class ModelTrainerUI(PipelineStepUI):
             cb.observe(self._on_intent_cb_change, names='value')
 
     def display(self):
+        # Ensure locale matches GLOBAL_OPTS
+        lang = GLOBAL_OPTS.get('LANGUAGE', 'en')
+        L.load_locale(lang)
         # 1. NOVO TREINO (Fluxo Completo)
         hp_sec = self._build_hp_section()
         dest_sec = self._build_dest_section()
@@ -147,7 +150,7 @@ class ModelTrainerUI(PipelineStepUI):
             self._refresh_canvas_hub()
         self.w_canvas_sort.observe(_on_sort_change, names='value')
 
-        btn_sync, _ = make_sync_button(Lang.REPO_SYNC, "refresh", lambda: self._sync_repository(show_loader=False, force_refresh=True), width='100%', button_style='primary', ui=self)
+        btn_sync, _ = make_sync_button(Lang.REPO_SYNC, "cloud-upload", lambda: self._sync_repository(show_loader=False, force_refresh=True), width='100%', button_style='primary', ui=self)
 
         btn_all_canvas = widgets.Button(description=Lang.ALL, icon="check-square", layout=widgets.Layout(width='48%'), button_style='info')
         btn_none_canvas = widgets.Button(description=Lang.CLEAR, icon="square-o", layout=widgets.Layout(width='48%'), button_style='warning')
@@ -207,9 +210,8 @@ class ModelTrainerUI(PipelineStepUI):
             self.chk_dict[k].value = True
 
     def _on_select_none_samples(self, _):
-        """Limpa apenas as amostras que estão visíveis pelo filtro."""
-        visible_keys = [s for s in self.chk_dict.keys() if self.search_query_samples.lower() in s.lower()]
-        for k in visible_keys:
+        """Deselect all samples."""
+        for k in self.chk_dict:
             self.chk_dict[k].value = False
 
     def _on_search_samples_change(self, change):
@@ -322,7 +324,7 @@ class ModelTrainerUI(PipelineStepUI):
         self.txt_search_samples.layout.flex = '1'
         reload_container, btn_reload_samples, _ = make_refresh_button(
             'refresh', lambda: self._refresh_samples_panes(force_gcs=True),
-            tooltip=Lang.RELOAD_SAMPLES
+            description=Lang.RELOAD_SAMPLES, tooltip=Lang.RELOAD_SAMPLES
         )
         sample_toolbar = widgets.HBox([
             widgets.HTML(f"<b style='margin-right:5px;'>{Lang.CAMPAIGN}:</b>"), 
@@ -371,7 +373,7 @@ class ModelTrainerUI(PipelineStepUI):
             if s in self.chk_dict and self.chk_dict[s].value:
                 continue # Already selected
                 
-            btn = widgets.Button(description=f"+ {s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#f8f9fa'})
+            btn = widgets.Button(description=f"{Lang.PLUS}{s}", layout=L(width='100%', min_height='28px', margin='1px 0'), style={'button_color': '#f8f9fa'})
             def _add(b, name=s):
                 if name not in self.chk_dict: self.chk_dict[name] = widgets.Checkbox(value=False)
                 self.chk_dict[name].value = True
@@ -1050,6 +1052,11 @@ def start_training(ui):
     ui.trainer_instance._sample_count = {'burned': int(y.sum()), 'not_burned': int((y==0).sum())}
     
     print("Training DNN...")
+    ui.tab.selected_index = 2  # switch to Canvas tab
+    from IPython.display import display as ipy_display
+    progress_bar = widgets.IntProgress(value=0, min=0, max=100, description='Training:',
+                                        bar_style='info', layout=widgets.Layout(width='100%'))
+    ipy_display(progress_bar)
     
     # Snapshot Directory
     m_id = ui.w_training_id.value
@@ -1059,6 +1066,13 @@ def start_training(ui):
 
     def update_chart(history, embeds=None, preds=None, y_true=None):
         ui._update_canvas_live(history, embeds, preds, y_true, selected_samples, bands_config)
+        if history and history.get('steps'):
+            steps = history['steps']
+            n_total = iters
+            if steps:
+                pct = min(100, int(len(steps) / 21 * 100))
+                progress_bar.value = pct
+                progress_bar.description = f'Training: {pct}%'
 
     # Iniciar Treino
     ui.trainer_instance.train(X_train, y_train, X_val=X_val, y_val=y_val, 
@@ -1122,7 +1136,7 @@ def start_training(ui):
         
         ui.live_training_info = None  # Remove o status de LIVE após conclusão
         ui._live_initialized = False
-        ui._sync_repository(show_loader=False)
+        ui._sync_repository(show_loader=False, force_refresh=True)
         ui._update_canvas()  # Pinta o card final!
         
     except Exception as e:

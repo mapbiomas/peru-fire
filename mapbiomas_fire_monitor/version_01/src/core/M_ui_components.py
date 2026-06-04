@@ -342,7 +342,7 @@ def make_select_all_none(on_all=None, on_none=None, width='70px'):
     btn_all = widgets.Button(description=L.ALL, icon='check-square',
                              layout=Layout(width=width), button_style='info')
     btn_none = widgets.Button(description=L.CLEAR, icon='square-o',
-                              layout=Layout(width='75px'), button_style='warning')
+                              layout=Layout(width=width), button_style='warning')
     if on_all:
         btn_all.on_click(on_all)
     if on_none:

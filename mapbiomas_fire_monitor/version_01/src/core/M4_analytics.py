@@ -255,6 +255,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                 with fs.open(f"{CONFIG['bucket']}/{base_dir}/metrics.json", 'r') as f: metrics = json.load(f)
             except Exception:
                 metrics = {}
+                display(HTML(f"<i style='color:#7f8c8d;'>{Lang.NO_METRICS}</i>"))
         # 2. Carrega Dados de Snapshots para o Time Machine se solicitado
         snap_data = None
         if epoch_index is not None:

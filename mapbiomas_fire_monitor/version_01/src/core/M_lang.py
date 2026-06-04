@@ -553,6 +553,7 @@ class L:
     REMOVE_FROM_CANVAS = "Remove from Canvas"
     BTN_CLOSE = "X"
     RELOAD_SAMPLES = "Reload samples list from GCS"
+    PLUS = "+ "
 
     # ── M4 - Analytics card labels ────────────────────
     LAYERS_LABEL = "Layers:"
@@ -1054,6 +1055,7 @@ STRINGS_ES = {
     "REMOVE_FROM_CANVAS": "Retirar del Canvas",
     "BTN_CLOSE": "X",
     "RELOAD_SAMPLES": "Recargar lista de muestras del GCS",
+    "PLUS": "+ ",
     # M4 - Analytics card labels
     "LAYERS_LABEL": "Capas:",
     "LR_ABBR": "LR:",
@@ -1552,6 +1554,7 @@ STRINGS_PT = {
     "REMOVE_FROM_CANVAS": "Remover do Canvas",
     "BTN_CLOSE": "X",
     "RELOAD_SAMPLES": "Recarregar lista de amostras do GCS",
+    "PLUS": "+ ",
     # M4 - Analytics card labels
     "LAYERS_LABEL": "Camadas:",
     "LR_ABBR": "LR:",
