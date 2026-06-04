@@ -38,27 +38,28 @@ def list_sample_collections_gcs(force_refresh=False):
         return samples
 
 def list_campaigns_gcs():
-    """Lista as campanhas (subpastas) disponíveis em LIBRARY_SAMPLES no GCS."""
+    """Lista as campanhas disponiveis sob gcs_campaigns_prefix no GCS."""
     try:
         from M0_auth_config import CONFIG
         fs = _get_fs()
-        path = f"{CONFIG['bucket']}/{gcs_samples_path()}"
-        if not fs.exists(path):
-            return ['monitor_01']
+        prefix = f"{CONFIG['bucket']}/{CONFIG['gcs_campaigns_prefix']}"
+        if not fs.exists(prefix):
+            return [CONFIG.get('campaign', 'MONITOR_01')]
         
-        items = fs.ls(path)
+        items = fs.ls(prefix)
         campaigns = []
+        skip = {'.CACHE', 'LIBRARY_IMAGES'}
         for item in items:
             name = item['name'] if isinstance(item, dict) else item
-            if not name.endswith('.csv') and not name.endswith('.json') and not name.endswith('.npz'):
-                c_name = name.split('/')[-1]
-                if c_name and not c_name.startswith('.'):
-                    campaigns.append(c_name)
+            c_name = name.rstrip('/').split('/')[-1]
+            if c_name and not c_name.startswith('.') and c_name not in skip:
+                campaigns.append(c_name)
         
-        if not campaigns: return ['monitor_01']
-        return sorted(list(set(campaigns)))
+        if not campaigns:
+            return [CONFIG.get('campaign', 'MONITOR_01')]
+        return sorted(campaigns)
     except Exception:
-        return ['monitor_01']
+        return [CONFIG.get('campaign', 'MONITOR_01')]
 
 def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
     """
