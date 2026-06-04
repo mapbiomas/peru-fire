@@ -5,7 +5,7 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import CacheManager, _get_fs
-from M_ui_components import PipelineStepUI, make_spinner, Layout, make_empty_state, make_select_all_none, make_search_box
+from M_ui_components import PipelineStepUI, make_spinner, Layout, make_empty_state, make_select_all_none, make_search_box, make_sync_button
 from M_lang import L as Lang
 
 from M4_data_extractor import extract_pixels_from_gcs, list_sample_collections_gcs, list_campaigns_gcs
@@ -137,13 +137,13 @@ class ModelTrainerUI(PipelineStepUI):
         self.extraction_area = self._build_extraction_matrix()
         
         self.new_training_tab = widgets.VBox([
-            widgets.HTML(f"<h2 style='color:#2c3e50; margin-bottom:5px;'> 1. {Lang.SAMPLE_SELECTION}</h2>"),
+            widgets.HTML(f"<h3 style='color:#2c3e50; margin:0 0 5px 0;'>{Lang.SAMPLE_SELECTION}</h3>"),
             self.samples_area,
-            widgets.HTML(f"<h2 style='color:#2c3e50; margin-top:10px; margin-bottom:5px;'> 2. {Lang.EXTRACTION_TITLE}</h2>"),
+            widgets.HTML(f"<h3 style='color:#2c3e50; margin:15px 0 5px 0;'>{Lang.EXTRACTION_TITLE}</h3>"),
             self.extraction_area,
-            widgets.HTML(f"<h2 style='color:#2c3e50; margin-top:10px; margin-bottom:5px;'> 3. {Lang.MODEL_CONFIG}</h2>"),
+            widgets.HTML(f"<h3 style='color:#2c3e50; margin:15px 0 5px 0;'>{Lang.MODEL_CONFIG}</h3>"),
             hp_sec,
-            widgets.HTML(f"<h2 style='color:#2c3e50; margin-top:10px; margin-bottom:5px;'> 4. {Lang.GCS_DEST}</h2>"),
+            widgets.HTML(f"<h3 style='color:#2c3e50; margin:15px 0 5px 0;'>{Lang.GCS_DEST}</h3>"),
             dest_sec,
         ], layout=widgets.Layout(padding='10px', background_color='white'))
         
@@ -203,9 +203,8 @@ class ModelTrainerUI(PipelineStepUI):
         self.tab.selected_index = 0
 
         # Global sync header
-        btn_sync_all = widgets.Button(description=Lang.REPO_SYNC, icon="cloud-upload",
-            button_style='primary', layout=widgets.Layout(width='auto', height='28px'))
-        btn_sync_all.on_click(lambda _: self._sync_all())
+        btn_sync_all, _ = make_sync_button(Lang.REPO_SYNC, "cloud-upload", self._sync_all,
+            width='auto', button_style='primary', ui=self)
         sync_header = widgets.HBox([
             widgets.HTML(f"<b style='font-size:16px; color:#2c3e50;'>M4 — Model Trainer</b>"),
             widgets.HTML("<div style='flex:1;'></div>"),
@@ -226,21 +225,46 @@ class ModelTrainerUI(PipelineStepUI):
             trainings=Lang.TRAININGS
         ))
 
+    def _populate_pane(self, pane, items, action):
+        """Fill a pane with clickable sample buttons."""
+        btns = []
+        for s in items:
+            bg = '#e3f2fd' if action == 'remove' else '#f8f9fa'
+            btn = widgets.Button(description=s, layout=Layout(width='100%', min_height='26px', margin='1px 0'),
+                style={'button_color': bg})
+            if action == 'add':
+                btn.on_click(lambda _, name=s: (self._selected_samples.add(name), self._refresh_panes()))
+            else:
+                btn.on_click(lambda _, name=s: (self._selected_samples.discard(name), self._refresh_panes()))
+            btns.append(btn)
+        pane.children = btns
+
+    def _refresh_panes(self):
+        """Redraw available and selected panes."""
+        q = (self.txt_search_samples.value or '').lower()
+        available = sorted([s for s in self._available_samples if q in s.lower() and s not in self._selected_samples])
+        selected = sorted(self._selected_samples)
+        self._populate_pane(self.available_pane, available, 'add')
+        self._populate_pane(self.selected_pane, selected, 'remove')
+
+    def _select_all_samples(self, _):
+        q = (self.txt_search_samples.value or '').lower()
+        for s in self._available_samples:
+            if q in s.lower():
+                self._selected_samples.add(s)
+        self._refresh_panes()
+
+    def _clear_all_samples(self, _):
+        self._selected_samples.clear()
+        self._refresh_panes()
+
     def _build_matrix(self):
         L = widgets.Layout
         css = PipelineStepUI.get_status_css()
 
-        # State: simple sets
         if not hasattr(self, '_selected_samples'):
             self._selected_samples = set()
-        if not hasattr(self, '_available_samples'):
-            self._available_samples = set()
-
-        def _load_samples():
-            self._available_samples = set(list_sample_collections_gcs())
-
-        if not self._available_samples:
-            _load_samples()
+        self._available_samples = set(list_sample_collections_gcs())
 
         # Campaign dropdown
         self.w_campaign = widgets.Dropdown(
@@ -257,7 +281,7 @@ class ModelTrainerUI(PipelineStepUI):
                 CacheManager._state = state
                 CacheManager.save()
             if hasattr(self, '_cached_samples'): del self._cached_samples
-            _load_samples()
+            self._available_samples = set(list_sample_collections_gcs())
             self._refresh_panes()
         self.w_campaign.observe(_on_campaign_change, names='value')
 
@@ -267,47 +291,17 @@ class ModelTrainerUI(PipelineStepUI):
 
         btn_all = widgets.Button(description=Lang.ALL, icon='check-square',
             button_style='info', layout=L(width='60px'))
-        btn_all.on_click(lambda _: [self._selected_samples.add(s) for s in self._get_filtered_available()] or self._refresh_panes())
+        btn_all.on_click(self._select_all_samples)
 
         btn_clear = widgets.Button(description=Lang.CLEAR, icon='square-o',
             button_style='warning', layout=L(width='60px'))
-        btn_clear.on_click(lambda _: self._selected_samples.clear() or self._refresh_panes())
+        btn_clear.on_click(self._clear_all_samples)
 
-        # Available pane
+        # Panes
         self.available_pane = widgets.VBox([], layout=L(
             border='1px solid #ddd', height='150px', overflow_y='auto', padding='0'))
-
-        # Selected pane
         self.selected_pane = widgets.VBox([], layout=L(
             border='1px solid #ddd', height='150px', overflow_y='auto', padding='0'))
-
-        def _refresh_panes():
-            q = (self.txt_search_samples.value or '').lower()
-            available = sorted([s for s in self._available_samples if q in s.lower() and s not in self._selected_samples])
-            selected = sorted(self._selected_samples)
-
-            avail_btns = []
-            for s in available:
-                btn = widgets.Button(description=s, layout=L(width='100%', min_height='26px', margin='1px 0'),
-                    style={'button_color': '#f8f9fa'})
-                btn.on_click(lambda _, name=s: (self._selected_samples.add(name), _refresh_panes()))
-                avail_btns.append(btn)
-            self.available_pane.children = avail_btns
-
-            sel_btns = []
-            for s in selected:
-                btn = widgets.Button(description=s, layout=L(width='100%', min_height='26px', margin='1px 0'),
-                    style={'button_color': '#e3f2fd'})
-                btn.on_click(lambda _, name=s: (self._selected_samples.discard(name), _refresh_panes()))
-                sel_btns.append(btn)
-            self.selected_pane.children = sel_btns
-
-        self._refresh_panes = _refresh_panes
-
-        def _get_filtered_available(self=None):
-            q = (self.txt_search_samples.value or '').lower()
-            return [s for s in self._available_samples if q in s.lower() and s not in self._selected_samples]
-        self._get_filtered_available = _get_filtered_available
 
         # Toolbar
         toolbar = widgets.HBox([
@@ -327,10 +321,9 @@ class ModelTrainerUI(PipelineStepUI):
             widgets.HTML(f"<b style='font-size:12px; color:#555;'>[OK] {Lang.SELECTED}</b>"),
             self.selected_pane
         ], layout=L(flex='1'))
-
         dual_pane = widgets.HBox([left_pane, right_pane], layout=L(gap='20px', padding='5px 10px 10px 10px'))
 
-        _refresh_panes()
+        self._refresh_panes()
         return widgets.VBox([css, toolbar, dual_pane])
 
     def _build_extraction_matrix(self):
