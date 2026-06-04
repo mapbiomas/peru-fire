@@ -478,6 +478,10 @@ class ModelTrainerUI(PipelineStepUI):
         """Sync all M4 data: models, samples, extraction cache."""
         print(Lang.REPO_SCANNING)
         try:
+            CacheManager.clear()
+        except Exception:
+            pass
+        try:
             CacheManager.build_full_cache()
         except Exception as e:
             print(f"  [WARN] Cache sync: {e}")
@@ -544,6 +548,16 @@ class ModelTrainerUI(PipelineStepUI):
                         pass  # metrics.json é opcional
                     
                     metadata_cache[m_id] = meta
+                    # Normalize path before caching (strip gcsfs /o/ prefix)
+                    raw = cache.get('meta', {}).get(m_id, {}).get('path', '')
+                    if '/o/' in raw:
+                        try:
+                            norm = raw.split('/o/', 1)[-1]
+                            norm = urllib.parse.unquote(norm)
+                            if norm.startswith(f"{CONFIG['bucket']}/"):
+                                norm = norm[len(CONFIG['bucket'])+1:]
+                            cache['meta'][m_id]['path'] = norm
+                        except: pass
                     updated_cache = True
                 except Exception as e:
                     print(f"[WARN] Erro ao carregar metadados de {m_id}: {e}")
