@@ -244,6 +244,7 @@ class ModelTrainerUI(PipelineStepUI):
         selected = sorted(self._selected_samples)
         self._populate_pane(self.available_pane, available, 'add')
         self._populate_pane(self.selected_pane, selected, 'remove')
+        self._update_shortname()
 
     def _select_all_samples(self, _):
         q = (self.txt_search_samples.value or '').lower()
@@ -255,6 +256,31 @@ class ModelTrainerUI(PipelineStepUI):
     def _clear_all_samples(self, _):
         self._selected_samples.clear()
         self._refresh_panes()
+
+    def _update_shortname(self):
+        """Update the shortname widget based on selected samples and bands."""
+        import re
+        sel = sorted(getattr(self, '_selected_samples', set()))
+        if not sel:
+            short = CONFIG.get('campaign', 'MONITOR_01').lower()
+        else:
+            regions = set()
+            for s in sel:
+                m = re.search(r'_r(\d+)_', s)
+                if m:
+                    regions.add(f"r{m.group(1)}")
+            if not regions:
+                short = 'peru_v1'
+            else:
+                region_part = '_'.join(sorted(regions)) if len(regions) == 1 else 'multiregion'
+                n_bands = 4
+                if hasattr(self, 'band_chk_map') and self.band_chk_map:
+                    n_bands = sum(1 for chk in self.band_chk_map.values() if chk.value)
+                    if n_bands == 0:
+                        n_bands = 4
+                short = f"{region_part}_{n_bands}b"
+        if hasattr(self, 'w_shortname'):
+            self.w_shortname.value = short
 
     def _build_matrix(self):
         L = widgets.Layout
@@ -434,32 +460,11 @@ class ModelTrainerUI(PipelineStepUI):
         L = widgets.Layout
         next_id = self._suggest_next_id()
 
-        def _suggest_shortname():
-            import re
-            sel = sorted(getattr(self, '_selected_samples', set()))
-            if not sel:
-                return CONFIG.get('campaign', 'MONITOR_01').lower()
-            # Extract region codes from sample names (e.g. _r1_, _r5_, _r9_)
-            regions = set()
-            for s in sel:
-                m = re.search(r'_r(\d+)_', s)
-                if m:
-                    regions.add(f"r{m.group(1)}")
-            if not regions:
-                return 'peru_v1'
-            region_part = '_'.join(sorted(regions)) if len(regions) == 1 else 'multiregion'
-            # Count selected bands (default 4: red, nir, swir1, swir2)
-            n_bands = 4
-            if hasattr(self, 'band_chk_map') and self.band_chk_map:
-                n_bands = sum(1 for chk in self.band_chk_map.values() if chk.value)
-                if n_bands == 0:
-                    n_bands = 4
-            return f"{region_part}_{n_bands}b"
-
         self.w_training_id = widgets.Text(value=next_id, description=Lang.TRAINING_ID,
             style={'description_width': '120px'}, layout=L(width='300px'))
-        self.w_shortname = widgets.Text(value=_suggest_shortname(), description=Lang.SHORTNAME,
+        self.w_shortname = widgets.Text(value='', description=Lang.SHORTNAME,
             layout=L(width='300px'))
+        self._update_shortname()
         self.w_comment = widgets.Textarea(placeholder=Lang.COMMENTS, layout=L(width='98%', height='60px'))
         
         return widgets.VBox([
