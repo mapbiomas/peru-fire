@@ -124,18 +124,9 @@ _AUTHENTICATED = False
 _GCS_CREDENTIALS = None
 
 
-def authenticate(project='mapbiomas-peru', clean_cache=False):
-    """Autenticar com Google Earth Engine e GCS (Suporta Local e Colab)."""
+def authenticate(project='mapbiomas-peru'):
+    """Autenticar com Google Earth Engine e GCS. Deve ser chamado antes de set_global_opts()."""
     global _AUTHENTICATED, _GCS_CREDENTIALS
-
-    if CONFIG is None:
-        raise RuntimeError("CONFIG not initialized. Call set_global_opts() first.")
-
-    if clean_cache:
-        _AUTHENTICATED = False
-        _GCS_CREDENTIALS = None
-        from M_cache import CacheManager
-        CacheManager.clear()
     
     if _AUTHENTICATED:
         return
