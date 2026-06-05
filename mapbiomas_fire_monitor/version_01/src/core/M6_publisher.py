@@ -218,7 +218,7 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
         logger(f"    Setting up GEE folders...")
 
     base = CONFIG['gee_campaigns_prefix']
-    campaign = CONFIG.get('campaign', 'MONITOR_01')
+    campaign = campaign or CONFIG.get('campaign', 'MONITOR_01')
     for sub in [f'{campaign}/LIBRARY_CLASSIFICATIONS', f'{campaign}/LIBRARY_CLASSIFICATIONS/REGIONAL']:
         try:
             ee.data.createAsset({'type': 'Folder'}, f"{base}/{sub}")
@@ -302,10 +302,10 @@ def gee_asset_exists(model_id, region, period, campaign=None):
         return False
 
 
-def load_gee_assets(model_id):
+def load_gee_assets(model_id, campaign=None):
     """Retorna set de region_period que ja existem no GEE para este modelo. 1 chamada GEE."""
     import ee
-    camp = CONFIG.get('campaign', 'MONITOR_01')
+    camp = campaign or CONFIG.get('campaign', 'MONITOR_01')
     parent = f"{CONFIG['gee_campaigns_prefix']}/{camp}/LIBRARY_CLASSIFICATIONS/REGIONAL/{model_id}"
     assets = set()
     try:
@@ -443,9 +443,12 @@ def discover_classified_groups(fs=None, logger=None):
     if fs is None:
         fs = _get_fs()
 
-    base = gcs_full(classifications_base('', '')).rstrip('/')
+    # Scan ALL campaigns under the prefix, not just CONFIG['campaign']
+    bucket = CONFIG.get('gcs_bucket', 'mapbiomas-fire')
+    gcs_prefix = CONFIG.get('gcs_campaigns_prefix', 'sudamerica/peru/CATALOG_01')
+    base = f"gs://{bucket}/{gcs_prefix}"
     patterns = [
-        f"{base}*/CLASSIFIED_TILES/tile_*.tif",
+        f"{base}/*/LIBRARY_CLASSIFICATIONS/*/CLASSIFIED_TILES/tile_*.tif",
     ]
 
     groups = set()
@@ -473,7 +476,9 @@ def discover_classified_groups(fs=None, logger=None):
                 region = '_'.join(parts[:-2]) if len(parts) >= 2 else parts[0]
             model_dir = tp.split('/CLASSIFIED_TILES')[0]
             model_id = os.path.basename(model_dir)
-            campaign = CONFIG.get('campaign', 'MONITOR_01')
+            # Extract campaign from actual GCS path, not from current CONFIG
+            # (CONFIG may have changed since tiles were written by M5)
+            campaign = model_dir.split('/LIBRARY_CLASSIFICATIONS')[0].rstrip('/').split('/')[-1]
             groups.add((model_id, region, period, campaign))
 
     return groups

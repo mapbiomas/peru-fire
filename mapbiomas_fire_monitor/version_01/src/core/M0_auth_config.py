@@ -124,12 +124,15 @@ _AUTHENTICATED = False
 _GCS_CREDENTIALS = None
 
 
-def authenticate(project='mapbiomas-peru'):
-    """Autenticar com Google Earth Engine e GCS. Deve ser chamado antes de set_global_opts()."""
+def authenticate(project=None):
+    """Autenticar com Google Earth Engine e GCS. Se project for None, usa CONFIG['gee_project']."""
     global _AUTHENTICATED, _GCS_CREDENTIALS
     
     if _AUTHENTICATED:
         return
+    
+    if project is None:
+        project = (CONFIG or {}).get('gee_project', 'mapbiomas-peru')
     
     import ee
 
