@@ -11,7 +11,7 @@ def show_toolkit_links():
     """
     github_link = "https://github.com/mapbiomas/peru-fire/blob/main/mapbiomas_fire_monitor/version_01/src/core/M3_toolkit.js"
     gee_link = "https://code.earthengine.google.com/?scriptPath=users%2Fmapbiomasworkspace1%2Fmapbiomas-fire%3A5-Monitor-Fuego%2FToolkit_Monitor_Fuego"
-    doc_link = "https://github.com/mapbiomas/peru-fire/blob/main/mapbiomas_fire_monitor/version_01/FIRE_MONITOR_STANDARDS.md"
+    slides_link = "https://docs.google.com/presentation/d/1kQlwA-DAliL07Hp5b67o82PIBtYnsuk2tWjq04D6KYk"
 
     print("\n" + "="*70)
     print(f"   {Lang.M3_TITLE}")
@@ -22,8 +22,8 @@ def show_toolkit_links():
     print(f"     {github_link}\n")
     print(f"   1.2. {Lang.M3_EDITOR}:")
     print(f"     {gee_link}\n")
-    print(f"   2. {Lang.M3_DOCS}:")
-    print(f"     {doc_link}")
+    print(f"   2. {Lang.M3_SLIDES}:")
+    print(f"     {slides_link}")
     print("\n" + "="*70 + "\n")
     return True
 
