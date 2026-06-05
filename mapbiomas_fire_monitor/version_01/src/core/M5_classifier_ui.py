@@ -207,18 +207,48 @@ class M5WorkplanUI:
         box, self.chk_models = self._create_checkbox_grid(models, "1. Seleccione Modelo (unico):", single_select=True, bg_color='#e8f4fd')
         self.w_model_box.children = box.children
         regions = ['Peru', 'Amazonia', 'Cerrado']
+        err_banner = None
         try:
             import ee
             if not getattr(ee.data, '_credentials', None):
                 from M0_auth_config import authenticate
                 authenticate()
-            asset = CONFIG.get('asset_regions', 'projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000')
-            fc = ee.FeatureCollection(asset)
-            names = fc.aggregate_array(REGION_NAME_PROPERTY).distinct().getInfo()
-            if names:
-                regions = sorted([n for n in names if n])
-        except Exception:
-            pass
+            asset = CONFIG.get('asset_regions')
+            if not asset:
+                err_banner = 'CONFIG[asset_regions] nao definido'
+            else:
+                try:
+                    ee.data.getAsset(asset)
+                except Exception:
+                    err_banner = f'<b>Asset nao encontrado no GEE:</b><br><code>{asset}</code>'
+
+                if not err_banner:
+                    fc = ee.FeatureCollection(asset)
+                    names = fc.aggregate_array(REGION_NAME_PROPERTY).distinct().getInfo()
+                    if names:
+                        regions = sorted([n for n in names if n])
+                    else:
+                        size = fc.size().getInfo()
+                        if size == 0:
+                            err_banner = f'<b>Asset existe mas esta VAZIO:</b><br><code>{asset}</code><br><small>0 features encontradas</small>'
+                        else:
+                            err_banner = (f'<b>Coluna <code>{REGION_NAME_PROPERTY}</code> nao encontrada:</b><br>'
+                                          f'<code>{asset}</code><br>'
+                                          f'<small>Asset tem {size} features, mas a propriedade <code>'
+                                          f'{REGION_NAME_PROPERTY}</code> nao retornou valores. Verifique o nome da coluna.</small>')
+        except Exception as e:
+            err_banner = f'<b>Erro ao acessar GEE:</b><br><span style="color:#d32f2f;">{e}</span>'
+
+        if err_banner:
+            from IPython.display import display, HTML
+            display(HTML(f"""
+            <div style='background:#fff3cd; border:1px solid #ffc107; border-radius:5px; padding:12px; margin:8px 0; font-family:monospace; font-size:13px;'>
+                <b style='color:#856404;'>Nao foi possivel popular regioes automaticamente</b><br><br>
+                {err_banner}<br><br>
+                <b>Coluna usada:</b> <code>{REGION_NAME_PROPERTY}</code><br><br>
+                <small style='color:#666;'>— Usando fallback estatico: {regions}</small>
+            </div>
+            """))
         box, self.chk_regions = self._create_checkbox_grid(regions, "2. Seleccione Regiones:", bg_color='#fdf7e8')
         self.w_region_box.children = box.children
         import datetime
