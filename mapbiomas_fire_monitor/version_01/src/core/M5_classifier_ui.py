@@ -10,7 +10,7 @@ from M5_workplan import load_workplan, save_workplan, make_job_id, new_job, gcs_
 from M4_data_extractor import list_campaigns_gcs
 from M_ui_components import inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output, make_select_all_none, make_refresh_button
 from M_lang import L as Lang
-from M_regions import REGION_NAME_PROPERTY
+from M_regions import REGION_NAME_PROPERTY, asset_for as _region_asset_for
 
 L = widgets.Layout
 
@@ -207,18 +207,42 @@ class M5WorkplanUI:
         box, self.chk_models = self._create_checkbox_grid(models, "1. Seleccione Modelo (unico):", single_select=True, bg_color='#e8f4fd')
         self.w_model_box.children = box.children
         regions = ['Peru', 'Amazonia', 'Cerrado']
+        asset1 = None
         try:
             import ee
             if not getattr(ee.data, '_credentials', None):
                 from M0_auth_config import authenticate
                 authenticate()
-            asset = CONFIG.get('asset_regions', 'projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000')
-            fc = ee.FeatureCollection(asset)
+            asset1 = CONFIG.get('asset_regions', 'projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000')
+            fc = ee.FeatureCollection(asset1)
             names = fc.aggregate_array(REGION_NAME_PROPERTY).distinct().getInfo()
             if names:
                 regions = sorted([n for n in names if n])
-        except Exception:
-            pass
+        except Exception as e1:
+            try:
+                asset2 = _region_asset_for('peru')
+                if not asset2:
+                    raise Exception("asset_for('peru') retornou None")
+                fc = ee.FeatureCollection(asset2)
+                names = fc.aggregate_array(REGION_NAME_PROPERTY).distinct().getInfo()
+                if names:
+                    regions = sorted([n for n in names if n])
+            except Exception as e2:
+                from IPython.display import display, HTML
+                display(HTML(f"""
+                <div style='background:#fff3cd; border:1px solid #ffc107; border-radius:5px; padding:12px; margin:8px 0; font-family:monospace; font-size:13px;'>
+                    <b style='color:#856404;'>⚠ Nao foi possivel popular regioes automaticamente</b><br><br>
+                    <b>1) CONFIG[asset_regions]:</b><br>
+                    <code>{asset1}</code><br>
+                    <b>Coluna:</b> <code>{REGION_NAME_PROPERTY}</code><br>
+                    <b>Erro:</b> <span style='color:#d32f2f;'>{e1}</span><br><br>
+                    <b>2) M_regions.asset_for("peru"):</b><br>
+                    <code>{_region_asset_for('peru') or 'nao encontrado'}</code><br>
+                    <b>Coluna:</b> <code>{REGION_NAME_PROPERTY}</code><br>
+                    <b>Erro:</b> <span style='color:#d32f2f;'>{e2}</span><br><br>
+                    <small style='color:#666;'>— Usando fallback estatico: {regions}</small>
+                </div>
+                """))
         box, self.chk_regions = self._create_checkbox_grid(regions, "2. Seleccione Regiones:", bg_color='#fdf7e8')
         self.w_region_box.children = box.children
         import datetime
