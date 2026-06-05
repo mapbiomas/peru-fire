@@ -10,7 +10,7 @@ from M5_workplan import load_workplan, save_workplan, make_job_id, new_job, gcs_
 from M4_data_extractor import list_campaigns_gcs
 from M_ui_components import inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output, make_select_all_none, make_refresh_button
 from M_lang import L as Lang
-from M_regions import REGION_NAME_PROPERTY, asset_for as _region_asset_for
+from M_regions import REGION_NAME_PROPERTY
 
 L = widgets.Layout
 
@@ -207,49 +207,48 @@ class M5WorkplanUI:
         box, self.chk_models = self._create_checkbox_grid(models, "1. Seleccione Modelo (unico):", single_select=True, bg_color='#e8f4fd')
         self.w_model_box.children = box.children
         regions = ['Peru', 'Amazonia', 'Cerrado']
+        err_banner = None
         try:
             import ee
             if not getattr(ee.data, '_credentials', None):
                 from M0_auth_config import authenticate
                 authenticate()
-            asset1 = CONFIG.get('asset_regions', 'projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000')
-            asset2 = _region_asset_for('peru')
-
-            errors = []
-            for fonte, asset in [
-                ('CONFIG[asset_regions]', asset1),
-                ('M_regions.asset_for(\"peru\")', asset2),
-            ]:
-                if not asset:
-                    errors.append((fonte, 'nao definido', 'asset e None'))
-                    continue
+            asset = CONFIG.get('asset_regions')
+            if not asset:
+                err_banner = 'CONFIG[asset_regions] nao definido'
+            else:
                 try:
+                    ee.data.getAsset(asset)
+                except Exception:
+                    err_banner = f'<b>Asset nao encontrado no GEE:</b><br><code>{asset}</code>'
+
+                if not err_banner:
                     fc = ee.FeatureCollection(asset)
                     names = fc.aggregate_array(REGION_NAME_PROPERTY).distinct().getInfo()
                     if names:
                         regions = sorted([n for n in names if n])
-                        break
-                    errors.append((fonte, asset, 'lista vazia (sem features ou coluna errada?)'))
-                except Exception as e:
-                    errors.append((fonte, asset, str(e)))
+                    else:
+                        size = fc.size().getInfo()
+                        if size == 0:
+                            err_banner = f'<b>Asset existe mas esta VAZIO:</b><br><code>{asset}</code><br><small>0 features encontradas</small>'
+                        else:
+                            err_banner = (f'<b>Coluna <code>{REGION_NAME_PROPERTY}</code> nao encontrada:</b><br>'
+                                          f'<code>{asset}</code><br>'
+                                          f'<small>Asset tem {size} features, mas a propriedade <code>'
+                                          f'{REGION_NAME_PROPERTY}</code> nao retornou valores. Verifique o nome da coluna.</small>')
+        except Exception as e:
+            err_banner = f'<b>Erro ao acessar GEE:</b><br><span style="color:#d32f2f;">{e}</span>'
 
-            if errors and regions == ['Peru', 'Amazonia', 'Cerrado']:
-                from IPython.display import display, HTML
-                err_lines = ''.join(
-                    f'<b>{f}:</b> <code>{a}</code><br>'
-                    f'<b>Coluna:</b> <code>{REGION_NAME_PROPERTY}</code><br>'
-                    f'<b>Erro:</b> <span style="color:#d32f2f;">{e}</span><br><br>'
-                    for f, a, e in errors
-                )
-                display(HTML(f"""
-                <div style='background:#fff3cd; border:1px solid #ffc107; border-radius:5px; padding:12px; margin:8px 0; font-family:monospace; font-size:13px;'>
-                    <b style='color:#856404;'>Nao foi possivel popular regioes automaticamente</b><br><br>
-                    {err_lines}
-                    <small style='color:#666;'>— Usando fallback estatico: {regions}</small>
-                </div>
-                """))
-        except Exception:
-            pass
+        if err_banner:
+            from IPython.display import display, HTML
+            display(HTML(f"""
+            <div style='background:#fff3cd; border:1px solid #ffc107; border-radius:5px; padding:12px; margin:8px 0; font-family:monospace; font-size:13px;'>
+                <b style='color:#856404;'>Nao foi possivel popular regioes automaticamente</b><br><br>
+                {err_banner}<br><br>
+                <b>Coluna usada:</b> <code>{REGION_NAME_PROPERTY}</code><br><br>
+                <small style='color:#666;'>— Usando fallback estatico: {regions}</small>
+            </div>
+            """))
         box, self.chk_regions = self._create_checkbox_grid(regions, "2. Seleccione Regiones:", bg_color='#fdf7e8')
         self.w_region_box.children = box.children
         import datetime
