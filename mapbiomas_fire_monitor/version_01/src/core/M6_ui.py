@@ -75,12 +75,12 @@ class M6WorkplanUI:
             if self.fs.exists(gcs_full(region_path(m, r, p, c))):
                 self._mosaics.add(group)
 
-        # 2. GEE: 1 chamada listAssets por modelo
-        by_model = {}
+        # 2. GEE: 1 chamada listAssets por (modelo, campanha)
+        by_model_camp = {}
         for g in self._groups:
-            by_model.setdefault(g[0], []).append(g)
-        for model_id, model_groups in by_model.items():
-            assets = load_gee_assets(model_id)
+            by_model_camp.setdefault((g[0], g[3]), []).append(g)
+        for (model_id, campaign), model_groups in by_model_camp.items():
+            assets = load_gee_assets(model_id, campaign=campaign)
             for m, r, p, c in model_groups:
                 if f"{r}_{p}" in assets:
                     self._gee_assets.add((m, r, p, c))
