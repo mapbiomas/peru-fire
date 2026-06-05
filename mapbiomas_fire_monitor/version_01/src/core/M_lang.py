@@ -1135,8 +1135,27 @@ STRINGS_ES = {
     "M6_START": "Iniciando Filtrado",
     "M6_EXPORT_OK": "Tarea de exportación iniciada",
     "M6_SUMMARY": "Resumen de Configuración Usada",
+    "TAB_ANALYTICS": "Analíticas",
+    "TAB_M6_COVERAGE": "Cobertura",
+    "GUIDE_M6_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>M6 - Mosaico, Stats y Publicación</h3>
+        <p>Publica tiles clasificados de M5: crea mosaicos regionales, calcula estadísticas de área quemada y sube a Google Earth Engine.</p>
+        <h4>Flujo:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_publish}</b> — grupos de tiles clasificados esperando mosaico.</li>
+            <li><b>{tab_done}</b> — regiones publicadas con mosaico y estadísticas.</li>
+            <li><b>{tab_analytics}</b> — tabla consolidada de estadísticas con descarga.</li>
+            <li><b>{tab_coverage}</b> — mapa de cobertura: publicado vs pendiente.</li>
+            <li>Ejecute <code>run_m6_publish()</code> en el notebook para procesar.</li>
+        </ol>
+    </div>""",
+    "DOWNLOAD_TABLE": "Descargar Tabla",
+    "ANALYTICS_FILTER_MODEL": "Modelo",
+    "ANALYTICS_FILTER_REGION": "Región",
+    "ANALYTICS_FILTER_PERIOD": "Periodo",
+    "REFRESH_M6": "Actualizar M6",
     "M6_HEADER_TITLE": "M6 - Mosaico, Stats y Publicación",
-    "M6_LABEL_PERIOD": "Periodo:",
+    "M6_LABEL_PERIOD": "Período:",
     "M6_GROUPS_PENDING": "{n} grupos pendientes de mosaico",
     "M6_MOSAIC_OK": "mosaico OK",
     "M6_PUBLISHED_GROUPS": "{n} grupos publicados",
@@ -1703,6 +1722,25 @@ STRINGS_PT = {
     "M6_START": "Iniciando Filtragem",
     "M6_EXPORT_OK": "Tarefa de exportação iniciada",
     "M6_SUMMARY": "Resumo da Configuração",
+    "TAB_ANALYTICS": "Analíticas",
+    "TAB_M6_COVERAGE": "Cobertura",
+    "GUIDE_M6_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>M6 - Mosaico, Stats e Publicação</h3>
+        <p>Publica tiles classificados do M5: cria mosaicos regionais, calcula estatísticas de área queimada e envia para o Google Earth Engine.</p>
+        <h4>Fluxo:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_publish}</b> — grupos de tiles classificados aguardando mosaico.</li>
+            <li><b>{tab_done}</b> — regiões publicadas com mosaico e estatísticas.</li>
+            <li><b>{tab_analytics}</b> — tabela consolidada de estatísticas com download.</li>
+            <li><b>{tab_coverage}</b> — mapa de cobertura: publicado vs pendente.</li>
+            <li>Execute <code>run_m6_publish()</code> no notebook para processar.</li>
+        </ol>
+    </div>""",
+    "DOWNLOAD_TABLE": "Baixar Tabela",
+    "ANALYTICS_FILTER_MODEL": "Modelo",
+    "ANALYTICS_FILTER_REGION": "Região",
+    "ANALYTICS_FILTER_PERIOD": "Período",
+    "REFRESH_M6": "Atualizar M6",
     "M6_HEADER_TITLE": "M6 - Mosaico, Stats e Publicação",
     "M6_LABEL_PERIOD": "Período:",
     "M6_GROUPS_PENDING": "{n} grupos pendentes de mosaico",
@@ -2271,6 +2309,25 @@ STRINGS_FR = {
     "M6_START": "Démarrage filtrage",
     "M6_EXPORT_OK": "Tâche d'exportation démarrée",
     "M6_SUMMARY": "Résumé configuration",
+    "TAB_ANALYTICS": "Analytiques",
+    "TAB_M6_COVERAGE": "Couverture",
+    "GUIDE_M6_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>M6 - Mosaïque, Stats et Publication</h3>
+        <p>Publie les tuiles classifiées de M5 : crée des mosaïques régionales, calcule les statistiques de surface brûlée et télécharge vers Google Earth Engine.</p>
+        <h4>Flux :</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_publish}</b> — groupes de tuiles classifiées en attente de mosaïque.</li>
+            <li><b>{tab_done}</b> — régions publiées avec mosaïque et statistiques.</li>
+            <li><b>{tab_analytics}</b> — tableau consolidé des statistiques avec téléchargement.</li>
+            <li><b>{tab_coverage}</b> — carte de couverture : publié vs en attente.</li>
+            <li>Exécutez <code>run_m6_publish()</code> dans le notebook pour traiter.</li>
+        </ol>
+    </div>""",
+    "DOWNLOAD_TABLE": "Télécharger Tableau",
+    "ANALYTICS_FILTER_MODEL": "Modèle",
+    "ANALYTICS_FILTER_REGION": "Région",
+    "ANALYTICS_FILTER_PERIOD": "Période",
+    "REFRESH_M6": "Actualiser M6",
     "M6_HEADER_TITLE": "M6 - Mosaïque, Stats et Publication",
     "M6_LABEL_PERIOD": "Période:",
     "M6_GROUPS_PENDING": "{n} groupes en attente de mosaïque",
@@ -2838,6 +2895,25 @@ STRINGS_ID = {
     "M6_START": "Memulai Penyaringan",
     "M6_EXPORT_OK": "Tugas ekspor dimulai",
     "M6_SUMMARY": "Ringkasan Konfigurasi",
+    "TAB_ANALYTICS": "Analitik",
+    "TAB_M6_COVERAGE": "Cakupan",
+    "GUIDE_M6_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>M6 - Mozaik, Statistik & Publikasi</h3>
+        <p>Menerbitkan tile terklasifikasi dari M5: membuat mosaik regional, menghitung statistik area terbakar, dan mengunggah ke Google Earth Engine.</p>
+        <h4>Alur:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_publish}</b> — grup tile terklasifikasi menunggu mozaik.</li>
+            <li><b>{tab_done}</b> — wilayah diterbitkan dengan mozaik dan statistik.</li>
+            <li><b>{tab_analytics}</b> — tabel statistik gabungan dengan unduhan.</li>
+            <li><b>{tab_coverage}</b> — peta cakupan: diterbitkan vs tertunda.</li>
+            <li>Jalankan <code>run_m6_publish()</code> di notebook untuk memproses.</li>
+        </ol>
+    </div>""",
+    "DOWNLOAD_TABLE": "Unduh Tabel",
+    "ANALYTICS_FILTER_MODEL": "Model",
+    "ANALYTICS_FILTER_REGION": "Wilayah",
+    "ANALYTICS_FILTER_PERIOD": "Periode",
+    "REFRESH_M6": "Muat Ulang M6",
     "M6_HEADER_TITLE": "M6 - Mozaik, Statistik & Publikasi",
     "M6_LABEL_PERIOD": "Periode:",
     "M6_GROUPS_PENDING": "{n} grup menunggu mozaik",
