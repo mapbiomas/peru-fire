@@ -1,7 +1,7 @@
 # MapBiomas Fire Monitor — Development Standards
 
 > Pipeline M0-M8 | Sentinel-2 | Peru Fire Monitor
-> Updated: 2026-06-05
+> Updated: 2026-06-05 | Última revisão: notebooks parametrizados, M5 diagnostic, asset por campanha
 
 ---
 
@@ -53,6 +53,16 @@ CATALOG_01/
 - Campaign name is `CAMPAIGN` in `set_global_opts()` — never hidden in code.
 - No redundant subfolders: the campaign directory IS the namespace.
 - Each campaign has isolated outputs; shared resources (images, cache) stay at root.
+- **Each campaign needs its own copy of the region FeatureCollection** (`AUXILIARY/regiones_fuego_{country}_v1`). Copy from the canonical source before first use:
+  ```python
+  import ee
+  ee.data.createAsset({'type': 'FOLDER'}, 'projects/mapbiomas-{country}/assets/FIRE/CATALOG_01/{campaign}')
+  ee.data.createAsset({'type': 'FOLDER'}, 'projects/mapbiomas-{country}/assets/FIRE/CATALOG_01/{campaign}/AUXILIARY')
+  ee.data.copyAsset(
+    'projects/mapbiomas-{country}/assets/FIRE/AUXILIARY_DATA/regiones_fuego_{country}_v1',
+    'projects/mapbiomas-{country}/assets/FIRE/CATALOG_01/{campaign}/AUXILIARY/regiones_fuego_{country}_v1'
+  )
+  ```
 - See ADR: `adr/005-campaign-concept.md`
 
 ---
@@ -63,27 +73,50 @@ CATALOG_01/
 
 Agnostic config: **9 required parameters, zero defaults.** No MapBiomas-specific assumptions.
 
+**Notebook branch strategy**
+
+Two parallel notebooks: `mapbiomas_fire_sentinel_peru.ipynb` (main/production) + `_dev.ipynb` (development). Both parameterized with `CONTRY_SELECTED` for easy multi-country reuse:
+
 ```python
-authenticate(project='mapbiomas-peru')
+CONTRY_SELECTED = 'peru'  # change to 'bolivia', 'chile', etc.
+
+import sys, os, subprocess, shutil
+if os.path.exists("/content/fire_monitor"):
+    shutil.rmtree("/content/fire_monitor")
+subprocess.run(["git", "clone", "-b", "BRANCH",    # BRANCH = 'dev' or 'main'
+    "https://github.com/mapbiomas/peru-fire.git", "fire_monitor"])
+from M0_auth_config import set_global_opts, authenticate, print_config
+authenticate(project=F'mapbiomas-{CONTRY_SELECTED}')
 
 set_global_opts(
-    country='peru',
-    gcs_bucket='mapbiomas-fire',
-    gcs_library_images_prefix='sudamerica/peru/CATALOG_01',
-    gcs_campaigns_prefix='sudamerica/peru/CATALOG_01',
-    gee_project='mapbiomas-peru',
-    gee_library_images_prefix='projects/mapbiomas-peru/assets/FIRE/CATALOG_01',
-    gee_campaigns_prefix='projects/mapbiomas-peru/assets/FIRE/CATALOG_01',
-    campaign='MONITOR_01',
-    asset_regions='projects/mapbiomas-peru/assets/FIRE/CATALOG_01/MONITOR_01/AUXILIARY/regiones_fuego_peru_v1',
-
+    country=F'{CONTRY_SELECTED}',
+    campaign='CAMPAIGN',                              # MONITOR_01 (main) / MONITOR_DEV (dev)
     sensor=['sentinel2'],
     periodicity=['monthly'],
     mosaic_methods=['minnbr', 'minnbr_buffer'],
-    personal_task_flag='MONITOR',
+    personal_task_flag='TASK_FLAG',                   # MONITOR (main) / MONITOR_DEV (dev)
     language='en',
+    gcs_bucket='mapbiomas-fire',
+    gcs_library_images_prefix=F'sudamerica/{CONTRY_SELECTED}/CATALOG_01',
+    gcs_campaigns_prefix=F'sudamerica/{CONTRY_SELECTED}/CATALOG_01',
+    gee_project=F'mapbiomas-{CONTRY_SELECTED}',
+    gee_library_images_prefix=F'projects/mapbiomas-{CONTRY_SELECTED}/assets/FIRE/CATALOG_01',
+    gee_campaigns_prefix=F'projects/mapbiomas-{CONTRY_SELECTED}/assets/FIRE/CATALOG_01',
+    asset_regions=F'projects/mapbiomas-{CONTRY_SELECTED}/assets/FIRE/CATALOG_01/{campaign}/AUXILIARY/regiones_fuego_{CONTRY_SELECTED}_v1',
 )
+print_config()
 ```
+
+**Key differences between notebooks:**
+
+| | `peru.ipynb` (main) | `peru_dev.ipynb` (dev) |
+|--|---------------------|----------------------|
+| Clone branch | `main` (no `-b`) | `dev` (`-b dev`) |
+| Campaign | `MONITOR_01` | `MONITOR_DEV` |
+| Task flag | `MONITOR` | `MONITOR_DEV` |
+| Asset regions | `.../MONITOR_01/AUXILIARY/...` | `.../MONITOR_DEV/AUXILIARY/...` |
+
+**Dev notebook** exists only in the `dev` branch — never merged into `main`. See `adr/009-dev-branch-strategy.md`.
 
 Dynamic path helpers replace fixed CONFIG keys:
 - `gcs_samples_path(campaign)` → `{prefix}/{campaign}/LIBRARY_SAMPLES`
@@ -136,6 +169,26 @@ See ADR: `adr/007-m4-redesign.md`
 ### M5 — Tile-Based Classification
 
 Loads DNN model from GCS, classifies each tile (cim-world-1-250000 grid) independently. Produces int16 2-band rasters: band 0 = probability (0-1000), band 1 = dayOfYear.
+
+**Region selection — auto-population logic:**
+
+In `_populate_dropdowns()` (`M5_classifier_ui.py:201`), the region checkbox grid is populated by querying GEE:
+
+```python
+asset = CONFIG['asset_regions']  # set in M0 notebook
+fc = ee.FeatureCollection(asset)
+names = fc.aggregate_array('region_nam').distinct().getInfo()
+```
+
+If the query returns names, regions are populated automatically. Otherwise a diagnostic banner is shown in the UI with the exact cause:
+
+| Diagnóstico | Causa provável |
+|-------------|----------------|
+| `Asset nao encontrado no GEE: {path}` | FeatureCollection path doesn't exist in GEE. Check `CONFIG[asset_regions]`. |
+| `Asset existe mas esta VAZIO (0 features)` | Campaign copy exists but is empty. Re-copy from `AUXILIARY_DATA/`. |
+| `Coluna {property} nao encontrada` | Asset has features but `region_nam` property is missing. Check `M_regions.py`. |
+
+**Property `region_nam`** is defined in `M_regions.py:9` and must match the target property in the GEE FeatureCollection. Every country's region asset follows the same schema.
 
 ### M6 — Post-Processing & Publication
 
@@ -232,7 +285,7 @@ For the M3 toolkit (JavaScript): edit `APP_LANG` variable and add the correspond
 
 - **Async:** Always dispatch to GEE via `ee.batch.Export`. Never block the UI.
 - **Cache:** Use `M_cache.py` to avoid repetitive GCS listings. Cache is rebuilt on M0 startup via `clean_cache=True`.
-- **Colab:** Notebook auto-clones fresh repo + runs `authenticate()` before `set_global_opts()`. No persistent local state.
+- **Colab:** Notebook auto-clones fresh repo + runs `authenticate()` before `set_global_opts()`. No persistent local state. `CONTRY_SELECTED` variable at the top of M0 cell defines all project paths via f-strings.
 - **Task naming:** All GEE tasks prefixed with `PERSONAL_TASK_FLAG` for filtering.
 - **GDAL:** Auto-detected via `ensure_gdal_path()` (Windows, Linux, Colab).
 
@@ -246,3 +299,6 @@ For the M3 toolkit (JavaScript): edit `APP_LANG` variable and add the correspond
 | 006 | Agnostic M0 | 9 required params, zero defaults, dynamic helpers |
 | 007 | M4 redesign | PCA only, single sync, 2×3 KPIs, auto-shortname |
 | 008 | M3 import | Use `addLayer()`, never `geometries().reset()` with `.evaluate()` |
+| 009 | Dev branch strategy | `dev` branch with isolated notebook; merge preserving M0 via `--ours` |
+| — | M5 region diagnostic | Auto-populates from `CONFIG[asset_regions]`; shows banner if asset not found / empty / wrong column |
+| — | Notebook parametrização | `CONTRY_SELECTED` + f-strings for all GCS/GEE paths; single variable change for new countries |

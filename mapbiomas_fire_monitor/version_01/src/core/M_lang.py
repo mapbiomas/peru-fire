@@ -96,6 +96,90 @@ class L:
     REFRESH_MAP = "Refresh Map"
     TASK_NAME_PLACEHOLDER = "e.g.: Classify Low Amazon 2025 (Lucas)"
 
+    # ── M5 - Section titles ────────────────────────────
+    SECTION_MODEL = "1. Select Model (single):"
+    SECTION_REGIONS = "2. Select Regions:"
+    SECTION_PERIODS = "3. Select Periods (Year / Year_Month):"
+    LOADING_CAMPAIGNS = "Loading campaigns..."
+    CAMPAIGN_LABEL = "Campaign:"
+    FILTER_LABEL = "Filter:"
+    FILTER_PLACEHOLDER = "search by model, region, period..."
+
+    # ── M5 - Region diagnostic ─────────────────────────
+    ERR_CONFIG_ASSET_REGIONS = "CONFIG[asset_regions] not defined"
+    ERR_ASSET_NOT_FOUND = "Asset NOT FOUND in GEE:"
+    ERR_ASSET_EMPTY = "Asset exists but is EMPTY:"
+    ERR_ASSET_COLUMN = "Column <code>{prop}</code> not found"
+    ERR_GEE_ACCESS = "Error accessing GEE:"
+    WARN_REGION_FALLBACK = "Could not auto-populate regions"
+    COLUMN_USED = "Column used:"
+
+    # ── M5 - Validation ───────────────────────────────
+    ERR_NO_TASK_NAME = "Attention: You must assign a Task Name."
+    ERR_NO_SELECTION = "Attention: Select 1 Model and at least 1 Region and 1 Period."
+
+    # ── M5 - Feedback messages ─────────────────────────
+    SAVING_TO_GCS = "Saving to GCS..."
+    MSG_NO_TASKS_ADDED = "No tasks were added."
+    MSG_TASKS_ADDED = "Success: {n} task(s) added."
+    FAIL_SAVE_LOCAL = "failed to save local file (lock busy)"
+    FAIL_GCS_UPLOAD = "{n} failed on GCS"
+    MSG_GCS_OK = "{n} saved to GCS."
+    MSG_SKIPPED_QUEUED = "{n} skipped (already in queue)."
+    WARN_ALREADY_QUEUED = "Warning: {n} tasks already in queue."
+    MSG_LOADED = "{loaded} loaded, {skipped} skipped."
+    TAREA_SAVED = "Task saved to GCS for {m}."
+    TAREA_DELETED = "Task deleted from GCS: {m}."
+    WORKPLAN_DISCARDED = "Workplan discarded: {m} ({n} jobs removed)."
+    QUEUE_CLEARED = "Queue cleared (GCS removed)."
+    SAVED_TO_GCS = "{n} job(s) saved to GCS."
+    ALREADY_SAVED = "{n} job(s) already saved."
+    TEMP_JOBS_REMOVED = "{n} temporary job(s) removed."
+    NO_TEMP_JOBS = "No temporary jobs to remove."
+    REMOVED_FROM_GCS = "{n} job(s) removed from GCS."
+    NO_TILES_GCS_ALT = "No tiles in GCS."
+    TILES_DELETED = "{n} tile(s) deleted."
+    SELECT_TILES_PROMPT = "Select tiles to delete."
+    SYNC_FROM_GCS = "{n} job(s) synced from GCS."
+
+    # ── M5 - Tareas section ────────────────────────────
+    TAREAS_HEADER = "Tasks in GCS ({n} available)"
+    TAREA_SUMMARY = "Model: {m} | Regions: {r} | Periods: {p}"
+
+    # ── M5 - Scale bar ─────────────────────────────────
+    SCALE_BAR_WIDTH = "~{w} km wide"
+
+    # ── M5 - Pending debug ─────────────────────────────
+    INFO_FILTER_COUNT = "{total} pending | {filtered} after filter"
+    GRID_COUNT = "({n} cells)"
+
+    # ── M5 - Map legend ────────────────────────────────
+    MAP_LEGEND_COUNTRY = "Country"
+    MAP_LEGEND_REGIONS = "Regions"
+    MAP_LEGEND_GRID = "Grid cim-world"
+
+    # ── M5 - Model inference errors ────────────────────
+    ERR_MODEL_NO_METADATA = "metadata.json not found at {path}"
+    ERR_MODEL_NO_BANDS_CONFIG = "Model has no 'bands_config' in metadata."
+    ERR_MODEL_NO_BAND_ORDER = "Model has no 'band_order' in metadata. Retrain with the latest M4 (commit 9b95392+)."
+    ERR_MODEL_INCONSISTENCY = "Metadata inconsistency: {details}"
+
+    # ── M5 - Jobs details panel ────────────────────────
+    JOBS_REGISTERED = "Registered jobs"
+    JOBS_SUMMARY = "{total} job(s), {regions} region(s), {periods} period(s)"
+    JOB_REGION = "Region"
+    JOB_PERIOD = "Period"
+    JOB_STATUS = "Status"
+    JOB_TASK = "Task"
+
+    # ── M5 - Model metadata panel ──────────────────────
+    META_SENSORS = "Sensors"
+    META_PERIODICITY = "Periodicity"
+    META_BANDS_INPUT = "Bands (input)"
+    META_ITERATIONS = "Iterations"
+    META_LEARNING_RATE = "Learning rate"
+    META_CAMPAIGN = "Campaign"
+
     # ── M5 Tabs ──────────────────────────────────────────
     TAB_GUIDE = "Guide"
     TAB_REGISTER = "Register"
@@ -656,6 +740,79 @@ STRINGS_ES = {
     "HIDE_TILES": "Ocultar",
     "REFRESH_MAP": "Actualizar Mapa",
     "TASK_NAME_PLACEHOLDER": "Ej: Clasificar Amazonia Baja 2025 (Lucas)",
+    # M5 - Section titles
+    "SECTION_MODEL": "1. Seleccione Modelo (único):",
+    "SECTION_REGIONS": "2. Seleccione Regiones:",
+    "SECTION_PERIODS": "3. Seleccione Periodos (Año / Año_Mes):",
+    "LOADING_CAMPAIGNS": "Cargando campañas...",
+    "CAMPAIGN_LABEL": "Campaña:",
+    "FILTER_LABEL": "Filtrar:",
+    "FILTER_PLACEHOLDER": "buscar por modelo, región, periodo...",
+    # M5 - Region diagnostic
+    "ERR_CONFIG_ASSET_REGIONS": "CONFIG[asset_regions] no definido",
+    "ERR_ASSET_NOT_FOUND": "Asset NO ENCONTRADO en GEE:",
+    "ERR_ASSET_EMPTY": "Asset existe pero está VACÍO:",
+    "ERR_ASSET_COLUMN": "Columna <code>{prop}</code> no encontrada",
+    "ERR_GEE_ACCESS": "Error al acceder a GEE:",
+    "WARN_REGION_FALLBACK": "No se pudo poblar regiones automáticamente",
+    "COLUMN_USED": "Columna usada:",
+    # M5 - Validation
+    "ERR_NO_TASK_NAME": "Atención: Debe asignar un Nombre de Tarea obligatoriamente.",
+    "ERR_NO_SELECTION": "Atención: Seleccione 1 Modelo y al menos una Región y un Periodo.",
+    # M5 - Feedback messages
+    "SAVING_TO_GCS": "Guardando en GCS...",
+    "MSG_NO_TASKS_ADDED": "Ninguna tarea fue añadida.",
+    "MSG_TASKS_ADDED": "Éxito: {n} tarea(s) agregada(s).",
+    "FAIL_SAVE_LOCAL": "fallo al guardar archivo local (bloqueo ocupado)",
+    "FAIL_GCS_UPLOAD": "{n} fallaron en GCS",
+    "MSG_GCS_OK": "{n} guardadas en GCS.",
+    "MSG_SKIPPED_QUEUED": "{n} omitidas (ya en la cola).",
+    "WARN_ALREADY_QUEUED": "Atención: {n} tareas ya estaban en la cola.",
+    "MSG_LOADED": "{loaded} cargadas, {skipped} omitidas.",
+    "TAREA_SAVED": "Tarea guardada en GCS para {m}.",
+    "TAREA_DELETED": "Tarea eliminada del GCS: {m}.",
+    "WORKPLAN_DISCARDED": "Plano descartado: {m} ({n} jobs removidos).",
+    "QUEUE_CLEARED": "Cola vaciada (GCS removido).",
+    "SAVED_TO_GCS": "{n} job(s) salvos en GCS.",
+    "ALREADY_SAVED": "{n} job(s) ya estaban salvos.",
+    "TEMP_JOBS_REMOVED": "{n} job(s) temporários removidos.",
+    "NO_TEMP_JOBS": "Ningún job temporário para remover.",
+    "REMOVED_FROM_GCS": "{n} job(s) removidos del GCS.",
+    "NO_TILES_GCS_ALT": "Ningún tile en GCS.",
+    "TILES_DELETED": "{n} tile(s) eliminados.",
+    "SELECT_TILES_PROMPT": "Seleccione tiles para eliminar.",
+    "SYNC_FROM_GCS": "{n} job(s) sincronizados del GCS.",
+    # M5 - Tareas section
+    "TAREAS_HEADER": "Tareas en GCS ({n} disponibles)",
+    "TAREA_SUMMARY": "Modelo: {m} | Regiones: {r} | Periodos: {p}",
+    # M5 - Scale bar
+    "SCALE_BAR_WIDTH": "~{w} km de ancho",
+    # M5 - Pending debug
+    "INFO_FILTER_COUNT": "{total} pendientes | {filtered} tras filtro",
+    "GRID_COUNT": "({n} celdas)",
+    # M5 - Map legend
+    "MAP_LEGEND_COUNTRY": "País",
+    "MAP_LEGEND_REGIONS": "Regiones",
+    "MAP_LEGEND_GRID": "Grid cim-world",
+    # M5 - Model inference errors
+    "ERR_MODEL_NO_METADATA": "metadata.json no encontrado en {path}",
+    "ERR_MODEL_NO_BANDS_CONFIG": "El modelo no tiene 'bands_config' en los metadatos.",
+    "ERR_MODEL_NO_BAND_ORDER": "El modelo no tiene 'band_order' en los metadatos. Reentrena con el M4 actual (commit 9b95392+).",
+    "ERR_MODEL_INCONSISTENCY": "Inconsistencia en los metadatos del modelo: {details}",
+    # M5 - Jobs details panel
+    "JOBS_REGISTERED": "Trabajos registrados",
+    "JOBS_SUMMARY": "{total} job(s), {regions} región(es), {periods} periodo(s)",
+    "JOB_REGION": "Región",
+    "JOB_PERIOD": "Periodo",
+    "JOB_STATUS": "Estado",
+    "JOB_TASK": "Tarea",
+    # M5 - Model metadata panel
+    "META_SENSORS": "Sensores",
+    "META_PERIODICITY": "Periodicidad",
+    "META_BANDS_INPUT": "Bandas (input)",
+    "META_ITERATIONS": "Iteraciones",
+    "META_LEARNING_RATE": "Learning rate",
+    "META_CAMPAIGN": "Campaña",
     # M5 Tabs
     "TAB_GUIDE": "Guía",
     "TAB_REGISTER": "Registrar",
@@ -664,24 +821,19 @@ STRINGS_ES = {
     "TAB_MAP": "Mapa",
     "TAB_DONE": "Finalizadas",
     "GUIDE_M5_HTML": """<div style='padding:20px; font-family:sans-serif;'>
-        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Clasificacion Regiónal de Gran Escala</h3>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Clasificación Regional de Gran Escala</h3>
         <p>Clasifica múltiples regiones (cartas cim-world-1-250000) usando modelos del M4.</p>
         <h4>Flujo:</h4>
         <ol style='line-height:1.6;'>
             <li><b>{tab_register}</b> — seleccione modelo + regiones + períodos.</li>
             <li><b>{tab_pending}</b> — siga la clasificación tile a tile.</li>
-            <li><b>{tab_publish}</b> — trabajos COMPLETED con gestión de tiles.</li>
-            <li><b>{tab_map}</b> — visibilidad general del progreso.</li>
-            <li><b>{tab_done}</b> — trabajos FINISHED con timeline de cobertura.</li>
+            <li><b>{tab_map}</b> — visión general del procesamiento en vivo.</li>
             <li>Ejecute <code>run_m5_workplan()</code> en el notebook para procesar.</li>
         </ol>
-        <h4>Eliminación granular:</h4>
-        <ul>
-            <li><b>{tab_pending}</b> — elimine trabajos individuales del plan.</li>
-            <li><b>{tab_publish}</b> — elimine tiles individuales o todos de un trabajo.</li>
-            <li><b>{tab_done}</b> — elimine por region o modelo completo.</li>
-            <li>Despues de eliminar, registre nuevamente el trabajo en <b>{tab_register}</b>.</li>
-        </ul>
+        <h4>Después de la Clasificación (M6):</h4>
+        <p>Use <b>M6</b> para mosaicar tiles, generar estadísticas regionales y subir a GEE.
+        Abra la UI de M6 y ejecute <code>run_m6_publish()</code> en una celda separada.</p>
+        <p>Los trabajos clasificados (COMPLETED) aparecen automáticamente en M6.</p>
     </div>""",
     "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
         <div style='margin-bottom:15px;padding:10px;background:#fff3cd;border-left:4px solid #ffc107;border-radius:4px;font-size:13px;'>
@@ -983,8 +1135,27 @@ STRINGS_ES = {
     "M6_START": "Iniciando Filtrado",
     "M6_EXPORT_OK": "Tarea de exportación iniciada",
     "M6_SUMMARY": "Resumen de Configuración Usada",
+    "TAB_ANALYTICS": "Analíticas",
+    "TAB_M6_COVERAGE": "Cobertura",
+    "GUIDE_M6_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>M6 - Mosaico, Stats y Publicación</h3>
+        <p>Publica tiles clasificados de M5: crea mosaicos regionales, calcula estadísticas de área quemada y sube a Google Earth Engine.</p>
+        <h4>Flujo:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_publish}</b> — grupos de tiles clasificados esperando mosaico.</li>
+            <li><b>{tab_done}</b> — regiones publicadas con mosaico y estadísticas.</li>
+            <li><b>{tab_analytics}</b> — tabla consolidada de estadísticas con descarga.</li>
+            <li><b>{tab_coverage}</b> — mapa de cobertura: publicado vs pendiente.</li>
+            <li>Ejecute <code>run_m6_publish()</code> en el notebook para procesar.</li>
+        </ol>
+    </div>""",
+    "DOWNLOAD_TABLE": "Descargar Tabla",
+    "ANALYTICS_FILTER_MODEL": "Modelo",
+    "ANALYTICS_FILTER_REGION": "Región",
+    "ANALYTICS_FILTER_PERIOD": "Periodo",
+    "REFRESH_M6": "Actualizar M6",
     "M6_HEADER_TITLE": "M6 - Mosaico, Stats y Publicación",
-    "M6_LABEL_PERIOD": "Periodo:",
+    "M6_LABEL_PERIOD": "Período:",
     "M6_GROUPS_PENDING": "{n} grupos pendientes de mosaico",
     "M6_MOSAIC_OK": "mosaico OK",
     "M6_PUBLISHED_GROUPS": "{n} grupos publicados",
@@ -1156,6 +1327,79 @@ STRINGS_PT = {
     "HIDE_TILES": "Ocultar",
     "REFRESH_MAP": "Atualizar Mapa",
     "TASK_NAME_PLACEHOLDER": "Ex: Classificar Amazônia Baixa 2025 (Lucas)",
+    # M5 - Section titles
+    "SECTION_MODEL": "1. Selecione Modelo (único):",
+    "SECTION_REGIONS": "2. Selecione Regiões:",
+    "SECTION_PERIODS": "3. Selecione Períodos (Ano / Ano_Mês):",
+    "LOADING_CAMPAIGNS": "Carregando campanhas...",
+    "CAMPAIGN_LABEL": "Campanha:",
+    "FILTER_LABEL": "Filtrar:",
+    "FILTER_PLACEHOLDER": "buscar por modelo, região, período...",
+    # M5 - Region diagnostic
+    "ERR_CONFIG_ASSET_REGIONS": "CONFIG[asset_regions] não definido",
+    "ERR_ASSET_NOT_FOUND": "Asset NÃO ENCONTRADO no GEE:",
+    "ERR_ASSET_EMPTY": "Asset existe mas está VAZIO:",
+    "ERR_ASSET_COLUMN": "Coluna <code>{prop}</code> não encontrada",
+    "ERR_GEE_ACCESS": "Erro ao acessar GEE:",
+    "WARN_REGION_FALLBACK": "Não foi possível popular regiões automaticamente",
+    "COLUMN_USED": "Coluna usada:",
+    # M5 - Validation
+    "ERR_NO_TASK_NAME": "Atenção: Deve atribuir um Nome de Tarefa obrigatoriamente.",
+    "ERR_NO_SELECTION": "Atenção: Selecione 1 Modelo e pelo menos uma Região e um Período.",
+    # M5 - Feedback messages
+    "SAVING_TO_GCS": "Salvando no GCS...",
+    "MSG_NO_TASKS_ADDED": "Nenhuma tarefa foi adicionada.",
+    "MSG_TASKS_ADDED": "Sucesso: {n} tarefa(s) adicionada(s).",
+    "FAIL_SAVE_LOCAL": "falha ao salvar arquivo local (lock ocupado)",
+    "FAIL_GCS_UPLOAD": "{n} falharam no GCS",
+    "MSG_GCS_OK": "{n} salvas no GCS.",
+    "MSG_SKIPPED_QUEUED": "{n} omitidas (já na fila).",
+    "WARN_ALREADY_QUEUED": "Atenção: {n} tarefas já estavam na fila.",
+    "MSG_LOADED": "{loaded} carregadas, {skipped} omitidas.",
+    "TAREA_SAVED": "Tarefa salva no GCS para {m}.",
+    "TAREA_DELETED": "Tarefa excluída do GCS: {m}.",
+    "WORKPLAN_DISCARDED": "Plano descartado: {m} ({n} jobs removidos).",
+    "QUEUE_CLEARED": "Fila esvaziada (GCS removido).",
+    "SAVED_TO_GCS": "{n} job(s) salvos no GCS.",
+    "ALREADY_SAVED": "{n} job(s) já estavam salvos.",
+    "TEMP_JOBS_REMOVED": "{n} job(s) temporários removidos.",
+    "NO_TEMP_JOBS": "Nenhum job temporário para remover.",
+    "REMOVED_FROM_GCS": "{n} job(s) removidos do GCS.",
+    "NO_TILES_GCS_ALT": "Nenhum tile no GCS.",
+    "TILES_DELETED": "{n} tile(s) eliminados.",
+    "SELECT_TILES_PROMPT": "Selecione tiles para eliminar.",
+    "SYNC_FROM_GCS": "{n} job(s) sincronizados do GCS.",
+    # M5 - Tareas section
+    "TAREAS_HEADER": "Tarefas no GCS ({n} disponíveis)",
+    "TAREA_SUMMARY": "Modelo: {m} | Regiões: {r} | Períodos: {p}",
+    # M5 - Scale bar
+    "SCALE_BAR_WIDTH": "~{w} km de largura",
+    # M5 - Pending debug
+    "INFO_FILTER_COUNT": "{total} pendentes | {filtered} após filtro",
+    "GRID_COUNT": "({n} células)",
+    # M5 - Map legend
+    "MAP_LEGEND_COUNTRY": "País",
+    "MAP_LEGEND_REGIONS": "Regiões",
+    "MAP_LEGEND_GRID": "Grid cim-world",
+    # M5 - Model inference errors
+    "ERR_MODEL_NO_METADATA": "metadata.json não encontrado em {path}",
+    "ERR_MODEL_NO_BANDS_CONFIG": "Modelo não tem 'bands_config' nos metadados.",
+    "ERR_MODEL_NO_BAND_ORDER": "Modelo não tem 'band_order' nos metadados. Retreine com o M4 atual (commit 9b95392+).",
+    "ERR_MODEL_INCONSISTENCY": "Inconsistência nos metadados do modelo: {details}",
+    # M5 - Jobs details panel
+    "JOBS_REGISTERED": "Trabalhos registrados",
+    "JOBS_SUMMARY": "{total} job(s), {regions} região(ões), {periods} período(s)",
+    "JOB_REGION": "Região",
+    "JOB_PERIOD": "Período",
+    "JOB_STATUS": "Status",
+    "JOB_TASK": "Tarefa",
+    # M5 - Model metadata panel
+    "META_SENSORS": "Sensores",
+    "META_PERIODICITY": "Periodicidade",
+    "META_BANDS_INPUT": "Bandas (input)",
+    "META_ITERATIONS": "Iterações",
+    "META_LEARNING_RATE": "Learning rate",
+    "META_CAMPAIGN": "Campanha",
     # M5 Tabs
     "TAB_GUIDE": "Guia",
     "TAB_REGISTER": "Registrar",
@@ -1170,18 +1414,13 @@ STRINGS_PT = {
         <ol style='line-height:1.6;'>
             <li><b>{tab_register}</b> — selecione modelo + regiões + períodos.</li>
             <li><b>{tab_pending}</b> — acompanhe a classificação tile a tile.</li>
-            <li><b>{tab_publish}</b> — trabalhos COMPLETED com gestão de tiles.</li>
-            <li><b>{tab_map}</b> — visibilidade geral do progresso.</li>
-            <li><b>{tab_done}</b> — trabalhos FINISHED com timeline de cobertura.</li>
+            <li><b>{tab_map}</b> — visão geral do processamento ao vivo.</li>
             <li>Execute <code>run_m5_workplan()</code> no notebook para processar.</li>
         </ol>
-        <h4>Exclusão granular:</h4>
-        <ul>
-            <li><b>{tab_pending}</b> — exclua trabalhos individuais do plano.</li>
-            <li><b>{tab_publish}</b> — exclua tiles individuais ou todos de um trabalho.</li>
-            <li><b>{tab_done}</b> — exclua por região ou modelo completo.</li>
-            <li>Após excluir, registre novamente o trabalho em <b>{tab_register}</b>.</li>
-        </ul>
+        <h4>Após a Classificação (M6):</h4>
+        <p>Use o <b>M6</b> para mosaicar tiles, gerar estatísticas regionais e enviar para o GEE.
+        Abra a UI do M6 e execute <code>run_m6_publish()</code> em uma célula separada.</p>
+        <p>Os trabalhos classificados (COMPLETED) aparecem automaticamente no M6.</p>
     </div>""",
     "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
         <div style='margin-bottom:15px;padding:10px;background:#fff3cd;border-left:4px solid #ffc107;border-radius:4px;font-size:13px;'>
@@ -1483,6 +1722,25 @@ STRINGS_PT = {
     "M6_START": "Iniciando Filtragem",
     "M6_EXPORT_OK": "Tarefa de exportação iniciada",
     "M6_SUMMARY": "Resumo da Configuração",
+    "TAB_ANALYTICS": "Analíticas",
+    "TAB_M6_COVERAGE": "Cobertura",
+    "GUIDE_M6_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>M6 - Mosaico, Stats e Publicação</h3>
+        <p>Publica tiles classificados do M5: cria mosaicos regionais, calcula estatísticas de área queimada e envia para o Google Earth Engine.</p>
+        <h4>Fluxo:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_publish}</b> — grupos de tiles classificados aguardando mosaico.</li>
+            <li><b>{tab_done}</b> — regiões publicadas com mosaico e estatísticas.</li>
+            <li><b>{tab_analytics}</b> — tabela consolidada de estatísticas com download.</li>
+            <li><b>{tab_coverage}</b> — mapa de cobertura: publicado vs pendente.</li>
+            <li>Execute <code>run_m6_publish()</code> no notebook para processar.</li>
+        </ol>
+    </div>""",
+    "DOWNLOAD_TABLE": "Baixar Tabela",
+    "ANALYTICS_FILTER_MODEL": "Modelo",
+    "ANALYTICS_FILTER_REGION": "Região",
+    "ANALYTICS_FILTER_PERIOD": "Período",
+    "REFRESH_M6": "Atualizar M6",
     "M6_HEADER_TITLE": "M6 - Mosaico, Stats e Publicação",
     "M6_LABEL_PERIOD": "Período:",
     "M6_GROUPS_PENDING": "{n} grupos pendentes de mosaico",
@@ -1656,6 +1914,79 @@ STRINGS_FR = {
     "HIDE_TILES": "Cacher",
     "REFRESH_MAP": "Actualiser la carte",
     "TASK_NAME_PLACEHOLDER": "Ex: Classifier Amazonie Basse 2025 (Lucas)",
+    # M5 - Section titles
+    "SECTION_MODEL": "1. Sélectionnez Modèle (unique) :",
+    "SECTION_REGIONS": "2. Sélectionnez Régions :",
+    "SECTION_PERIODS": "3. Sélectionnez Périodes (Année / Année_Mois) :",
+    "LOADING_CAMPAIGNS": "Chargement campagnes...",
+    "CAMPAIGN_LABEL": "Campagne :",
+    "FILTER_LABEL": "Filtrer :",
+    "FILTER_PLACEHOLDER": "rechercher par modèle, région, période...",
+    # M5 - Region diagnostic
+    "ERR_CONFIG_ASSET_REGIONS": "CONFIG[asset_regions] non défini",
+    "ERR_ASSET_NOT_FOUND": "Asset INTROUVABLE dans GEE :",
+    "ERR_ASSET_EMPTY": "L'asset existe mais est VIDE :",
+    "ERR_ASSET_COLUMN": "Colonne <code>{prop}</code> introuvable",
+    "ERR_GEE_ACCESS": "Erreur d'accès à GEE :",
+    "WARN_REGION_FALLBACK": "Impossible de peupler les régions automatiquement",
+    "COLUMN_USED": "Colonne utilisée :",
+    # M5 - Validation
+    "ERR_NO_TASK_NAME": "Attention : Vous devez attribuer un Nom de Tâche.",
+    "ERR_NO_SELECTION": "Attention : Sélectionnez 1 Modèle et au moins 1 Région et 1 Période.",
+    # M5 - Feedback messages
+    "SAVING_TO_GCS": "Enregistrement dans GCS...",
+    "MSG_NO_TASKS_ADDED": "Aucune tâche ajoutée.",
+    "MSG_TASKS_ADDED": "Succès : {n} tâche(s) ajoutée(s).",
+    "FAIL_SAVE_LOCAL": "échec de la sauvegarde locale (verrou occupé)",
+    "FAIL_GCS_UPLOAD": "{n} échec(s) sur GCS",
+    "MSG_GCS_OK": "{n} enregistrée(s) dans GCS.",
+    "MSG_SKIPPED_QUEUED": "{n} ignorée(s) (déjà dans la file).",
+    "WARN_ALREADY_QUEUED": "Attention : {n} tâches déjà dans la file.",
+    "MSG_LOADED": "{loaded} chargée(s), {skipped} ignorée(s).",
+    "TAREA_SAVED": "Tâche enregistrée dans GCS pour {m}.",
+    "TAREA_DELETED": "Tâche supprimée de GCS : {m}.",
+    "WORKPLAN_DISCARDED": "Plan abandonné : {m} ({n} travaux supprimés).",
+    "QUEUE_CLEARED": "File vidée (GCS supprimé).",
+    "SAVED_TO_GCS": "{n} travail(aux) enregistré(s) dans GCS.",
+    "ALREADY_SAVED": "{n} travail(aux) déjà enregistré(s).",
+    "TEMP_JOBS_REMOVED": "{n} travail(aux) temporaire(s) supprimé(s).",
+    "NO_TEMP_JOBS": "Aucun travail temporaire à supprimer.",
+    "REMOVED_FROM_GCS": "{n} travail(aux) supprimé(s) de GCS.",
+    "NO_TILES_GCS_ALT": "Aucun tile dans GCS.",
+    "TILES_DELETED": "{n} tile(s) supprimé(s).",
+    "SELECT_TILES_PROMPT": "Sélectionnez les tiles à supprimer.",
+    "SYNC_FROM_GCS": "{n} travail(aux) synchronisé(s) de GCS.",
+    # M5 - Tareas section
+    "TAREAS_HEADER": "Tâches dans GCS ({n} disponibles)",
+    "TAREA_SUMMARY": "Modèle : {m} | Régions : {r} | Périodes : {p}",
+    # M5 - Scale bar
+    "SCALE_BAR_WIDTH": "~{w} km de large",
+    # M5 - Pending debug
+    "INFO_FILTER_COUNT": "{total} en attente | {filtered} après filtre",
+    "GRID_COUNT": "({n} cellules)",
+    # M5 - Map legend
+    "MAP_LEGEND_COUNTRY": "Pays",
+    "MAP_LEGEND_REGIONS": "Régions",
+    "MAP_LEGEND_GRID": "Grille cim-world",
+    # M5 - Model inference errors
+    "ERR_MODEL_NO_METADATA": "metadata.json introuvable dans {path}",
+    "ERR_MODEL_NO_BANDS_CONFIG": "Le modèle n'a pas 'bands_config' dans les métadonnées.",
+    "ERR_MODEL_NO_BAND_ORDER": "Le modèle n'a pas 'band_order' dans les métadonnées. Réentraînez avec le M4 actuel (commit 9b95392+).",
+    "ERR_MODEL_INCONSISTENCY": "Incohérence dans les métadonnées du modèle : {details}",
+    # M5 - Jobs details panel
+    "JOBS_REGISTERED": "Travaux enregistrés",
+    "JOBS_SUMMARY": "{total} travail(aux), {regions} région(s), {periods} période(s)",
+    "JOB_REGION": "Région",
+    "JOB_PERIOD": "Période",
+    "JOB_STATUS": "Statut",
+    "JOB_TASK": "Tâche",
+    # M5 - Model metadata panel
+    "META_SENSORS": "Capteurs",
+    "META_PERIODICITY": "Périodicité",
+    "META_BANDS_INPUT": "Bandas (entrée)",
+    "META_ITERATIONS": "Itérations",
+    "META_LEARNING_RATE": "Learning rate",
+    "META_CAMPAIGN": "Campagne",
     # M5 Tabs
     "TAB_GUIDE": "Guide",
     "TAB_REGISTER": "Enregistrer",
@@ -1666,22 +1997,17 @@ STRINGS_FR = {
     "GUIDE_M5_HTML": """<div style='padding:20px; font-family:sans-serif;'>
         <h3 style='color:#2c3e50; border-bottom:2px solid #3498db; padding-bottom:5px;'>M5 - Classification Régionale à Grande Échelle</h3>
         <p>Classifie plusieurs régions (grille cim-world-1-250000) en utilisant les modèles M4.</p>
-        <h4>Flux:</h4>
+        <h4>Flux :</h4>
         <ol style='line-height:1.6;'>
-            <li><b>{tab_register}</b> — selectionnez modèle + régions + périodes.</li>
+            <li><b>{tab_register}</b> — sélectionnez modèle + régions + périodes.</li>
             <li><b>{tab_pending}</b> — suivez la classification tile par tile.</li>
-            <li><b>{tab_publish}</b> — travaux COMPLETED avec gestion des tiles.</li>
-            <li><b>{tab_map}</b> — apercu general de l avancement.</li>
-            <li><b>{tab_done}</b> — travaux FINISHED avec chronologie de couverture.</li>
+            <li><b>{tab_map}</b> — aperçu général du traitement en direct.</li>
             <li>Exécutez <code>run_m5_workplan()</code> dans le notebook pour traiter.</li>
         </ol>
-        <h4>Suppression granulaire:</h4>
-        <ul>
-            <li><b>{tab_pending}</b> — supprimez des travaux individuels du plan.</li>
-            <li><b>{tab_publish}</b> — supprimez des tiles individuelles ou toutes d un travail.</li>
-            <li><b>{tab_done}</b> — supprimez par region ou modèle complet.</li>
-            <li>Après suppression, réenregistrez le travail dans <b>{tab_register}</b>.</li>
-        </ul>
+        <h4>Après la Classification (M6) :</h4>
+        <p>Utilisez <b>M6</b> pour mosaïquer les tiles, générer des statistiques régionales et publier dans GEE.
+        Ouvrez l'interface M6 et exécutez <code>run_m6_publish()</code> dans une cellule séparée.</p>
+        <p>Les travaux classifiés (COMPLETED) apparaissent automatiquement dans M6.</p>
     </div>""",
     "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
         <div style='margin-bottom:15px;padding:10px;background:#fff3cd;border-left:4px solid #ffc107;border-radius:4px;font-size:13px;'>
@@ -1983,6 +2309,25 @@ STRINGS_FR = {
     "M6_START": "Démarrage filtrage",
     "M6_EXPORT_OK": "Tâche d'exportation démarrée",
     "M6_SUMMARY": "Résumé configuration",
+    "TAB_ANALYTICS": "Analytiques",
+    "TAB_M6_COVERAGE": "Couverture",
+    "GUIDE_M6_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>M6 - Mosaïque, Stats et Publication</h3>
+        <p>Publie les tuiles classifiées de M5 : crée des mosaïques régionales, calcule les statistiques de surface brûlée et télécharge vers Google Earth Engine.</p>
+        <h4>Flux :</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_publish}</b> — groupes de tuiles classifiées en attente de mosaïque.</li>
+            <li><b>{tab_done}</b> — régions publiées avec mosaïque et statistiques.</li>
+            <li><b>{tab_analytics}</b> — tableau consolidé des statistiques avec téléchargement.</li>
+            <li><b>{tab_coverage}</b> — carte de couverture : publié vs en attente.</li>
+            <li>Exécutez <code>run_m6_publish()</code> dans le notebook pour traiter.</li>
+        </ol>
+    </div>""",
+    "DOWNLOAD_TABLE": "Télécharger Tableau",
+    "ANALYTICS_FILTER_MODEL": "Modèle",
+    "ANALYTICS_FILTER_REGION": "Région",
+    "ANALYTICS_FILTER_PERIOD": "Période",
+    "REFRESH_M6": "Actualiser M6",
     "M6_HEADER_TITLE": "M6 - Mosaïque, Stats et Publication",
     "M6_LABEL_PERIOD": "Période:",
     "M6_GROUPS_PENDING": "{n} groupes en attente de mosaïque",
@@ -2155,6 +2500,79 @@ STRINGS_ID = {
     "HIDE_TILES": "Sembunyikan",
     "REFRESH_MAP": "Muat Ulang Peta",
     "TASK_NAME_PLACEHOLDER": "Contoh: Klasifikasi Amazon Bawah 2025 (Lucas)",
+    # M5 - Section titles
+    "SECTION_MODEL": "1. Pilih Model (tunggal):",
+    "SECTION_REGIONS": "2. Pilih Wilayah:",
+    "SECTION_PERIODS": "3. Pilih Periode (Tahun / Tahun_Bulan):",
+    "LOADING_CAMPAIGNS": "Memuat kampanye...",
+    "CAMPAIGN_LABEL": "Kampanye:",
+    "FILTER_LABEL": "Filter:",
+    "FILTER_PLACEHOLDER": "cari berdasarkan model, wilayah, periode...",
+    # M5 - Region diagnostic
+    "ERR_CONFIG_ASSET_REGIONS": "CONFIG[asset_regions] tidak terdefinisi",
+    "ERR_ASSET_NOT_FOUND": "Aset TIDAK DITEMUKAN di GEE:",
+    "ERR_ASSET_EMPTY": "Aset ada tetapi KOSONG:",
+    "ERR_ASSET_COLUMN": "Kolom <code>{prop}</code> tidak ditemukan",
+    "ERR_GEE_ACCESS": "Kesalahan mengakses GEE:",
+    "WARN_REGION_FALLBACK": "Tidak dapat mengisi wilayah secara otomatis",
+    "COLUMN_USED": "Kolom yang digunakan:",
+    # M5 - Validation
+    "ERR_NO_TASK_NAME": "Perhatian: Anda harus mengisi Nama Tugas.",
+    "ERR_NO_SELECTION": "Perhatian: Pilih 1 Model dan setidaknya 1 Wilayah dan 1 Periode.",
+    # M5 - Feedback messages
+    "SAVING_TO_GCS": "Menyimpan ke GCS...",
+    "MSG_NO_TASKS_ADDED": "Tidak ada tugas yang ditambahkan.",
+    "MSG_TASKS_ADDED": "Berhasil: {n} tugas ditambahkan.",
+    "FAIL_SAVE_LOCAL": "gagal menyimpan file lokal (lock sibuk)",
+    "FAIL_GCS_UPLOAD": "{n} gagal di GCS",
+    "MSG_GCS_OK": "{n} tersimpan di GCS.",
+    "MSG_SKIPPED_QUEUED": "{n} dilewati (sudah dalam antrian).",
+    "WARN_ALREADY_QUEUED": "Perhatian: {n} tugas sudah dalam antrian.",
+    "MSG_LOADED": "{loaded} dimuat, {skipped} dilewati.",
+    "TAREA_SAVED": "Tugas tersimpan di GCS untuk {m}.",
+    "TAREA_DELETED": "Tugas dihapus dari GCS: {m}.",
+    "WORKPLAN_DISCARDED": "Rencana kerja dibuang: {m} ({n} pekerjaan dihapus).",
+    "QUEUE_CLEARED": "Antrian dikosongkan (GCS dihapus).",
+    "SAVED_TO_GCS": "{n} pekerjaan tersimpan di GCS.",
+    "ALREADY_SAVED": "{n} pekerjaan sudah tersimpan.",
+    "TEMP_JOBS_REMOVED": "{n} pekerjaan sementara dihapus.",
+    "NO_TEMP_JOBS": "Tidak ada pekerjaan sementara untuk dihapus.",
+    "REMOVED_FROM_GCS": "{n} pekerjaan dihapus dari GCS.",
+    "NO_TILES_GCS_ALT": "Tidak ada tile di GCS.",
+    "TILES_DELETED": "{n} tile dihapus.",
+    "SELECT_TILES_PROMPT": "Pilih tile untuk dihapus.",
+    "SYNC_FROM_GCS": "{n} pekerjaan disinkronkan dari GCS.",
+    # M5 - Tareas section
+    "TAREAS_HEADER": "Tugas di GCS ({n} tersedia)",
+    "TAREA_SUMMARY": "Model: {m} | Wilayah: {r} | Periode: {p}",
+    # M5 - Scale bar
+    "SCALE_BAR_WIDTH": "~{w} km lebar",
+    # M5 - Pending debug
+    "INFO_FILTER_COUNT": "{total} tertunda | {filtered} setelah filter",
+    "GRID_COUNT": "({n} sel)",
+    # M5 - Map legend
+    "MAP_LEGEND_COUNTRY": "Negara",
+    "MAP_LEGEND_REGIONS": "Wilayah",
+    "MAP_LEGEND_GRID": "Grid cim-world",
+    # M5 - Model inference errors
+    "ERR_MODEL_NO_METADATA": "metadata.json tidak ditemukan di {path}",
+    "ERR_MODEL_NO_BANDS_CONFIG": "Model tidak memiliki 'bands_config' di metadata.",
+    "ERR_MODEL_NO_BAND_ORDER": "Model tidak memiliki 'band_order' di metadata. Latih ulang dengan M4 terbaru (commit 9b95392+).",
+    "ERR_MODEL_INCONSISTENCY": "Inkonsistensi metadata model: {details}",
+    # M5 - Jobs details panel
+    "JOBS_REGISTERED": "Pekerjaan terdaftar",
+    "JOBS_SUMMARY": "{total} pekerjaan, {regions} wilayah, {periods} periode",
+    "JOB_REGION": "Wilayah",
+    "JOB_PERIOD": "Periode",
+    "JOB_STATUS": "Status",
+    "JOB_TASK": "Tugas",
+    # M5 - Model metadata panel
+    "META_SENSORS": "Sensor",
+    "META_PERIODICITY": "Periodisitas",
+    "META_BANDS_INPUT": "Bands (input)",
+    "META_ITERATIONS": "Iterasi",
+    "META_LEARNING_RATE": "Learning rate",
+    "META_CAMPAIGN": "Kampanye",
     # M5 Tabs
     "TAB_GUIDE": "Panduan",
     "TAB_REGISTER": "Daftar",
@@ -2169,18 +2587,13 @@ STRINGS_ID = {
         <ol style='line-height:1.6;'>
             <li><b>{tab_register}</b> — pilih model + wilayah + periode.</li>
             <li><b>{tab_pending}</b> — pantau klasifikasi tile per tile.</li>
-            <li><b>{tab_publish}</b> — tugas COMPLETED dengan pengelolaan tile.</li>
-            <li><b>{tab_map}</b> — gambaran umum kemajuan.</li>
-            <li><b>{tab_done}</b> — tugas FINISHED dengan kronologi cakupan.</li>
+            <li><b>{tab_map}</b> — gambaran umum pemrosesan langsung.</li>
             <li>Jalankan <code>run_m5_workplan()</code> di notebook untuk memproses.</li>
         </ol>
-        <h4>Penghapusan granular:</h4>
-        <ul>
-            <li><b>{tab_pending}</b> — hapus tugas individu dari rencana.</li>
-            <li><b>{tab_publish}</b> — hapus tile individu atau semua tile dari tugas.</li>
-            <li><b>{tab_done}</b> — hapus berdasarkan wilayah atau model lengkap.</li>
-            <li>Setelah dihapus, daftarkan ulang tugas di <b>{tab_register}</b>.</li>
-        </ul>
+        <h4>Setelah Klasifikasi (M6):</h4>
+        <p>Gunakan <b>M6</b> untuk membuat mosaik tile, menghasilkan statistik regional, dan unggah ke GEE.
+        Buka UI M6 dan jalankan <code>run_m6_publish()</code> di sel terpisah.</p>
+        <p>Tugas yang telah diklasifikasikan (COMPLETED) muncul secara otomatis di M6.</p>
     </div>""",
     "GUIDE_M1_HTML": """<div style='padding:20px; font-family:sans-serif;'>
         <div style='margin-bottom:15px;padding:10px;background:#fff3cd;border-left:4px solid #ffc107;border-radius:4px;font-size:13px;'>
@@ -2482,6 +2895,25 @@ STRINGS_ID = {
     "M6_START": "Memulai Penyaringan",
     "M6_EXPORT_OK": "Tugas ekspor dimulai",
     "M6_SUMMARY": "Ringkasan Konfigurasi",
+    "TAB_ANALYTICS": "Analitik",
+    "TAB_M6_COVERAGE": "Cakupan",
+    "GUIDE_M6_HTML": """<div style='padding:20px; font-family:sans-serif;'>
+        <h3 style='color:#2c3e50; border-bottom:2px solid #27ae60; padding-bottom:5px;'>M6 - Mozaik, Statistik & Publikasi</h3>
+        <p>Menerbitkan tile terklasifikasi dari M5: membuat mosaik regional, menghitung statistik area terbakar, dan mengunggah ke Google Earth Engine.</p>
+        <h4>Alur:</h4>
+        <ol style='line-height:1.6;'>
+            <li><b>{tab_publish}</b> — grup tile terklasifikasi menunggu mozaik.</li>
+            <li><b>{tab_done}</b> — wilayah diterbitkan dengan mozaik dan statistik.</li>
+            <li><b>{tab_analytics}</b> — tabel statistik gabungan dengan unduhan.</li>
+            <li><b>{tab_coverage}</b> — peta cakupan: diterbitkan vs tertunda.</li>
+            <li>Jalankan <code>run_m6_publish()</code> di notebook untuk memproses.</li>
+        </ol>
+    </div>""",
+    "DOWNLOAD_TABLE": "Unduh Tabel",
+    "ANALYTICS_FILTER_MODEL": "Model",
+    "ANALYTICS_FILTER_REGION": "Wilayah",
+    "ANALYTICS_FILTER_PERIOD": "Periode",
+    "REFRESH_M6": "Muat Ulang M6",
     "M6_HEADER_TITLE": "M6 - Mozaik, Statistik & Publikasi",
     "M6_LABEL_PERIOD": "Periode:",
     "M6_GROUPS_PENDING": "{n} grup menunggu mozaik",

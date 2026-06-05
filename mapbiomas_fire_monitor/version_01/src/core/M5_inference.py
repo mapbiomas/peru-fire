@@ -8,6 +8,7 @@ from affine import Affine
 from shapely.geometry import shape, mapping
 from pyproj import Transformer
 from osgeo import gdal
+from M_lang import L as Lang
 from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _gcs_download, _gcs_upload
 from M4_data_extractor import normalize
 
@@ -33,21 +34,18 @@ def load_model_from_gcs(model_dir, fs, logger=None):
 
     meta_path = f"{model_dir}/metadata.json"
     if not fs.exists(meta_path):
-        raise ValueError(f"metadata.json no encontrado en {meta_path}")
+        raise ValueError(Lang.ERR_MODEL_NO_METADATA.format(path=meta_path))
 
     with fs.open(meta_path, 'r') as f:
         meta = json.load(f)
 
     bands_config = meta.get('bands_config', {})
     if not bands_config:
-        raise ValueError("Modelo no tiene 'bands_config' en los metadatos.")
+        raise ValueError(Lang.ERR_MODEL_NO_BANDS_CONFIG)
 
     band_order = meta.get('band_order')
     if not band_order:
-        raise ValueError(
-            "Modelo no tiene 'band_order' en los metadatos. "
-            "Reentrena el modelo con la versión actual del M4 (commit 9b95392+)."
-        )
+        raise ValueError(Lang.ERR_MODEL_NO_BAND_ORDER)
 
     norm_stats = {int(k): tuple(v) for k, v in meta.get('norm_stats', {}).items()}
     num_input = meta['num_input']
@@ -69,7 +67,7 @@ def load_model_from_gcs(model_dir, fs, logger=None):
     if missing:
         mismatches.append(f"band_order contém bandas ausentes em bands_config: {missing}")
     if mismatches:
-        raise ValueError(f"Inconsistência nos metadados do modelo: {'; '.join(mismatches)}")
+        raise ValueError(Lang.ERR_MODEL_INCONSISTENCY.format(details='; '.join(mismatches)))
 
     local_npz = os.path.join(get_temp_dir('weights'), f"{meta.get('training_id', 'model')}_weights.npz")
     _gcs_download(f"{model_dir}/weights.npz", local_npz)
