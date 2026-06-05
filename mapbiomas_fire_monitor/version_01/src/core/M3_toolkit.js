@@ -90,7 +90,33 @@ var L = (function () {
             btn_hand: 'Mano',
             btn_delete: 'Borrar',
             btn_center: 'Centrar',
-            loading: ''
+            loading: '',
+            ref_name_modis_ba: 'MODIS Burned Area',
+            ref_name_gabam: 'GABAM',
+            ref_name_firms: 'FIRMS',
+            ref_name_fire_cci: 'FIRE_CCI',
+            ref_cicatrizes_peru: 'Cicatrizes Peru',
+            ref_name_buffer_inpe: 'Buffer Focos INPE',
+            ref_name_hotspots_inpe: 'Hotspots INPE (Puntos)',
+            lbl_all_regions: 'Todas las Regiones',
+            lbl_selected_region: 'Region Seleccionada',
+            status_no_models_region: '(sin modelos en la region)',
+            lbl_qty_pct: 'Cant%',
+            lbl_area_pct: 'Area%',
+            lbl_class_col: 'CLASE',
+            btn_all_regions: '[ Todos ]',
+            ref_modis_mcd64a1: 'MODIS MCD64A1',
+            ref_buffer_focos: 'Buffer Focos',
+            ref_hotspots_inpe: 'Hotspots INPE',
+            sat_sentinel2_buffer: 'Sentinel2 Buffer',
+            lbl_bands: 'Bandas',
+            lbl_band_classification: 'Clasificacion',
+            lbl_band_probability: 'Probabilidad',
+            lbl_band_dayofyear: 'Dia del Ano',
+            lbl_dashboard: 'Panel',
+            placeholder_campaign: 'Seleccionar campana...',
+            lbl_campaign: 'Campana',
+            lbl_select_campaign: 'Seleccionar Campana'
         },
         pt: {
             title: 'MapBiomas-Fogo | Monitor',
@@ -165,7 +191,33 @@ var L = (function () {
             btn_hand: 'Mao',
             btn_delete: 'Deletar',
             btn_center: 'Centralizar',
-            loading: ''
+            loading: '',
+            ref_name_modis_ba: 'MODIS Burned Area',
+            ref_name_gabam: 'GABAM',
+            ref_name_firms: 'FIRMS',
+            ref_name_fire_cci: 'FIRE_CCI',
+            ref_cicatrizes_peru: 'Cicatrizes Peru',
+            ref_name_buffer_inpe: 'Buffer Focos INPE',
+            ref_name_hotspots_inpe: 'Hotspots INPE (Pontos)',
+            lbl_all_regions: 'Todas as Regioes',
+            lbl_selected_region: 'Regiao Selecionada',
+            status_no_models_region: '(sem modelos na regiao)',
+            lbl_qty_pct: 'Qtd%',
+            lbl_area_pct: 'Area%',
+            lbl_class_col: 'CLASSE',
+            btn_all_regions: '[ Todos ]',
+            ref_modis_mcd64a1: 'MODIS MCD64A1',
+            ref_buffer_focos: 'Buffer Focos',
+            ref_hotspots_inpe: 'Hotspots INPE',
+            sat_sentinel2_buffer: 'Sentinel2 Buffer',
+            lbl_bands: 'Bandas',
+            lbl_band_classification: 'Classificacao',
+            lbl_band_probability: 'Probabilidade',
+            lbl_band_dayofyear: 'Dia do Ano',
+            lbl_dashboard: 'Painel',
+            placeholder_campaign: 'Selecionar campanha...',
+            lbl_campaign: 'Campanha',
+            lbl_select_campaign: 'Selecionar Campanha'
         },
         en: {
             title: 'MapBiomas-Fire | Monitor',
@@ -240,7 +292,33 @@ var L = (function () {
             btn_hand: 'Hand',
             btn_delete: 'Delete',
             btn_center: 'Center',
-            loading: ''
+            loading: '',
+            ref_name_modis_ba: 'MODIS Burned Area',
+            ref_name_gabam: 'GABAM',
+            ref_name_firms: 'FIRMS',
+            ref_name_fire_cci: 'FIRE_CCI',
+            ref_cicatrizes_peru: 'Peru Fire Scars',
+            ref_name_buffer_inpe: 'INPE Hotspot Buffer',
+            ref_name_hotspots_inpe: 'INPE Hotspots (Points)',
+            lbl_all_regions: 'All Regions',
+            lbl_selected_region: 'Selected Region',
+            status_no_models_region: '(no models in region)',
+            lbl_qty_pct: 'Qty%',
+            lbl_area_pct: 'Area%',
+            lbl_class_col: 'CLASS',
+            btn_all_regions: '[ All ]',
+            ref_modis_mcd64a1: 'MODIS MCD64A1',
+            ref_buffer_focos: 'Buffer Focos',
+            ref_hotspots_inpe: 'Hotspots INPE',
+            sat_sentinel2_buffer: 'Sentinel2 Buffer',
+            lbl_bands: 'Bands',
+            lbl_band_classification: 'Classification',
+            lbl_band_probability: 'Probability',
+            lbl_band_dayofyear: 'Day of Year',
+            lbl_dashboard: 'Dashboard',
+            placeholder_campaign: 'Select campaign...',
+            lbl_campaign: 'Campaign',
+            lbl_select_campaign: 'Select Campaign'
         }
     };
     return dict[APP_LANG] || dict['es'];
@@ -1355,18 +1433,19 @@ function user_interface() {
                 updateSelectedRegionsMap();
             }
             updateExportPreview();
-            clearDrawingTools();
+            // Remove existing fire/notFire drawing layers
             var layers = Map.drawingTools().layers();
-            var fireLayer, notFireLayer;
-            for (var i = 0; i < layers.length(); i++) {
-                if (layers.get(i).getName() === 'fire') fireLayer = layers.get(i);
-                if (layers.get(i).getName() === 'notFire') notFireLayer = layers.get(i);
+            for (var i = layers.length() - 1; i >= 0; i--) {
+                var l = layers.get(i);
+                if (l.getName() === 'fire' || l.getName() === 'notFire') {
+                    layers.remove(l);
+                }
             }
 
             ee.FeatureCollection(id).filter(ee.Filter.eq('fire', 1)).geometry().coordinates().map(function (list) { return ee.Geometry.Polygon(list); })
-                .evaluate(function (geomList) { if (fireLayer && geomList) fireLayer.geometries().reset(geomList); });
+                .evaluate(function (geomList) { Map.drawingTools().addLayer({ geometries: geomList, name: 'fire', color: 'ff0000', shown: true }); });
             ee.FeatureCollection(id).filter(ee.Filter.eq('fire', 0)).geometry().coordinates().map(function (list) { return ee.Geometry.Polygon(list); })
-                .evaluate(function (geomList) { if (notFireLayer && geomList) notFireLayer.geometries().reset(geomList); });
+                .evaluate(function (geomList) { Map.drawingTools().addLayer({ geometries: geomList, name: 'notFire', color: '0000ff', shown: true }); });
         }
     });
 
@@ -1405,7 +1484,7 @@ function user_interface() {
             assets.forEach(function (a) {
                 var fname = a.id.split('/').slice(-1)[0];
 
-                var m = fname.match(/^samples_(\d{4})$/);
+                var m = fname.match(/^samples_(\d{4})/);
 
                 if (m) {
                     var n = parseInt(m[1], 10);
