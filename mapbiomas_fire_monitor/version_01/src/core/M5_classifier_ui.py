@@ -207,42 +207,49 @@ class M5WorkplanUI:
         box, self.chk_models = self._create_checkbox_grid(models, "1. Seleccione Modelo (unico):", single_select=True, bg_color='#e8f4fd')
         self.w_model_box.children = box.children
         regions = ['Peru', 'Amazonia', 'Cerrado']
-        asset1 = None
         try:
             import ee
             if not getattr(ee.data, '_credentials', None):
                 from M0_auth_config import authenticate
                 authenticate()
             asset1 = CONFIG.get('asset_regions', 'projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000')
-            fc = ee.FeatureCollection(asset1)
-            names = fc.aggregate_array(REGION_NAME_PROPERTY).distinct().getInfo()
-            if names:
-                regions = sorted([n for n in names if n])
-        except Exception as e1:
-            try:
-                asset2 = _region_asset_for('peru')
-                if not asset2:
-                    raise Exception("asset_for('peru') retornou None")
-                fc = ee.FeatureCollection(asset2)
-                names = fc.aggregate_array(REGION_NAME_PROPERTY).distinct().getInfo()
-                if names:
-                    regions = sorted([n for n in names if n])
-            except Exception as e2:
+            asset2 = _region_asset_for('peru')
+
+            errors = []
+            for fonte, asset in [
+                ('CONFIG[asset_regions]', asset1),
+                ('M_regions.asset_for(\"peru\")', asset2),
+            ]:
+                if not asset:
+                    errors.append((fonte, 'nao definido', 'asset e None'))
+                    continue
+                try:
+                    fc = ee.FeatureCollection(asset)
+                    names = fc.aggregate_array(REGION_NAME_PROPERTY).distinct().getInfo()
+                    if names:
+                        regions = sorted([n for n in names if n])
+                        break
+                    errors.append((fonte, asset, 'lista vazia (sem features ou coluna errada?)'))
+                except Exception as e:
+                    errors.append((fonte, asset, str(e)))
+
+            if errors and regions == ['Peru', 'Amazonia', 'Cerrado']:
                 from IPython.display import display, HTML
+                err_lines = ''.join(
+                    f'<b>{f}:</b> <code>{a}</code><br>'
+                    f'<b>Coluna:</b> <code>{REGION_NAME_PROPERTY}</code><br>'
+                    f'<b>Erro:</b> <span style="color:#d32f2f;">{e}</span><br><br>'
+                    for f, a, e in errors
+                )
                 display(HTML(f"""
                 <div style='background:#fff3cd; border:1px solid #ffc107; border-radius:5px; padding:12px; margin:8px 0; font-family:monospace; font-size:13px;'>
-                    <b style='color:#856404;'>⚠ Nao foi possivel popular regioes automaticamente</b><br><br>
-                    <b>1) CONFIG[asset_regions]:</b><br>
-                    <code>{asset1}</code><br>
-                    <b>Coluna:</b> <code>{REGION_NAME_PROPERTY}</code><br>
-                    <b>Erro:</b> <span style='color:#d32f2f;'>{e1}</span><br><br>
-                    <b>2) M_regions.asset_for("peru"):</b><br>
-                    <code>{_region_asset_for('peru') or 'nao encontrado'}</code><br>
-                    <b>Coluna:</b> <code>{REGION_NAME_PROPERTY}</code><br>
-                    <b>Erro:</b> <span style='color:#d32f2f;'>{e2}</span><br><br>
+                    <b style='color:#856404;'>Nao foi possivel popular regioes automaticamente</b><br><br>
+                    {err_lines}
                     <small style='color:#666;'>— Usando fallback estatico: {regions}</small>
                 </div>
                 """))
+        except Exception:
+            pass
         box, self.chk_regions = self._create_checkbox_grid(regions, "2. Seleccione Regiones:", bg_color='#fdf7e8')
         self.w_region_box.children = box.children
         import datetime
