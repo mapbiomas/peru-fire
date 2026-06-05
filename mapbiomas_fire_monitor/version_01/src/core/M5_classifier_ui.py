@@ -49,15 +49,15 @@ class M5WorkplanUI:
         )
 
         self.w_campaign = widgets.Dropdown(
-            options=['carregando...'],
-            value='carregando...',
-            description='Campanha:',
+            options=[Lang.LOADING_CAMPAIGNS],
+            value=Lang.LOADING_CAMPAIGNS,
+            description=Lang.CAMPAIGN_LABEL,
             layout=L(width='400px')
         )
         self.w_campaign.observe(self._on_campaign_change, names='value')
 
         self.f_pend_search = widgets.Text(
-            description='Filtrar:', placeholder='buscar por modelo, regiao, periodo...',
+            description=Lang.FILTER_LABEL, placeholder=Lang.FILTER_PLACEHOLDER,
             layout=L(width='100%'))
         self.f_pend_search.observe(lambda _: self._render_pending(), names='value')
 
@@ -204,7 +204,7 @@ class M5WorkplanUI:
             models = list_trained_models()
         except Exception:
             models = []
-        box, self.chk_models = self._create_checkbox_grid(models, "1. Seleccione Modelo (unico):", single_select=True, bg_color='#e8f4fd')
+        box, self.chk_models = self._create_checkbox_grid(models, Lang.SECTION_MODEL, single_select=True, bg_color='#e8f4fd')
         self.w_model_box.children = box.children
         regions = ['Peru', 'Amazonia', 'Cerrado']
         err_banner = None
@@ -215,12 +215,12 @@ class M5WorkplanUI:
                 authenticate()
             asset = CONFIG.get('asset_regions')
             if not asset:
-                err_banner = 'CONFIG[asset_regions] nao definido'
+                err_banner = Lang.ERR_CONFIG_ASSET_REGIONS
             else:
                 try:
                     ee.data.getAsset(asset)
                 except Exception:
-                    err_banner = f'<b>Asset nao encontrado no GEE:</b><br><code>{asset}</code>'
+                    err_banner = f'<b>{Lang.ERR_ASSET_NOT_FOUND}</b><br><code>{asset}</code>'
 
                 if not err_banner:
                     fc = ee.FeatureCollection(asset)
@@ -230,26 +230,26 @@ class M5WorkplanUI:
                     else:
                         size = fc.size().getInfo()
                         if size == 0:
-                            err_banner = f'<b>Asset existe mas esta VAZIO:</b><br><code>{asset}</code><br><small>0 features encontradas</small>'
+                            err_banner = f'<b>{Lang.ERR_ASSET_EMPTY}</b><br><code>{asset}</code><br><small>0 features</small>'
                         else:
-                            err_banner = (f'<b>Coluna <code>{REGION_NAME_PROPERTY}</code> nao encontrada:</b><br>'
+                            err_banner = (f'<b>{Lang.ERR_ASSET_COLUMN.format(prop=REGION_NAME_PROPERTY)}:</b><br>'
                                           f'<code>{asset}</code><br>'
                                           f'<small>Asset tem {size} features, mas a propriedade <code>'
-                                          f'{REGION_NAME_PROPERTY}</code> nao retornou valores. Verifique o nome da coluna.</small>')
+                                          f'{REGION_NAME_PROPERTY}</code> nao retornou valores.</small>')
         except Exception as e:
-            err_banner = f'<b>Erro ao acessar GEE:</b><br><span style="color:#d32f2f;">{e}</span>'
+            err_banner = f'<b>{Lang.ERR_GEE_ACCESS}</b><br><span style="color:#d32f2f;">{e}</span>'
 
         if err_banner:
-            from IPython.display import display, HTML
-            display(HTML(f"""
-            <div style='background:#fff3cd; border:1px solid #ffc107; border-radius:5px; padding:12px; margin:8px 0; font-family:monospace; font-size:13px;'>
-                <b style='color:#856404;'>Nao foi possivel popular regioes automaticamente</b><br><br>
-                {err_banner}<br><br>
-                <b>Coluna usada:</b> <code>{REGION_NAME_PROPERTY}</code><br><br>
-                <small style='color:#666;'>— Usando fallback estatico: {regions}</small>
-            </div>
-            """))
-        box, self.chk_regions = self._create_checkbox_grid(regions, "2. Seleccione Regiones:", bg_color='#fdf7e8')
+                from IPython.display import display, HTML
+                display(HTML(f"""
+                <div style='background:#fff3cd; border:1px solid #ffc107; border-radius:5px; padding:12px; margin:8px 0; font-family:monospace; font-size:13px;'>
+                    <b style='color:#856404;'>{Lang.WARN_REGION_FALLBACK}</b><br><br>
+                    {err_banner}<br><br>
+                    <b>{Lang.COLUMN_USED}</b> <code>{REGION_NAME_PROPERTY}</code><br><br>
+                    <small style='color:#666;'>— Fallback: {regions}</small>
+                </div>
+                """))
+        box, self.chk_regions = self._create_checkbox_grid(regions, Lang.SECTION_REGIONS, bg_color='#fdf7e8')
         self.w_region_box.children = box.children
         import datetime
         now = datetime.datetime.now()
@@ -263,7 +263,7 @@ class M5WorkplanUI:
                 for m in range(1, max_m + 1):
                     periods.append(f"{y}_{m:02d}")
         periods.sort(reverse=True)
-        box, self.chk_periods = self._create_checkbox_grid(periods, "3. Seleccione Periodos (Año / Año_Mes):", bg_color='#ebf5eb', columns=4)
+        box, self.chk_periods = self._create_checkbox_grid(periods, Lang.SECTION_PERIODS, bg_color='#ebf5eb', columns=4)
         btn_all_per, btn_none_per, hbox_per = make_select_all_none(
             on_all=lambda _: self._toggle_periods(True),
             on_none=lambda _: self._toggle_periods(False))
@@ -295,12 +295,12 @@ class M5WorkplanUI:
         if not task_name:
             with self.out_msg:
                 clear_output()
-                display(HTML("<b style='color:red;'>Atencion: Debe asignar un Nombre de Tarea obligatoriamente.</b>"))
+                display(HTML(f"<b style='color:red;'>{Lang.ERR_NO_TASK_NAME}</b>"))
             return
         if not model or not regions or not periods:
             with self.out_msg:
                 clear_output()
-                display(HTML("<b style='color:red;'>Atencion: Seleccione 1 Modelo y al menos una Region y un Periodo.</b>"))
+                display(HTML(f"<b style='color:red;'>{Lang.ERR_NO_SELECTION}</b>"))
             return
         added = 0
         skipped = 0
@@ -308,7 +308,7 @@ class M5WorkplanUI:
         gcs_fail = 0
         with self.out_msg:
             clear_output(wait=True)
-            display(HTML("<i>⏳ Salvando no GCS...</i>"))
+            display(HTML(f"<i>⏳ {Lang.SAVING_TO_GCS}</i>"))
         fs = _get_fs()
         campaign = CONFIG.get('campaign', 'MONITOR_01')
         for r in regions:
@@ -332,28 +332,28 @@ class M5WorkplanUI:
         with self.out_msg:
             clear_output()
             if added == 0 and skipped == 0:
-                display(HTML("<b style='color:red;'>Nenhuma tarea foi adicionada.</b>"))
+                display(HTML(f"<b style='color:red;'>{Lang.MSG_NO_TASKS_ADDED}</b>"))
             elif added > 0:
-                msg = f"<b style='color:green;'>Exito: {added} tareas agregadas.</b>"
+                msg = f"<b style='color:green;'>{Lang.MSG_TASKS_ADDED.format(n=added)}</b>"
                 failures = []
                 if not saved_ok:
-                    failures.append("falha ao salvar arquivo local (lock ocupado)")
+                    failures.append(Lang.FAIL_SAVE_LOCAL)
                 if gcs_fail > 0:
-                    failures.append(f"{gcs_fail} falharam no GCS")
+                    failures.append(Lang.FAIL_GCS_UPLOAD.format(n=gcs_fail))
                 if failures:
                     msg += f"<br><span style='color:red;'>⚠ {'; '.join(failures)}.</span>"
                 if gcs_ok > 0:
-                    msg += f"<br><span style='color:green;'>{gcs_ok} salvas no GCS.</span>"
+                    msg += f"<br><span style='color:green;'>{Lang.MSG_GCS_OK.format(n=gcs_ok)}</span>"
                 if skipped > 0:
-                    msg += f"<br><span style='color:orange;'>{skipped} omitidas (ya en la cola).</span>"
+                    msg += f"<br><span style='color:orange;'>{Lang.MSG_SKIPPED_QUEUED.format(n=skipped)}</span>"
                 display(HTML(msg))
             else:
-                display(HTML(f"<b style='color:orange;'>Atencion: {skipped} tareas ya estaban en la cola.</b>"))
+                display(HTML(f"<b style='color:orange;'>{Lang.WARN_ALREADY_QUEUED.format(n=skipped)}</b>"))
         self._refresh_ui()
 
     def _on_campaign_change(self, change):
         campaign = change['new']
-        if campaign and campaign != 'carregando...':
+        if campaign and campaign != Lang.LOADING_CAMPAIGNS:
             CONFIG['campaign'] = campaign
             self._refresh_ui()
 
@@ -465,7 +465,7 @@ class M5WorkplanUI:
             return widgets.HTML("")
 
         cards = []
-        header = widgets.HTML(f"<div style='margin:10px 0 5px; padding:8px; background:#fef9e7; border:1px solid #f9e79f; border-radius:4px;'><b>Tareas en GCS ({len(tareas)} disponibles)</b></div>")
+        header = widgets.HTML(f"<div style='margin:10px 0 5px; padding:8px; background:#fef9e7; border:1px solid #f9e79f; border-radius:4px;'><b>{Lang.TAREAS_HEADER.format(n=len(tareas))}</b></div>")
         cards.append(header)
 
         for t in tareas:
@@ -473,7 +473,7 @@ class M5WorkplanUI:
             regions = t.get('regions', [])
             periods = t.get('periods', [])
             years = sorted(set(p.split('_')[0] for p in periods))
-            label = f" Modelo: {model} | Regiones: {', '.join(regions)} | Periodos: {', '.join(years)}"
+            label = f" {Lang.TAREA_SUMMARY.format(m=model, r=', '.join(regions), p=', '.join(years))}"
 
             cargar_container, btn_cargar, _ = make_refresh_button('plus', _make_cargar(model, regions, periods), description=Lang.LOAD_TO_QUEUE, width='150px')
             btn_cargar.button_style = 'success'
@@ -487,7 +487,7 @@ class M5WorkplanUI:
                     gcs_fail = 0
                     with self.out_msg:
                         clear_output(wait=True)
-                        display(HTML("<i>Salvando no GCS...</i>"))
+                        display(HTML(f"<i>{Lang.SAVING_TO_GCS}</i>"))
                     fs = _get_fs()
                     for r in regs:
                         for p in pers:
@@ -507,12 +507,12 @@ class M5WorkplanUI:
                     saved_ok = save_workplan(self.plan)
                     with self.out_msg:
                         clear_output()
-                        msg = f"<span style='color:green;'>{added} cargadas, {skipped} omitidas.</span>"
+                        msg = f"<span style='color:green;'>{Lang.MSG_LOADED.format(loaded=added, skipped=skipped)}</span>"
                         failures = []
                         if not saved_ok:
-                            failures.append("falha ao salvar arquivo local (lock ocupado)")
+                            failures.append(Lang.FAIL_SAVE_LOCAL)
                         if gcs_fail > 0:
-                            failures.append(f"{gcs_fail} falharam no GCS")
+                            failures.append(Lang.FAIL_GCS_UPLOAD.format(n=gcs_fail))
                         if failures:
                             msg += f"<br><span style='color:red;'> {', '.join(failures)}.</span>"
                         display(HTML(msg))
@@ -574,7 +574,7 @@ class M5WorkplanUI:
                f'<div style="display:flex;align-items:center;gap:4px;">'
                f'<span style="border-top:2px solid #333;width:{scale_px}px;height:0;"></span>'
                f'<span>{scale_km} km</span>'
-               f'<span style="margin-left:auto;">~{width_km:.0f} km de ancho</span>'
+               f'<span style="margin-left:auto;">{Lang.SCALE_BAR_WIDTH.format(w=round(width_km))}</span>'
                '</div></div>')
         return bar
 
@@ -591,7 +591,7 @@ class M5WorkplanUI:
             search_box = self.f_pend_search
 
             debug_info = (f'<div style="font-size:11px;color:#94a3b8;margin:0 0 6px 0;">'
-                          f'{len(all_jobs)} pendentes | {len(filtered)} apos filtro</div>')
+                          f'{Lang.INFO_FILTER_COUNT.format(total=len(all_jobs), filtered=len(filtered))}</div>')
             debug_html = widgets.HTML(debug_info)
 
             if not filtered:
@@ -674,7 +674,7 @@ class M5WorkplanUI:
                             pct = 0
                             prog_str = jbs[0].get('progress', '0%')
                         grid_n = self._get_grid_count(r)
-                        grid_str = f"({grid_n} celdas)" if grid_n else ""
+                        grid_str = Lang.GRID_COUNT.format(n=grid_n) if grid_n else ""
                         bar_color = '#22c55e' if running else '#3b82f6'
                         bar = (f'<div style="width:100px;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">'
                                f'<div style="width:{pct:.0f}%;height:100%;background:{bar_color};border-radius:4px;"></div></div>')
@@ -755,21 +755,21 @@ class M5WorkplanUI:
 
             rows = []
             if sensors:
-                rows.append(('<td style="padding:2px 8px;font-weight:600;">Sensores</td>',
+                rows.append((f'<td style="padding:2px 8px;font-weight:600;">{Lang.META_SENSORS}</td>',
                              f'<td style="padding:2px 8px;">{", ".join(sensors)}</td>'))
             if periodicities:
-                rows.append(('<td style="padding:2px 8px;font-weight:600;">Periodicidade</td>',
+                rows.append((f'<td style="padding:2px 8px;font-weight:600;">{Lang.META_PERIODICITY}</td>',
                              f'<td style="padding:2px 8px;">{", ".join(periodicities)}</td>'))
-            rows.append(('<td style="padding:2px 8px;font-weight:600;">Bands (input)</td>',
+            rows.append((f'<td style="padding:2px 8px;font-weight:600;">{Lang.META_BANDS_INPUT}</td>',
                          f'<td style="padding:2px 8px;">{num_input}</td>'))
             if n_iters:
-                rows.append(('<td style="padding:2px 8px;font-weight:600;">Iteracoes</td>',
+                rows.append((f'<td style="padding:2px 8px;font-weight:600;">{Lang.META_ITERATIONS}</td>',
                              f'<td style="padding:2px 8px;">{n_iters}</td>'))
             if learning_rate:
-                rows.append(('<td style="padding:2px 8px;font-weight:600;">Learning rate</td>',
+                rows.append((f'<td style="padding:2px 8px;font-weight:600;">{Lang.META_LEARNING_RATE}</td>',
                              f'<td style="padding:2px 8px;">{learning_rate}</td>'))
             if campaign:
-                rows.append(('<td style="padding:2px 8px;font-weight:600;">Campanha</td>',
+                rows.append((f'<td style="padding:2px 8px;font-weight:600;">{Lang.META_CAMPAIGN}</td>',
                              f'<td style="padding:2px 8px;">{campaign}</td>'))
 
             html = '<table style="font-size:12px;color:#334155;border-collapse:collapse;">'
@@ -777,7 +777,7 @@ class M5WorkplanUI:
                 html += f'<tr>{label}{value}</tr>'
             html += '</table>'
             parts.append(widgets.HTML(
-                f'<div style="font-size:12px;font-weight:600;color:#0f172a;margin-bottom:4px;">Modelo</div>'
+                f'<div style="font-size:12px;font-weight:600;color:#0f172a;margin-bottom:4px;">{Lang.MODEL}</div>'
                 f'{html}',
                 layout=L(margin='4px 0')))
         else:
@@ -790,15 +790,15 @@ class M5WorkplanUI:
         total = len(jobs_list)
 
         html = f'<div style="font-size:12px;color:#334155;margin-top:8px;">'
-        html += f'<div style="font-size:12px;font-weight:600;color:#0f172a;margin-bottom:4px;">Jobs cadastrados</div>'
-        html += f'<div style="margin-bottom:4px;">{total} job(s), {len(regions)} regiao(oes), {len(periods)} periodo(s)</div>'
+        html += f'<div style="font-size:12px;font-weight:600;color:#0f172a;margin-bottom:4px;">{Lang.JOBS_REGISTERED}</div>'
+        html += f'<div style="margin-bottom:4px;">{Lang.JOBS_SUMMARY.format(total=total, regions=len(regions), periods=len(periods))}</div>'
         html += '<table style="font-size:11px;border-collapse:collapse;width:100%;">'
-        html += ('<tr style="background:#f8fafc;">'
-                 '<th style="padding:3px 6px;text-align:left;border-bottom:1px solid #e2e8f0;">Regiao</th>'
-                 '<th style="padding:3px 6px;text-align:left;border-bottom:1px solid #e2e8f0;">Periodo</th>'
-                 '<th style="padding:3px 6px;text-align:left;border-bottom:1px solid #e2e8f0;">Status</th>'
-                 '<th style="padding:3px 6px;text-align:left;border-bottom:1px solid #e2e8f0;">Tarefa</th>'
-                 '</tr>')
+        html += (f'<tr style="background:#f8fafc;">'
+                 f'<th style="padding:3px 6px;text-align:left;border-bottom:1px solid #e2e8f0;">{Lang.JOB_REGION}</th>'
+                 f'<th style="padding:3px 6px;text-align:left;border-bottom:1px solid #e2e8f0;">{Lang.JOB_PERIOD}</th>'
+                 f'<th style="padding:3px 6px;text-align:left;border-bottom:1px solid #e2e8f0;">{Lang.JOB_STATUS}</th>'
+                 f'<th style="padding:3px 6px;text-align:left;border-bottom:1px solid #e2e8f0;">{Lang.JOB_TASK}</th>'
+                 f'</tr>')
         for j in sorted(jobs_list, key=lambda x: (x['region'], x['period'])):
             status = j.get('status', 'PENDING')
             color = {'PENDING': '#f59e0b', 'RUNNING': '#3b82f6',
@@ -826,14 +826,14 @@ class M5WorkplanUI:
         save_tarea(model, regions, periods)
         with self.out_msg:
             clear_output()
-            display(HTML(f"<span style='color:green;'>Tarea guardada en GCS para {model}.</span>"))
+            display(HTML(f"<span style='color:green;'>{Lang.TAREA_SAVED.format(m=model)}</span>"))
         self._refresh_ui()
 
     def _tarea_delete_click(self, model):
         delete_tarea(model)
         with self.out_msg:
             clear_output()
-            display(HTML(f"<span style='color:red;'>Tarea eliminada del GCS: {model}.</span>"))
+            display(HTML(f"<span style='color:red;'>{Lang.TAREA_DELETED.format(m=model)}</span>"))
         self._refresh_ui()
 
     def _on_discard_workplan(self, model_name):
@@ -850,7 +850,7 @@ class M5WorkplanUI:
         save_workplan(self.plan)
         with self.out_msg:
             clear_output()
-            display(HTML(f"<b style='color:red;'>Plano descartado: {model_name} ({removed} jobs removidos).</b>"))
+            display(HTML(f"<b style='color:red;'>{Lang.WORKPLAN_DISCARDED.format(m=model_name, n=removed)}</b>"))
         self._refresh_ui()
 
     def _on_clear_click(self):
@@ -863,7 +863,7 @@ class M5WorkplanUI:
         save_workplan(self.plan)
         with self.out_msg:
             clear_output()
-            display(HTML("<b style='color:red;'>Cola vaciada (GCS removido).</b>"))
+            display(HTML(f"<b style='color:red;'>{Lang.QUEUE_CLEARED}</b>"))
         self._refresh_ui()
 
     def _on_save_gcs_click(self, model_name):
@@ -886,9 +886,9 @@ class M5WorkplanUI:
         with self.out_msg:
             clear_output()
             if saved > 0:
-                display(HTML(f"<span style='color:green;'>{saved} jobs salvos no GCS.</span>"))
+                display(HTML(f"<span style='color:green;'>{Lang.SAVED_TO_GCS.format(n=saved)}</span>"))
             if skipped > 0:
-                display(HTML(f"<span style='color:orange;'>{skipped} jobs já estavam salvos.</span>"))
+                display(HTML(f"<span style='color:orange;'>{Lang.ALREADY_SAVED.format(n=skipped)}</span>"))
         self._refresh_ui()
 
     def _on_dismiss_click(self, model_name):
@@ -902,9 +902,9 @@ class M5WorkplanUI:
         with self.out_msg:
             clear_output()
             if removed > 0:
-                display(HTML(f"<span style='color:red;'>{removed} jobs temporários removidos.</span>"))
+                display(HTML(f"<span style='color:red;'>{Lang.TEMP_JOBS_REMOVED.format(n=removed)}</span>"))
             else:
-                display(HTML("<span style='color:orange;'>Nenhum job temporário para remover.</span>"))
+                display(HTML(f"<span style='color:orange;'>{Lang.NO_TEMP_JOBS}</span>"))
         self._refresh_ui()
 
     def _on_delete_gcs_click(self, model_name):
@@ -922,7 +922,7 @@ class M5WorkplanUI:
             save_workplan(self.plan)
         with self.out_msg:
             clear_output()
-            display(HTML(f"<span style='color:red;'>{removed} jobs removidos do GCS.</span>"))
+            display(HTML(f"<span style='color:red;'>{Lang.REMOVED_FROM_GCS.format(n=removed)}</span>"))
         self._refresh_ui()
 
     # --- HABILITACION DE CARDS ---
@@ -1087,7 +1087,7 @@ class M5WorkplanUI:
             except Exception:
                 pass
         if not tile_fqpaths:
-            container.children = [widgets.HTML("<span style='color:#999; font-size:11px;'>Ningun tile en GCS.</span>")]
+            container.children = [widgets.HTML(f"<span style='color:#999; font-size:11px;'>{Lang.NO_TILES_GCS_ALT}</span>")]
             return
         tile_chks = []
         for fp in tile_fqpaths:
@@ -1102,19 +1102,19 @@ class M5WorkplanUI:
                 n = self._delete_tiles(to_rm, fs)
                 with self.out_msg:
                     clear_output()
-                    display(HTML(f"<span style='color:red;'>{n} tiles eliminados.</span>"))
+                    display(HTML(f"<span style='color:red;'>{Lang.TILES_DELETED.format(n=n)}</span>"))
                 self._refresh_tile_list(job, container)
             else:
                 with self.out_msg:
                     clear_output()
-                    display(HTML("<span style='color:orange;'>Seleccione tiles para eliminar.</span>"))
+                    display(HTML(f"<span style='color:orange;'>{Lang.SELECT_TILES_PROMPT}</span>"))
         btn_del_sel.on_click(_del_sel)
         btn_del_all = widgets.Button(description=Lang.DELETE_ALL, button_style='warning', layout=L(width='130px', height='26px'))
         def _del_all(_):
             n = self._delete_tiles(tile_fqpaths, fs)
             with self.out_msg:
                 clear_output()
-                display(HTML(f"<span style='color:red;'>{n} tiles eliminados.</span>"))
+                display(HTML(f"<span style='color:red;'>{Lang.TILES_DELETED.format(n=n)}</span>"))
             self._refresh_tile_list(job, container)
         btn_del_all.on_click(_del_all)
         actions = widgets.HBox([btn_del_sel, btn_del_all], layout=L(margin='3px 0 0 20px'))
@@ -1145,7 +1145,7 @@ class M5WorkplanUI:
             overlay = ee.ImageCollection([bg, region_lines, grid_lines]).mosaic()
 
             region_val = self.f_mapa_region.value
-            if region_val and region_val != 'Todas':
+            if region_val and region_val != Lang.ALL_F:
                 sel = all_regions.filter(ee.Filter.eq(REGION_NAME_PROPERTY, region_val))
                 sel_style = sel.style(**{'color': 'e74c3c', 'width': 2, 'fillColor': 'e74c3c20'})
                 overlay = ee.ImageCollection([overlay, sel_style]).mosaic()
@@ -1186,11 +1186,11 @@ class M5WorkplanUI:
                               f'{Lang.GRID_CELLS}</th></tr>'
                               f'{count_rows}</table></div>')
 
-            legenda = """
+            legenda = f"""
             <div style="display:flex;gap:15px;margin:10px 0;font-size:12px;color:#555;">
-                <span><span style="display:inline-block;width:12px;height:12px;background:#2c3e50;border-radius:2px;"></span> Peru</span>
-                <span><span style="display:inline-block;width:12px;height:12px;background:#2980b9;border-radius:2px;"></span> Regiones</span>
-                <span><span style="display:inline-block;width:12px;height:12px;background:#bdc3c7;border-radius:2px;"></span> Grid cim-world</span>
+                <span><span style="display:inline-block;width:12px;height:12px;background:#2c3e50;border-radius:2px;"></span> {Lang.MAP_LEGEND_COUNTRY}</span>
+                <span><span style="display:inline-block;width:12px;height:12px;background:#2980b9;border-radius:2px;"></span> {Lang.MAP_LEGEND_REGIONS}</span>
+                <span><span style="display:inline-block;width:12px;height:12px;background:#bdc3c7;border-radius:2px;"></span> {Lang.MAP_LEGEND_GRID}</span>
             </div>
             """
             img_html = f'<img src="data:image/png;base64,{b64}" style="max-width:100%; border:1px solid #ccc; border-radius:4px;">'
@@ -1349,7 +1349,7 @@ class M5WorkplanUI:
         if n_sync > 0:
             with self.out_msg:
                 clear_output()
-                display(HTML(f"<span style='color:green;'>{n_sync} jobs sincronizados del GCS.</span>"))
+                display(HTML(f"<span style='color:green;'>{Lang.SYNC_FROM_GCS.format(n=n_sync)}</span>"))
         self._build_guide()
         self._refresh_ui()
 
