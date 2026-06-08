@@ -5,7 +5,7 @@ import threading
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
-from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode
+from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode, monthly_cog_path, yearly_cog_path
 import M0_auth_config as config_module
 from M_cache import CacheManager
 from M_ui_components import PipelineStepUI
@@ -126,15 +126,33 @@ class MosaicAssemblerUI(PipelineStepUI):
                     chk._meta = {'sensor': sensor, 'period': period, 'mosaic': mosaic_method, 'year': y, 'month': m, 'band': b}
                     
                     if exists_cog:
-                        status, css = 'OK', 'mfm-ok'
                         if not is_edit_mode(): chk.disabled = True
+                        if period == 'monthly':
+                            cog_dir = monthly_cog_path(y, m, mosaic=mosaic_method, sensor=sensor)
+                        else:
+                            cog_dir = yearly_cog_path(y, mosaic=mosaic_method, sensor=sensor)
+                        cog_file = f"{m_name}_cog.tif"
+                        gcs_url = f"https://storage.googleapis.com/{CONFIG['bucket']}/{cog_dir}/{cog_file}"
+                        status_html = widgets.HTML(
+                            f'<a href="{gcs_url}" target="_blank" '
+                            f'style="font-size:10px;font-weight:700;color:#155724;text-decoration:underline;">OK ↗</a>',
+                            layout=widgets.Layout(width='32px')
+                        )
+                        cell = widgets.HBox(
+                            [chk, status_html],
+                            layout=widgets.Layout(
+                                width='auto', min_height='34px',
+                                justify_content='center', align_items='center',
+                                padding='0', overflow='hidden', margin='1px'
+                            )
+                        )
+                        cell.add_class('mfm-ok')
                     elif has_chunks:
-                        status, css = 'READY', 'mfm-run' 
+                        cell = PipelineStepUI.make_status_cell(chk, 'READY', 'mfm-run', width='auto')
                     else:
-                        status, css = 'MISS', 'mfm-null'
+                        cell = PipelineStepUI.make_status_cell(chk, 'MISS', 'mfm-null', width='auto')
                         chk.disabled = True
                     
-                    cell = PipelineStepUI.make_status_cell(chk, status, css, width='auto')
                     cell.layout.flex = '1'
                     self.chk_dict[f"{sensor}_{period}_{mosaic_method}_{date_str}_{b}"] = chk
                     cells.append(cell)
