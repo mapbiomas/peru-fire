@@ -13,7 +13,7 @@ from M0_auth_config import (
     yearly_chunk_path, yearly_mosaic_path, yearly_cog_path,
     get_temp_dir, check_command_exists
 )
-from M_gcs import upload
+from M_gcs import upload, download
 
 # Mapeamento de Tipos de Dados Recomendado (IPAM/MapBiomas)
 BAND_DATATYPES = {
@@ -85,8 +85,6 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
         if logger: logger(msg, "error")
         return []
 
-    fs = _get_fs()
-
     work_root = get_temp_dir()
     session_id = f"m2_{base_name}_{int(time.time())}"
     tmp_path = os.path.join(work_root, session_id)
@@ -140,7 +138,7 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
             try:
                 for shard_url in remote_shards:
                     local_shard = os.path.join(band_tmp, os.path.basename(shard_url))
-                    fs.get(shard_url, local_shard)
+                    download(shard_url, local_shard)
 
                 local_shards = glob.glob(os.path.join(band_tmp, '*.tif'))
                 if not local_shards: continue
