@@ -983,6 +983,7 @@ def start_training(ui):
         return
         
     print(f"Success: {len(X)} pixels extracted (Fire: {y.sum()} | No-fire: {(y==0).sum()}).")
+    ui.log(type='success', f"{len(X)} pixels extracted ({int(y.sum())} fire, {int((y==0).sum())} no-fire)")
     
     from sklearn.model_selection import train_test_split
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -994,6 +995,7 @@ def start_training(ui):
     ui.trainer_instance._sample_count = {'burned': int(y.sum()), 'not_burned': int((y==0).sum())}
     
     print("Training DNN...")
+    ui.log(type='info', "Training DNN...")
     ui.tab.selected_index = 2  # switch to Canvas tab
     from IPython.display import display as ipy_display
     progress_bar = widgets.IntProgress(value=0, min=0, max=100, description='Training:',
@@ -1023,6 +1025,7 @@ def start_training(ui):
     
     # --- AUDITORIA FINAL COM t-SNE (INTERATIVO) ---
     print("\n Training completed. Generating high-resolution t-SNE audit...")
+    ui.log(type='success', "Training completed")
     ui._live_initialized = False
     ui._live_plots_out.clear_output(wait=True)
     with ui._live_plots_out:
@@ -1065,6 +1068,7 @@ def start_training(ui):
     try:
         saved_meta = ui.trainer_instance.save(ui.w_training_id.value, ui.w_shortname.value, comment=ui.w_comment.value, logger=_logger)
         print("Model and Model Card saved successfully!")
+        ui.log(type='success', "Model saved to GCS")
         
         # Inserir o modelo fresquinho na Mesa do Canvas automaticamente
         final_id = f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{GLOBAL_OPTS['SENSOR'][0].lower()}"
@@ -1083,6 +1087,7 @@ def start_training(ui):
         
     except Exception as e:
         print(f"Error saving: {e}")
+        ui.log(type='error', f"Error saving model: {e}")
 
 def run_ui():
     ui = ModelTrainerUI()

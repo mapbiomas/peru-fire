@@ -6,6 +6,14 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output
 from M_lang import L
 
+THEME = {
+    'ERROR': '#d32f2f',
+    'WARNING': '#e67e22',
+    'SUCCESS': '#27ae60',
+    'INFO': '#3498db',
+    'DEFAULT': '#333333',
+}
+
 class PipelineStepUI:
     """
     Componente base para englobar visualmente as etapas do pipeline.
@@ -100,11 +108,7 @@ class PipelineStepUI:
 
     def log(self, message, type="info"):
         """Adiciona uma mensagem textualmente formatada no Output de Logs."""
-        color = "black"
-        if type == "error": color = "red"
-        elif type == "success": color = "green"
-        elif type == "warning": color = "orange"
-        
+        color = THEME.get(type.upper(), THEME['DEFAULT'])
         with self.log_output:
             display(widgets.HTML(f"<span style='color:{color}'>[{type.upper()}] {message}</span>"))
             

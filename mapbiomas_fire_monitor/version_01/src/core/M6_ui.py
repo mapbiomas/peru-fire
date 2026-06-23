@@ -9,7 +9,7 @@ from M0_auth_config import CONFIG, _get_fs, gcs_classifications_path
 from M5_workplan import gcs_full, consolidated_stats_path, region_path
 from M6_publisher import discover_classified_groups, gee_asset_exists, stats_row_exists, load_gee_assets, load_stats_done
 from M_cache import CacheManager
-from M_ui_components import make_empty_state, flash_output, make_select_all_none, make_refresh_button
+from M_ui_components import THEME, make_empty_state, flash_output, make_select_all_none, make_refresh_button
 from M_lang import L as Lang
 
 L = widgets.Layout
@@ -206,7 +206,7 @@ class M6WorkplanUI:
                 widgets.HTML(f"<b>{m}</b>{c_label}", layout=L(width='220px')),
                 widgets.HTML(r, layout=L(width='150px')),
                 widgets.HTML(p, layout=L(width='120px')),
-                widgets.HTML(f"<span style='color:green;'> {Lang.M6_MOSAIC_OK}</span>"),
+                widgets.HTML(f"<span style='color:{THEME['SUCCESS']};'> {Lang.M6_MOSAIC_OK}</span>"),
             ], layout=L(margin='2px 0', padding='4px', border='1px solid #eee')))
         self.tab_finished.children = [
             widgets.HTML(f"<b>{Lang.M6_PUBLISHED_GROUPS.format(n=len(done))}</b>"),
@@ -316,11 +316,11 @@ class M6WorkplanUI:
                     n = len(periods)
                     n_done = len(periods_done)
                     if n_done == n:
-                        cell = f"<span style='color:green;'>{n}/{n}</span>"
+                        cell = f"<span style='color:{THEME['SUCCESS']};'>{n}/{n}</span>"
                     elif n_done > 0:
-                        cell = f"<span style='color:#f39c12;'>{n_done}/{n}</span>"
+                        cell = f"<span style='color:{THEME['WARNING']};'>{n_done}/{n}</span>"
                     else:
-                        cell = f"<span style='color:#3498db;'>0/{n}</span>"
+                        cell = f"<span style='color:{THEME['INFO']};'>0/{n}</span>"
                 line += f"<td style='padding:4px 10px;text-align:center;'>{cell}</td>"
             line += "</tr>"
             lines.append(line)
@@ -328,9 +328,9 @@ class M6WorkplanUI:
         lines.append("</table>")
         legend = widgets.HTML(f"""
             <div style='margin-top:15px;font-size:12px;'>
-                <span style='color:green;'>\u25cf {Lang.M6_LEGEND_PUBLISHED}</span> &nbsp;
-                <span style='color:#f39c12;'>\u25cf {Lang.M6_LEGEND_PARTIAL}</span> &nbsp;
-                <span style='color:#3498db;'>\u25cf {Lang.M6_LEGEND_CLASSIFIED_ONLY}</span> &nbsp;
+                <span style='color:{THEME['SUCCESS']};'>\u25cf {Lang.M6_LEGEND_PUBLISHED}</span> &nbsp;
+                <span style='color:{THEME['WARNING']};'>\u25cf {Lang.M6_LEGEND_PARTIAL}</span> &nbsp;
+                <span style='color:{THEME['INFO']};'>\u25cf {Lang.M6_LEGEND_CLASSIFIED_ONLY}</span> &nbsp;
                 <span style='color:#ccc;'>\u25cf {Lang.M6_LEGEND_NO_DATA}</span>
             </div>
         """)
