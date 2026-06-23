@@ -382,11 +382,14 @@ class ModelTrainerUI(PipelineStepUI):
                     available_combos[combo].add(p['band'])
         except Exception:
             # Fallback offline fixo se nem o cache existir
-            available_combos = {
-                ('sentinel2', 'minnbr', 'mensal'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']),
-                ('sentinel2', 'minnbr_buffer', 'mensal'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear']),
-                ('landsat', 'minnbr', 'mensal'): set(['red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'])
+            all_combos = {
+                ('sentinel2', 'minnbr', 'mensal'): {'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'},
+                ('sentinel2', 'minnbr_buffer', 'mensal'): {'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'},
+                ('landsat', 'minnbr', 'mensal'): {'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'},
+                ('landsat', 'minnbr_buffer', 'mensal'): {'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'},
             }
+            active = [s.lower() for s in GLOBAL_OPTS.get('SENSOR', ['sentinel2'])]
+            available_combos = {k: v for k, v in all_combos.items() if k[0] in active}
 
         if not available_combos:
             return make_empty_state(Lang.NO_COGS)
