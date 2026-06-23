@@ -352,12 +352,12 @@ def start_export(ui_obj, mode=None):
     
     if not selected:
         print(Lang.EXPORT_NONE_SEL)
-        ui_obj.log(type='warning', Lang.EXPORT_NONE_SEL)
+        ui_obj.log(Lang.EXPORT_NONE_SEL, type='warning')
         return
 
     from M1_export_logic import export_to_asset, export_to_gcs
     print(f" Starting {len(selected)} exports...")
-    ui_obj.log(type='info', f"Starting {len(selected)} exports...")
+    ui_obj.log(f"Starting {len(selected)} exports...", type='info')
 
     import M1_export_logic as logic
     from M0_auth_config import CONFIG, mosaic_name
@@ -384,11 +384,11 @@ def start_export(ui_obj, mode=None):
             else:
                 logic.export_to_gcs(mosaic_obj, name_base, y, m, p, bands=[band], mosaic=mosaic_m, sensor=sensor)
             succeeded += 1
-            ui_obj.log(type='success', f"Export sent: {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d} [{meta['type']}]")
+            ui_obj.log(f"Export sent: {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d} [{meta['type']}]", type='success')
         except Exception as e:
             print(f"  [ERR] Failed {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d}: {e}")
-            ui_obj.log(type='error', f"Failed {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d}: {e}")
+            ui_obj.log(f"Failed {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d}: {e}", type='error')
             traceback.print_exc()
             
     print(f"\n Completed! {succeeded}/{len(selected)} tasks sent.")
-    ui_obj.log(type='success' if succeeded == len(selected) else 'warning', f"Completed! {succeeded}/{len(selected)} tasks sent.")
+    ui_obj.log(f"Completed! {succeeded}/{len(selected)} tasks sent.", type='success' if succeeded == len(selected) else 'warning')
