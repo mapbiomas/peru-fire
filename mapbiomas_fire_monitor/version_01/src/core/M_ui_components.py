@@ -14,6 +14,11 @@ THEME = {
     'DEFAULT': '#333333',
 }
 
+def cell_log(message, type="info"):
+    """Exibe mensagem colorida na célula atual (não dentro de um PipelineStepUI)."""
+    color = THEME.get(type.upper(), THEME['DEFAULT'])
+    display(widgets.HTML(f"<span style='color:{color}'>[{type.upper()}] {message}</span>"))
+
 class PipelineStepUI:
     """
     Componente base para englobar visualmente as etapas do pipeline.

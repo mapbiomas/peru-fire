@@ -8,7 +8,7 @@ from IPython.display import display, clear_output
 from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode
 import M0_auth_config as config_module
 from M_cache import CacheManager
-from M_ui_components import PipelineStepUI
+from M_ui_components import PipelineStepUI, cell_log
 from M_lang import L as Lang
 from M1_export_logic import get_quality_mosaic, export_to_asset, export_to_gcs, clear_gcs_chunks, delete_gcs_band, delete_asset_band
 
@@ -352,12 +352,12 @@ def start_export(ui_obj, mode=None):
     
     if not selected:
         print(Lang.EXPORT_NONE_SEL)
-        ui_obj.log(Lang.EXPORT_NONE_SEL, type='warning')
+        cell_log(Lang.EXPORT_NONE_SEL, type='warning')
         return
 
     from M1_export_logic import export_to_asset, export_to_gcs
     print(f" Starting {len(selected)} exports...")
-    ui_obj.log(f"Starting {len(selected)} exports...", type='info')
+    cell_log(f"Starting {len(selected)} exports...", type='info')
 
     import M1_export_logic as logic
     from M0_auth_config import CONFIG, mosaic_name
@@ -384,11 +384,11 @@ def start_export(ui_obj, mode=None):
             else:
                 logic.export_to_gcs(mosaic_obj, name_base, y, m, p, bands=[band], mosaic=mosaic_m, sensor=sensor)
             succeeded += 1
-            ui_obj.log(f"Export sent: {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d} [{meta['type']}]", type='success')
+            cell_log(f"Export sent: {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d} [{meta['type']}]", type='success')
         except Exception as e:
             print(f"  [ERR] Failed {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d}: {e}")
-            ui_obj.log(f"Failed {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d}: {e}", type='error')
+            cell_log(f"Failed {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d}: {e}", type='error')
             traceback.print_exc()
             
     print(f"\n Completed! {succeeded}/{len(selected)} tasks sent.")
-    ui_obj.log(f"Completed! {succeeded}/{len(selected)} tasks sent.", type='success' if succeeded == len(selected) else 'warning')
+    cell_log(f"Completed! {succeeded}/{len(selected)} tasks sent.", type='success' if succeeded == len(selected) else 'warning')

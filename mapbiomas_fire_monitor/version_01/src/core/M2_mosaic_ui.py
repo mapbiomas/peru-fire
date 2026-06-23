@@ -8,7 +8,7 @@ from IPython.display import display, clear_output
 from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode, monthly_cog_path, yearly_cog_path
 import M0_auth_config as config_module
 from M_cache import CacheManager
-from M_ui_components import PipelineStepUI
+from M_ui_components import PipelineStepUI, cell_log
 from M_lang import L as Lang
 from M2_mosaic_logic import assemble_country_mosaic
 
@@ -359,11 +359,11 @@ def start_mosaic_assembly(ui_obj):
     selected = [chk._meta for chk in ui_obj.chk_dict.values() if chk.value]
     if not selected:
         print("[WARNING] No mosaic selected.")
-        ui_obj.log("No mosaic selected.", type='warning')
+        cell_log("No mosaic selected.", type='warning')
         return
     
     print(f"[INFO] Starting assembly of {len(selected)} COG bands...")
-    ui_obj.log(f"Starting assembly of {len(selected)} COG bands...", type='info')
+    cell_log(f"Starting assembly of {len(selected)} COG bands...", type='info')
     
     from M2_mosaic_logic import assemble_country_mosaic
 
@@ -383,10 +383,10 @@ def start_mosaic_assembly(ui_obj):
                 logger=print
             )
             succeeded += 1
-            ui_obj.log(f"COG montado: {item['sensor']} {d_label} {item['band']}", type='success')
+            cell_log(f"COG montado: {item['sensor']} {d_label} {item['band']}", type='success')
         except Exception as e:
             print(f"[ERR] Failed {item['sensor']} {d_label} {item['band']}: {e}")
-            ui_obj.log(f"Failed {item['sensor']} {d_label} {item['band']}: {e}", type='error')
+            cell_log(f"Failed {item['sensor']} {d_label} {item['band']}: {e}", type='error')
             traceback.print_exc()
     print(f"\n[SUMMARY] Assembly completed: {succeeded}/{len(selected)} succeeded.")
-    ui_obj.log(f"Assembly completed: {succeeded}/{len(selected)}", type='success')
+    cell_log(f"Assembly completed: {succeeded}/{len(selected)}", type='success')
