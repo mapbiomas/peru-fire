@@ -163,6 +163,16 @@ def authenticate(project=None):
     from M_gcs import authenticate as _mgcs_auth
     _mgcs_auth()
     print("[GCS] GCS/ADC authentication configured.")
+
+    # Deferred cache sync — gsutil auth já está pronto aqui
+    try:
+        from M_cache import CacheManager
+        state = CacheManager.get_state()
+        if not state.get('updated_at') or not state.get('cogs_monthly'):
+            CacheManager.build_full_cache()
+    except Exception as e:
+        print(f"Cache sync deferred: {e}")
+
     _AUTHENTICATED = True
 
 
@@ -266,15 +276,6 @@ def set_global_opts(
                 print("GCS cache not found (nothing to clear).")
         except Exception as e:
             print(f"Warning while clearing cache: {e}")
-    
-    # Sincronizar cache automaticamente apos M0
-    try:
-        from M_cache import CacheManager
-        state = CacheManager.get_state()
-        if not state.get('updated_at') or not state.get('cogs_monthly'):
-            CacheManager.build_full_cache()
-    except Exception as e:
-        print(f"Cache sync deferred (GCS auth pending). Run manual sync in M1/M2 if needed.")
     
     return GLOBAL_OPTS
 
