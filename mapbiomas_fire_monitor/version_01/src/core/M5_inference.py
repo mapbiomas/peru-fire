@@ -31,6 +31,7 @@ def load_model_from_gcs(model_dir, fs, logger=None):
     """
     import json
     import tensorflow as tf
+    tf.config.run_functions_eagerly(True)
 
     meta_path = f"{model_dir}/metadata.json"
     if not fs.exists(meta_path):
