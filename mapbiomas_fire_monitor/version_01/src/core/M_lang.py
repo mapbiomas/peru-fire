@@ -81,6 +81,9 @@ class L:
     NO_PENDING_JOBS = "No pending jobs to classify."
     ERR_NO_SAMPLES = "Error: No samples selected."
     ERR_NO_BANDS = "Error: No bands selected in the Extraction Matrix."
+    ERR_INCOMPATIBLE_ENV = "Incompatible local environment"
+    ERR_NO_AVX = "Your CPU does not support AVX/AVX2 instructions required by TensorFlow."
+    ERR_RUN_ON_COLAB = "Please: Run this training on Google Colab."
     CARD_SAVED = "Saved \u2713"
     CARD_TEMP = "Temporary"
     CARD_SAVED_PARTIAL = "{s}/{t} Saved"
@@ -112,6 +115,7 @@ class L:
     ERR_ASSET_COLUMN = "Column <code>{prop}</code> not found"
     ERR_GEE_ACCESS = "Error accessing GEE:"
     WARN_REGION_FALLBACK = "Could not auto-populate regions"
+    ERR_RENDER_PENDING = "Error rendering pending:"
     COLUMN_USED = "Column used:"
 
     # ── M5 - Validation ───────────────────────────────
@@ -344,6 +348,9 @@ class L:
 
     # ── M4 - Training ────────────────────────────────────
     MODEL_TRAINER = "Model Trainer"
+    M4_HEADER_TITLE = "M4 - Model Trainer"
+    SELECTED_OK = "[OK] Selected"
+    TRAINING_PROGRESS = "Training:"
     ITERATIONS = "Iterations"
     BATCH_SIZE = "Batch Size"
     LEARNING_RATE = "Learning Rate"
@@ -724,8 +731,11 @@ STRINGS_ES = {
     "DISCARD_WORKPLAN": "Descartar Plan de Trabajo",
     "GLOBAL_ACTIONS": "Acciones Globales",
     "NO_PENDING_JOBS": "No hay trabajos pendientes para clasificar.",
-    "ERR_NO_SAMPLES": "Error: No hay muestras seleccionadas.",
-    "ERR_NO_BANDS": "Error: No hay bandas seleccionadas en la Matriz de Extracción.",
+        "ERR_NO_SAMPLES": "Error: No hay muestras seleccionadas.",
+        "ERR_NO_BANDS": "Error: No hay bandas seleccionadas en la Matriz de Extracción.",
+        "ERR_INCOMPATIBLE_ENV": "Entorno local incompatible",
+        "ERR_NO_AVX": "Tu CPU no soporta las instrucciones AVX/AVX2 requeridas por TensorFlow.",
+        "ERR_RUN_ON_COLAB": "Por favor: Ejecuta este entrenamiento en Google Colab.",
     "CARD_SAVED": "Guardado \u2713",
     "CARD_TEMP": "Temporal",
     "CARD_SAVED_PARTIAL": "{s}/{t} Guardados",
@@ -754,7 +764,8 @@ STRINGS_ES = {
     "ERR_ASSET_EMPTY": "Asset existe pero está VACÍO:",
     "ERR_ASSET_COLUMN": "Columna <code>{prop}</code> no encontrada",
     "ERR_GEE_ACCESS": "Error al acceder a GEE:",
-    "WARN_REGION_FALLBACK": "No se pudo poblar regiones automáticamente",
+        "WARN_REGION_FALLBACK": "No se pudo poblar regiones automáticamente",
+        "ERR_RENDER_PENDING": "Error al renderizar pendientes:",
     "COLUMN_USED": "Columna usada:",
     # M5 - Validation
     "ERR_NO_TASK_NAME": "Atención: Debe asignar un Nombre de Tarea obligatoriamente.",
@@ -927,7 +938,10 @@ STRINGS_ES = {
     "STATUS_PUBLISHED": "Publicado",
     "STATUS_SKIPPED": "Omitido",
     # M4 - Training
-    "MODEL_TRAINER": "Entrenador del Modelo",
+        "MODEL_TRAINER": "Entrenador del Modelo",
+        "M4_HEADER_TITLE": "M4 - Entrenador del Modelo",
+        "SELECTED_OK": "[OK] Seleccionados",
+        "TRAINING_PROGRESS": "Entrenando:",
     "ITERATIONS": "Iteraciones",
     "BATCH_SIZE": "Tamaño de Lote",
     "LEARNING_RATE": "Tasa de Aprendizaje",
@@ -1311,8 +1325,11 @@ STRINGS_PT = {
     "DISCARD_WORKPLAN": "Descartar Plano de Trabalho",
     "GLOBAL_ACTIONS": "Ações Globais",
     "NO_PENDING_JOBS": "Nenhum trabalho pendente para classificar.",
-    "ERR_NO_SAMPLES": "Erro: Nenhuma amostra selecionada.",
-    "ERR_NO_BANDS": "Erro: Nenhuma banda selecionada na Matriz de Extração.",
+        "ERR_NO_SAMPLES": "Erro: Nenhuma amostra selecionada.",
+        "ERR_NO_BANDS": "Erro: Nenhuma banda selecionada na Matriz de Extração.",
+        "ERR_INCOMPATIBLE_ENV": "Ambiente local incompatível",
+        "ERR_NO_AVX": "Sua CPU não suporta as instruções AVX/AVX2 requeridas pelo TensorFlow.",
+        "ERR_RUN_ON_COLAB": "Por favor: Execute este treinamento no Google Colab.",
     "CARD_SAVED": "Salvo \u2713",
     "CARD_TEMP": "Temporário",
     "CARD_SAVED_PARTIAL": "{s}/{t} Salvos",
@@ -1341,7 +1358,8 @@ STRINGS_PT = {
     "ERR_ASSET_EMPTY": "Asset existe mas está VAZIO:",
     "ERR_ASSET_COLUMN": "Coluna <code>{prop}</code> não encontrada",
     "ERR_GEE_ACCESS": "Erro ao acessar GEE:",
-    "WARN_REGION_FALLBACK": "Não foi possível popular regiões automaticamente",
+        "WARN_REGION_FALLBACK": "Não foi possível popular regiões automaticamente",
+        "ERR_RENDER_PENDING": "Erro ao renderizar pendentes:",
     "COLUMN_USED": "Coluna usada:",
     # M5 - Validation
     "ERR_NO_TASK_NAME": "Atenção: Deve atribuir um Nome de Tarefa obrigatoriamente.",
@@ -1514,7 +1532,10 @@ STRINGS_PT = {
     "STATUS_PUBLISHED": "Publicado",
     "STATUS_SKIPPED": "Omitido",
     # M4 - Training
-    "MODEL_TRAINER": "Treinador de Modelo",
+        "MODEL_TRAINER": "Treinador de Modelo",
+        "M4_HEADER_TITLE": "M4 - Treinador de Modelo",
+        "SELECTED_OK": "[OK] Selecionados",
+        "TRAINING_PROGRESS": "Treinando:",
     "ITERATIONS": "Iterações",
     "BATCH_SIZE": "Tamanho do Lote",
     "LEARNING_RATE": "Taxa de Aprendizado",
@@ -1898,8 +1919,11 @@ STRINGS_FR = {
     "DISCARD_WORKPLAN": "Abandonner le Plan de Travail",
     "GLOBAL_ACTIONS": "Actions Globales",
     "NO_PENDING_JOBS": "Aucun travail en attente à classer.",
-    "ERR_NO_SAMPLES": "Erreur : Aucun échantillon sélectionné.",
-    "ERR_NO_BANDS": "Erreur : Aucune bande sélectionnée dans la Matrice d'Extraction.",
+        "ERR_NO_SAMPLES": "Erreur : Aucun échantillon sélectionné.",
+        "ERR_NO_BANDS": "Erreur : Aucune bande sélectionnée dans la Matrice d'Extraction.",
+        "ERR_INCOMPATIBLE_ENV": "Environnement local incompatible",
+        "ERR_NO_AVX": "Votre CPU ne supporte pas les instructions AVX/AVX2 requises par TensorFlow.",
+        "ERR_RUN_ON_COLAB": "Veuillez exécuter cet entraînement sur Google Colab.",
     "CARD_SAVED": "Enregistré \u2713",
     "CARD_TEMP": "Temporaire",
     "CARD_SAVED_PARTIAL": "{s}/{t} Enregistrés",
@@ -1928,7 +1952,8 @@ STRINGS_FR = {
     "ERR_ASSET_EMPTY": "L'asset existe mais est VIDE :",
     "ERR_ASSET_COLUMN": "Colonne <code>{prop}</code> introuvable",
     "ERR_GEE_ACCESS": "Erreur d'accès à GEE :",
-    "WARN_REGION_FALLBACK": "Impossible de peupler les régions automatiquement",
+        "WARN_REGION_FALLBACK": "Impossible de peupler les régions automatiquement",
+        "ERR_RENDER_PENDING": "Erreur lors du rendu des tâches en attente:",
     "COLUMN_USED": "Colonne utilisée :",
     # M5 - Validation
     "ERR_NO_TASK_NAME": "Attention : Vous devez attribuer un Nom de Tâche.",
@@ -2101,7 +2126,10 @@ STRINGS_FR = {
     "STATUS_PUBLISHED": "Publié",
     "STATUS_SKIPPED": "Ignoré",
     # M4 - Training
-    "MODEL_TRAINER": "Entraîneur de modèle",
+        "MODEL_TRAINER": "Entraîneur de modèle",
+        "M4_HEADER_TITLE": "M4 - Entraîneur de modèle",
+        "SELECTED_OK": "[OK] Sélectionnés",
+        "TRAINING_PROGRESS": "Entraînement:",
     "ITERATIONS": "Itérations",
     "BATCH_SIZE": "Taille du lot",
     "LEARNING_RATE": "Taux d'apprentissage",
@@ -2484,8 +2512,11 @@ STRINGS_ID = {
     "DISCARD_WORKPLAN": "Buang Rencana Kerja",
     "GLOBAL_ACTIONS": "Aksi Global",
     "NO_PENDING_JOBS": "Tidak ada pekerjaan tertunda untuk diklasifikasikan.",
-    "ERR_NO_SAMPLES": "Error: Tidak ada sampel yang dipilih.",
-    "ERR_NO_BANDS": "Error: Tidak ada pita yang dipilih di Matriks Ekstraksi.",
+        "ERR_NO_SAMPLES": "Error: Tidak ada sampel yang dipilih.",
+        "ERR_NO_BANDS": "Error: Tidak ada pita yang dipilih di Matriks Ekstraksi.",
+        "ERR_INCOMPATIBLE_ENV": "Lingkungan lokal tidak kompatibel",
+        "ERR_NO_AVX": "CPU Anda tidak mendukung instruksi AVX/AVX2 yang diperlukan TensorFlow.",
+        "ERR_RUN_ON_COLAB": "Silakan: Jalankan pelatihan ini di Google Colab.",
     "CARD_SAVED": "Tersimpan \u2713",
     "CARD_TEMP": "Sementara",
     "CARD_SAVED_PARTIAL": "{s}/{t} Tersimpan",
@@ -2514,7 +2545,8 @@ STRINGS_ID = {
     "ERR_ASSET_EMPTY": "Aset ada tetapi KOSONG:",
     "ERR_ASSET_COLUMN": "Kolom <code>{prop}</code> tidak ditemukan",
     "ERR_GEE_ACCESS": "Kesalahan mengakses GEE:",
-    "WARN_REGION_FALLBACK": "Tidak dapat mengisi wilayah secara otomatis",
+        "WARN_REGION_FALLBACK": "Tidak dapat mengisi wilayah secara otomatis",
+        "ERR_RENDER_PENDING": "Error saat merender tugas tertunda:",
     "COLUMN_USED": "Kolom yang digunakan:",
     # M5 - Validation
     "ERR_NO_TASK_NAME": "Perhatian: Anda harus mengisi Nama Tugas.",
@@ -2687,7 +2719,10 @@ STRINGS_ID = {
     "STATUS_PUBLISHED": "Dipublikasi",
     "STATUS_SKIPPED": "Dilewati",
     # M4 - Training
-    "MODEL_TRAINER": "Pelatih Model",
+        "MODEL_TRAINER": "Pelatih Model",
+        "M4_HEADER_TITLE": "M4 - Pelatih Model",
+        "SELECTED_OK": "[OK] Dipilih",
+        "TRAINING_PROGRESS": "Pelatihan:",
     "ITERATIONS": "Iterasi",
     "BATCH_SIZE": "Ukuran Batch",
     "LEARNING_RATE": "Laju Pembelajaran",

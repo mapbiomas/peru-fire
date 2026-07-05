@@ -15,7 +15,7 @@ from M4_hub_manager import list_trained_models, _load_m4_metadata, _save_m4_meta
 class ModelTrainerUI(PipelineStepUI):
     def __init__(self):
         super().__init__(
-            title=f"M4 - {Lang.MODEL_TRAINER}", 
+            title=Lang.M4_HEADER_TITLE, 
             description=Lang.CANVAS_TITLE
         )
         self.trainer_instance = None
@@ -205,7 +205,7 @@ class ModelTrainerUI(PipelineStepUI):
         btn_sync_all, _ = make_sync_button(Lang.SYNC_DATA, "refresh", self._sync_all,
             width='auto', button_style='success', ui=self)
         sync_header = widgets.HBox([
-            widgets.HTML(f"<b style='font-size:16px; color:#2c3e50;'>M4 — Model Trainer</b>"),
+            widgets.HTML(f"<b style='font-size:16px; color:#2c3e50;'>{Lang.M4_HEADER_TITLE}</b>"),
             widgets.HTML("<div style='flex:1;'></div>"),
             btn_sync_all
         ], layout=widgets.Layout(align_items='center', margin='0 0 5px 0'))
@@ -321,7 +321,7 @@ class ModelTrainerUI(PipelineStepUI):
             self.available_pane
         ], layout=L(flex='1'))
         right_pane = widgets.VBox([
-            widgets.HTML(f"<b style='font-size:12px; color:#555;'>[OK] {Lang.SELECTED}</b>"),
+            widgets.HTML(f"<b style='font-size:12px; color:#555;'>{Lang.SELECTED_OK}</b>"),
             self.selected_pane
         ], layout=L(flex='1'))
         dual_pane = widgets.HBox([left_pane, right_pane], layout=L(gap='20px', padding='5px 10px 10px 10px'))
@@ -876,9 +876,9 @@ def start_training(ui):
     tf_avail = _get_tf(force=True)
     if tf_avail is None:
         print("\n" + "="*70)
-        print(" [WARNING] INCOMPATIBLE LOCAL ENVIRONMENT")
-        print(" Your CPU does not support AVX/AVX2 instructions required by TensorFlow.")
-        print(" PLEASE: Run this training on Google Colab.")
+        print(f" [WARNING] {Lang.ERR_INCOMPATIBLE_ENV}")
+        print(f" {Lang.ERR_NO_AVX}")
+        print(f" {Lang.ERR_RUN_ON_COLAB}")
         print("="*70 + "\n")
         return
     # -----------------------------------------------------------------
@@ -998,7 +998,7 @@ def start_training(ui):
     cell_log("Training DNN...", type='info')
     ui.tab.selected_index = 2  # switch to Canvas tab
     from IPython.display import display as ipy_display
-    progress_bar = widgets.IntProgress(value=0, min=0, max=100, description='Training:',
+    progress_bar = widgets.IntProgress(value=0, min=0, max=100, description=Lang.TRAINING_PROGRESS,
                                         bar_style='info', layout=widgets.Layout(width='100%'))
     ipy_display(progress_bar)
     
@@ -1016,7 +1016,7 @@ def start_training(ui):
             if steps:
                 pct = min(100, int(len(steps) / 21 * 100))
                 progress_bar.value = pct
-                progress_bar.description = f'Training: {pct}%'
+                progress_bar.description = f'{Lang.TRAINING_PROGRESS} {pct}%'
 
     # Iniciar Treino
     ui.trainer_instance.train(X_train, y_train, X_val=X_val, y_val=y_val, 

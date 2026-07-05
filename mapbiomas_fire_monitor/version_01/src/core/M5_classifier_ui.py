@@ -713,7 +713,7 @@ class M5WorkplanUI:
         except Exception as e:
             import traceback
             err_html = widgets.HTML(f'<div style="color:{THEME["ERROR"]};padding:20px;">'
-                                    f'<b>Erro ao renderizar pending:</b><br>'
+                                    f'<b>{Lang.ERR_RENDER_PENDING}</b><br>'
                                     f'<pre style="font-size:11px;">{traceback.format_exc()}</pre></div>')
             self.tab_pending.children = [err_html]
 
