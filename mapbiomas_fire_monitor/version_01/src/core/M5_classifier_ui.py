@@ -8,7 +8,7 @@ from M5_workplan import load_workplan, save_workplan, make_job_id, new_job, gcs_
     save_pending_job_to_gcs, delete_pending_job_gcs, \
     load_pending_from_gcs, sync_gcs_to_local_workplan
 from M4_data_extractor import list_campaigns_gcs
-from M_ui_components import THEME, inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output, make_select_all_none, make_refresh_button
+from M_ui_components import THEME, inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output, make_select_all_none, make_refresh_button, make_sync_button
 from M_lang import L as Lang
 from M_regions import REGION_NAME_PROPERTY
 
@@ -38,7 +38,7 @@ class M5WorkplanUI:
         self.btn_add_container, self.btn_add, _ = make_refresh_button('plus', self._on_add_click, description=Lang.ADD_BATCH, width='200px')
         self.btn_add.button_style = 'primary'
         
-        self.btn_refresh_container, self.btn_refresh, _ = make_refresh_button('refresh', self._refresh_ui, description=Lang.REFRESH_VIEW, width='150px')
+        self.btn_sync, _ = make_sync_button(Lang.SYNC_DATA, "refresh", self._sync_data, width='180px', button_style='success')
 
         self.w_task_name = widgets.Text(
             value='',
@@ -1311,6 +1311,12 @@ class M5WorkplanUI:
 
     # --- REFRESH ---
 
+    def _sync_data(self):
+        from M_cache import CacheManager
+        CacheManager.build_full_cache()
+        self._populate_dropdowns()
+        self._refresh_ui()
+
     def _refresh_ui(self):
         self.plan = load_workplan()
 
@@ -1371,7 +1377,7 @@ class M5WorkplanUI:
 
         header_actions = widgets.HBox([
             widgets.HTML(f"<b style='color:#2c3e50; font-size:14px; margin-right:15px;'>{Lang.GLOBAL_ACTIONS}:</b>"),
-            self.btn_refresh_container
+            self.btn_sync
         ], layout=L(margin='0 0 15px 0', align_items='center', padding='10px', border='1px solid #e0e0e0', background_color='#fcfcfc', border_radius='5px'))
 
         display(widgets.VBox([header_actions, self.tabs]))

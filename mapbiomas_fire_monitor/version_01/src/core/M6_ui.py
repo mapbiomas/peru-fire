@@ -9,7 +9,7 @@ from M0_auth_config import CONFIG, _get_fs, gcs_classifications_path
 from M5_workplan import gcs_full, consolidated_stats_path, region_path
 from M6_publisher import discover_classified_groups, gee_asset_exists, stats_row_exists, load_gee_assets, load_stats_done
 from M_cache import CacheManager
-from M_ui_components import THEME, make_empty_state, flash_output, make_select_all_none, make_refresh_button
+from M_ui_components import THEME, make_empty_state, flash_output, make_select_all_none, make_refresh_button, make_sync_button
 from M_lang import L as Lang
 
 L = widgets.Layout
@@ -40,7 +40,7 @@ class M6WorkplanUI:
         self.tab_analytics = widgets.VBox()
         self.tab_coverage = widgets.VBox()
 
-        self.btn_refresh_container, self.btn_refresh, _ = make_refresh_button('refresh', lambda: self._refresh_all(force=True), description=Lang.REFRESH_M6, width='150px')
+        self.btn_sync, _ = make_sync_button(Lang.SYNC_DATA, "refresh", lambda: self._refresh_all(force=True), width='180px', button_style='success')
 
         self._build_guide()
 
@@ -131,6 +131,8 @@ class M6WorkplanUI:
                     self._thumbnails[r] = b64
 
     def _refresh_all(self, force=False):
+        if force:
+            CacheManager.build_cache_from_classifications()
         self._discover_all(force=force)
         self._load_stats()
         self._render_to_publish()
@@ -352,7 +354,7 @@ class M6WorkplanUI:
 
         header = widgets.HBox([
             widgets.HTML(f"<b style='color:#2c3e50; font-size:14px;'>{Lang.M6_HEADER_TITLE}</b>"),
-            self.btn_refresh_container
+            self.btn_sync
         ], layout=L(margin='0 0 15px 0', align_items='center', padding='10px',
                     border='1px solid #e0e0e0', background='#fcfcfc'))
 

@@ -202,8 +202,8 @@ class ModelTrainerUI(PipelineStepUI):
         self.tab.selected_index = 0
 
         # Global sync header
-        btn_sync_all, _ = make_sync_button(Lang.REPO_SYNC, "cloud-upload", self._sync_all,
-            width='auto', button_style='primary', ui=self)
+        btn_sync_all, _ = make_sync_button(Lang.SYNC_DATA, "refresh", self._sync_all,
+            width='auto', button_style='success', ui=self)
         sync_header = widgets.HBox([
             widgets.HTML(f"<b style='font-size:16px; color:#2c3e50;'>M4 — Model Trainer</b>"),
             widgets.HTML("<div style='flex:1;'></div>"),
