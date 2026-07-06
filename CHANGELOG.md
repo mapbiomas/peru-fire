@@ -12,6 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+## [1.2.3] — 2026-07-05
+
+### Fixed
+- Hotfix: `align_self='start'` → `'flex-start'` for ipywidgets compatibility (CSS shorthand not accepted)
+
 ## [1.2.2] — 2026-07-05
 
 ### Fixed
