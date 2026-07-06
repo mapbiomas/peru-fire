@@ -390,7 +390,7 @@ def build_thumbnail_column(thumb_b64, width='128px'):
     return widgets.VBox([
         thumb_el,
         widgets.Box([], layout=Layout(flex='1')),
-    ], layout=Layout(width=width, align_self='start'))
+    ], layout=Layout(width=width, align_self='flex-start'))
 
 
 # ---------------------------------------------------------------------------
