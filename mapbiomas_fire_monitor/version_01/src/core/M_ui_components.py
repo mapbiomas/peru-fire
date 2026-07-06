@@ -450,6 +450,9 @@ class ProgressTracker:
     def step(self, n=1):
         self.completed += n
 
+    def passo(self, n=1):
+        self.step(n)
+
     @property
     def remaining(self):
         if self.completed == 0:
