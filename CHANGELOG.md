@@ -12,6 +12,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+## [1.2.2] — 2026-07-05
+
+### Fixed
+- M6: thumbnail resolution increased 64→128px to match display size (was upscaled 2x, blurry)
+- UI: removed thumbnail scrollbars by changing `align_self='stretch'` → `'start'` in `build_thumbnail_column()`
+
+### Changed
+- M0: suppressed GDAL `FutureWarning` about `UseExceptions` that polluted M5 output
+
 ## [1.2.1] — 2026-07-05
 
 ### Fixed
