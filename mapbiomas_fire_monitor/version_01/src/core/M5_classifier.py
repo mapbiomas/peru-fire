@@ -114,9 +114,12 @@ def _run_classification(plan, out, progress_callback=None, n_workers=None):
             global_completed += groups_cells_count.get((model_id, period), 0)
         except Exception as e:
             import traceback
-            with out:
-                print(f"[FATAL] Group '{model_id}' | {period} failed:")
-                traceback.print_exc()
+            _log(out, f"[ERROR] [FATAL] Group '{model_id}' | {period} failed:")
+            if 'metadata.json not found' in str(e):
+                _log(out, f"[ERROR] Model '{model_id}' not found in GCS. It may have been deleted. Click 'Sync Data' to refresh the model list.")
+            else:
+                _log(out, f"[ERROR] {e}")
+                _log(out, traceback.format_exc())
             p = load_workplan()
             for job in group:
                 for pj in p:

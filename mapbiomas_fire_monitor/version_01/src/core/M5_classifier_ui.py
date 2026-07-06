@@ -201,7 +201,7 @@ class M5WorkplanUI:
     def _populate_dropdowns(self):
         try:
             from M4_model_trainer import list_trained_models
-            models = list_trained_models()
+            models = list_trained_models(force_refresh=True)
         except Exception:
             models = []
         box, self.chk_models = self._create_checkbox_grid(models, Lang.SECTION_MODEL, single_select=True, bg_color='#e8f4fd')
@@ -301,6 +301,14 @@ class M5WorkplanUI:
             with self.out_msg:
                 clear_output()
                 display(HTML(f"<b style='color:{THEME['ERROR']};'>{Lang.ERR_NO_SELECTION}</b>"))
+            return
+        from M0_auth_config import _gcs_models_base
+        fs = _get_fs()
+        model_dir = f"{CONFIG['bucket']}/{_gcs_models_base()}/{model}"
+        if not fs.exists(model_dir):
+            with self.out_msg:
+                clear_output()
+                display(HTML(f"<b style='color:{THEME['ERROR']};'>{model}: model not found in GCS. It may have been deleted. Click 'Sync Data' to refresh the model list.</b>"))
             return
         added = 0
         skipped = 0
