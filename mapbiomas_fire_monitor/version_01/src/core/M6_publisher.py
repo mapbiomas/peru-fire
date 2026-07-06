@@ -16,6 +16,7 @@ from M5_workplan import (
 )
 from M_regions import REGION_NAME_PROPERTY
 from M_cache import CacheManager
+from M_ui_components import _fmt_time, ProgressTracker
 
 
 def _get_resolution_from_model(model_id):
@@ -38,16 +39,6 @@ def _gcs_exists(path, timeout=15):
             return fs.exists(path)
         except Exception:
             return False
-
-
-def _fmt_time(s):
-    h, r = divmod(int(s), 3600)
-    m, s = divmod(r, 60)
-    if h:
-        return f"{h}h{m:02d}m{s:02d}s"
-    if m:
-        return f"{m}m{s:02d}s"
-    return f"{s}s"
 
 
 def merge_region_tiles(model_id, region, period, fs=None, logger=None, campaign=None):
@@ -509,7 +500,7 @@ def cleanup_old_m5_stats(fs=None, logger=print):
     logger("  Cleanup done.")
 
 
-def generate_region_thumbnail(region_name, size=64):
+def generate_region_thumbnail(region_name, size=128):
     """Retorna base64 PNG estilo M5: Peru outline + grid + regiao destacada."""
     import ee
     import base64
@@ -589,6 +580,7 @@ def run_m6_publish(upload_gee=True, groups=None, ui=None, logger=None):
 
     groups = sorted(groups)
     _t0 = time.time()
+    prog = ProgressTracker(len(groups), "M6 Publish")
 
     for idx, (model_id, region, period, campaign) in enumerate(groups):
         campaign_str = f" [{campaign}]" if campaign else ""
@@ -620,6 +612,10 @@ def run_m6_publish(upload_gee=True, groups=None, ui=None, logger=None):
                 upload_to_gee(model_id, region, period, fs=fs, logger=logger, campaign=campaign)
             else:
                 logger(f"    Already in GEE.")
+
+        prog.passo()
+        if prog.completed < prog.total:
+            logger(f"  {prog.summary()}")
 
     total = time.time() - _t0
     logger(f"\n  --- M6 publish done in {_fmt_time(total)} ---")
