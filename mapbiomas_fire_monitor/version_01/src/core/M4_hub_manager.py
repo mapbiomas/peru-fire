@@ -47,6 +47,9 @@ def list_trained_models(force_refresh=False):
             for t_dir in trainings:
                 t_name = t_dir.split('/')[-1]
                 if t_name.startswith('training_'):
+                    if not fs.exists(f"{t_dir}/metadata.json"):
+                        fs.rm(t_dir, recursive=True)
+                        continue
                     models.append(t_name)
                     # Guarda o path em metadata
                     meta_cache = _load_m4_metadata()
