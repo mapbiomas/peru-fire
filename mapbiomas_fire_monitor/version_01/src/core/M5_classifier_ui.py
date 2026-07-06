@@ -8,7 +8,7 @@ from M5_workplan import load_workplan, save_workplan, make_job_id, new_job, gcs_
     save_pending_job_to_gcs, delete_pending_job_gcs, \
     load_pending_from_gcs, sync_gcs_to_local_workplan
 from M4_data_extractor import list_campaigns_gcs
-from M_ui_components import inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output, make_select_all_none, make_refresh_button
+from M_ui_components import THEME, inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output, make_select_all_none, make_refresh_button, make_sync_button
 from M_lang import L as Lang
 from M_regions import REGION_NAME_PROPERTY
 
@@ -38,7 +38,7 @@ class M5WorkplanUI:
         self.btn_add_container, self.btn_add, _ = make_refresh_button('plus', self._on_add_click, description=Lang.ADD_BATCH, width='200px')
         self.btn_add.button_style = 'primary'
         
-        self.btn_refresh_container, self.btn_refresh, _ = make_refresh_button('refresh', self._refresh_ui, description=Lang.REFRESH_VIEW, width='150px')
+        self.btn_sync, _ = make_sync_button(Lang.SYNC_DATA, "refresh", self._sync_data, width='180px', button_style='success')
 
         self.w_task_name = widgets.Text(
             value='',
@@ -157,7 +157,7 @@ class M5WorkplanUI:
                     elif j['status'] in ('PENDING', 'RUNNING'):
                         status = 'running'
                     break
-            colors = {'none': '#ddd', 'running': '#e67e22', 'done': '#27ae60'}
+            colors = {'none': '#ddd', 'running': THEME['WARNING'], 'done': THEME['SUCCESS']}
             title = period if m else str(year)
             dots.append(f'<span title="{title}" style="display:inline-block;width:14px;height:14px;'
                         f'border-radius:50%;background:{colors[status]};margin:0 2px;'
@@ -237,7 +237,7 @@ class M5WorkplanUI:
                                           f'<small>Asset tem {size} features, mas a propriedade <code>'
                                           f'{REGION_NAME_PROPERTY}</code> nao retornou valores.</small>')
         except Exception as e:
-            err_banner = f'<b>{Lang.ERR_GEE_ACCESS}</b><br><span style="color:#d32f2f;">{e}</span>'
+            err_banner = f'<b>{Lang.ERR_GEE_ACCESS}</b><br><span style="color:{THEME["ERROR"]};">{e}</span>'
 
         if err_banner:
                 from IPython.display import display, HTML
@@ -295,12 +295,12 @@ class M5WorkplanUI:
         if not task_name:
             with self.out_msg:
                 clear_output()
-                display(HTML(f"<b style='color:red;'>{Lang.ERR_NO_TASK_NAME}</b>"))
+                display(HTML(f"<b style='color:{THEME['ERROR']};'>{Lang.ERR_NO_TASK_NAME}</b>"))
             return
         if not model or not regions or not periods:
             with self.out_msg:
                 clear_output()
-                display(HTML(f"<b style='color:red;'>{Lang.ERR_NO_SELECTION}</b>"))
+                display(HTML(f"<b style='color:{THEME['ERROR']};'>{Lang.ERR_NO_SELECTION}</b>"))
             return
         added = 0
         skipped = 0
@@ -332,23 +332,23 @@ class M5WorkplanUI:
         with self.out_msg:
             clear_output()
             if added == 0 and skipped == 0:
-                display(HTML(f"<b style='color:red;'>{Lang.MSG_NO_TASKS_ADDED}</b>"))
+                display(HTML(f"<b style='color:{THEME['ERROR']};'>{Lang.MSG_NO_TASKS_ADDED}</b>"))
             elif added > 0:
-                msg = f"<b style='color:green;'>{Lang.MSG_TASKS_ADDED.format(n=added)}</b>"
+                msg = f"<b style='color:{THEME['SUCCESS']};'>{Lang.MSG_TASKS_ADDED.format(n=added)}</b>"
                 failures = []
                 if not saved_ok:
                     failures.append(Lang.FAIL_SAVE_LOCAL)
                 if gcs_fail > 0:
                     failures.append(Lang.FAIL_GCS_UPLOAD.format(n=gcs_fail))
                 if failures:
-                    msg += f"<br><span style='color:red;'>⚠ {'; '.join(failures)}.</span>"
+                    msg += f"<br><span style='color:{THEME['ERROR']};'>⚠ {'; '.join(failures)}.</span>"
                 if gcs_ok > 0:
-                    msg += f"<br><span style='color:green;'>{Lang.MSG_GCS_OK.format(n=gcs_ok)}</span>"
+                    msg += f"<br><span style='color:{THEME['SUCCESS']};'>{Lang.MSG_GCS_OK.format(n=gcs_ok)}</span>"
                 if skipped > 0:
-                    msg += f"<br><span style='color:orange;'>{Lang.MSG_SKIPPED_QUEUED.format(n=skipped)}</span>"
+                    msg += f"<br><span style='color:{THEME['WARNING']};'>{Lang.MSG_SKIPPED_QUEUED.format(n=skipped)}</span>"
                 display(HTML(msg))
             else:
-                display(HTML(f"<b style='color:orange;'>{Lang.WARN_ALREADY_QUEUED.format(n=skipped)}</b>"))
+                display(HTML(f"<b style='color:{THEME['WARNING']};'>{Lang.WARN_ALREADY_QUEUED.format(n=skipped)}</b>"))
         self._refresh_ui()
 
     def _on_campaign_change(self, change):
@@ -507,14 +507,14 @@ class M5WorkplanUI:
                     saved_ok = save_workplan(self.plan)
                     with self.out_msg:
                         clear_output()
-                        msg = f"<span style='color:green;'>{Lang.MSG_LOADED.format(loaded=added, skipped=skipped)}</span>"
+                        msg = f"<span style='color:{THEME['SUCCESS']};'>{Lang.MSG_LOADED.format(loaded=added, skipped=skipped)}</span>"
                         failures = []
                         if not saved_ok:
                             failures.append(Lang.FAIL_SAVE_LOCAL)
                         if gcs_fail > 0:
                             failures.append(Lang.FAIL_GCS_UPLOAD.format(n=gcs_fail))
                         if failures:
-                            msg += f"<br><span style='color:red;'> {', '.join(failures)}.</span>"
+                            msg += f"<br><span style='color:{THEME['ERROR']};'> {', '.join(failures)}.</span>"
                         display(HTML(msg))
                     self._refresh_ui()
                 return _h
@@ -712,8 +712,8 @@ class M5WorkplanUI:
             self.tab_pending.children = [pend_vbox]
         except Exception as e:
             import traceback
-            err_html = widgets.HTML(f'<div style="color:red;padding:20px;">'
-                                    f'<b>Erro ao renderizar pending:</b><br>'
+            err_html = widgets.HTML(f'<div style="color:{THEME["ERROR"]};padding:20px;">'
+                                    f'<b>{Lang.ERR_RENDER_PENDING}</b><br>'
                                     f'<pre style="font-size:11px;">{traceback.format_exc()}</pre></div>')
             self.tab_pending.children = [err_html]
 
@@ -826,14 +826,14 @@ class M5WorkplanUI:
         save_tarea(model, regions, periods)
         with self.out_msg:
             clear_output()
-            display(HTML(f"<span style='color:green;'>{Lang.TAREA_SAVED.format(m=model)}</span>"))
+            display(HTML(f"<span style='color:{THEME['SUCCESS']};'>{Lang.TAREA_SAVED.format(m=model)}</span>"))
         self._refresh_ui()
 
     def _tarea_delete_click(self, model):
         delete_tarea(model)
         with self.out_msg:
             clear_output()
-            display(HTML(f"<span style='color:red;'>{Lang.TAREA_DELETED.format(m=model)}</span>"))
+            display(HTML(f"<span style='color:{THEME['ERROR']};'>{Lang.TAREA_DELETED.format(m=model)}</span>"))
         self._refresh_ui()
 
     def _on_discard_workplan(self, model_name):
@@ -850,7 +850,7 @@ class M5WorkplanUI:
         save_workplan(self.plan)
         with self.out_msg:
             clear_output()
-            display(HTML(f"<b style='color:red;'>{Lang.WORKPLAN_DISCARDED.format(m=model_name, n=removed)}</b>"))
+            display(HTML(f"<b style='color:{THEME['ERROR']};'>{Lang.WORKPLAN_DISCARDED.format(m=model_name, n=removed)}</b>"))
         self._refresh_ui()
 
     def _on_clear_click(self):
@@ -863,7 +863,7 @@ class M5WorkplanUI:
         save_workplan(self.plan)
         with self.out_msg:
             clear_output()
-            display(HTML(f"<b style='color:red;'>{Lang.QUEUE_CLEARED}</b>"))
+            display(HTML(f"<b style='color:{THEME['ERROR']};'>{Lang.QUEUE_CLEARED}</b>"))
         self._refresh_ui()
 
     def _on_save_gcs_click(self, model_name):
@@ -886,9 +886,9 @@ class M5WorkplanUI:
         with self.out_msg:
             clear_output()
             if saved > 0:
-                display(HTML(f"<span style='color:green;'>{Lang.SAVED_TO_GCS.format(n=saved)}</span>"))
+                display(HTML(f"<span style='color:{THEME['SUCCESS']};'>{Lang.SAVED_TO_GCS.format(n=saved)}</span>"))
             if skipped > 0:
-                display(HTML(f"<span style='color:orange;'>{Lang.ALREADY_SAVED.format(n=skipped)}</span>"))
+                display(HTML(f"<span style='color:{THEME['WARNING']};'>{Lang.ALREADY_SAVED.format(n=skipped)}</span>"))
         self._refresh_ui()
 
     def _on_dismiss_click(self, model_name):
@@ -902,9 +902,9 @@ class M5WorkplanUI:
         with self.out_msg:
             clear_output()
             if removed > 0:
-                display(HTML(f"<span style='color:red;'>{Lang.TEMP_JOBS_REMOVED.format(n=removed)}</span>"))
+                display(HTML(f"<span style='color:{THEME['ERROR']};'>{Lang.TEMP_JOBS_REMOVED.format(n=removed)}</span>"))
             else:
-                display(HTML(f"<span style='color:orange;'>{Lang.NO_TEMP_JOBS}</span>"))
+                display(HTML(f"<span style='color:{THEME['WARNING']};'>{Lang.NO_TEMP_JOBS}</span>"))
         self._refresh_ui()
 
     def _on_delete_gcs_click(self, model_name):
@@ -922,7 +922,7 @@ class M5WorkplanUI:
             save_workplan(self.plan)
         with self.out_msg:
             clear_output()
-            display(HTML(f"<span style='color:red;'>{Lang.REMOVED_FROM_GCS.format(n=removed)}</span>"))
+            display(HTML(f"<span style='color:{THEME['ERROR']};'>{Lang.REMOVED_FROM_GCS.format(n=removed)}</span>"))
         self._refresh_ui()
 
     # --- HABILITACION DE CARDS ---
@@ -978,7 +978,7 @@ class M5WorkplanUI:
                  f"<tr><td style='padding:2px 8px;'>{Lang.REGION}</td><td style='padding:2px 8px;'><b>{region}</b></td></tr>",
                  f"<tr><td style='padding:2px 8px;'>{Lang.PROGRESS}</td><td style='padding:2px 8px;'><b>{pct}</b></td></tr>"]
         if current:
-            lines.append(f"<tr><td style='padding:2px 8px;'>{Lang.CURRENT_TILE}</td><td style='padding:2px 8px;'><span style='color:#e67e22;font-weight:bold;'>{current}</span></td></tr>")
+            lines.append(f"<tr><td style='padding:2px 8px;'>{Lang.CURRENT_TILE}</td><td style='padding:2px 8px;'><span style='color:{THEME['WARNING']};font-weight:bold;'>{current}</span></td></tr>")
 
         # tiles completados
         if done_set:
@@ -986,11 +986,11 @@ class M5WorkplanUI:
             done_html = ', '.join(done_cells[:10])
             if len(done_cells) > 10:
                 done_html += f' ... (+{len(done_cells)-10} mas)'
-            lines.append(f"<tr><td style='padding:2px 8px;'>{Lang.COMPLETED}</td><td style='padding:2px 8px;color:#27ae60;'>{done_html}</td></tr>")
+            lines.append(f"<tr><td style='padding:2px 8px;'>{Lang.COMPLETED}</td><td style='padding:2px 8px;color:{THEME['SUCCESS']};'>{done_html}</td></tr>")
 
-        html = (f'<div style="margin:8px 0;padding:10px;border:2px solid #e67e22;border-radius:6px;'
+        html = (f'<div style="margin:8px 0;padding:10px;border:2px solid {THEME["WARNING"]};border-radius:6px;'
                 f'background:#fef9e7;">'
-                f'<b style="color:#e67e22;">{Lang.LIVE_PROCESSING}</b>'
+                f'<b style="color:{THEME["WARNING"]};">{Lang.LIVE_PROCESSING}</b>'
                 f'<table style="font-size:12px;color:#555;border-collapse:collapse;margin-top:6px;">'
                 f'{"".join(lines)}</table></div>')
 
@@ -1102,19 +1102,19 @@ class M5WorkplanUI:
                 n = self._delete_tiles(to_rm, fs)
                 with self.out_msg:
                     clear_output()
-                    display(HTML(f"<span style='color:red;'>{Lang.TILES_DELETED.format(n=n)}</span>"))
+                    display(HTML(f"<span style='color:{THEME['ERROR']};'>{Lang.TILES_DELETED.format(n=n)}</span>"))
                 self._refresh_tile_list(job, container)
             else:
                 with self.out_msg:
                     clear_output()
-                    display(HTML(f"<span style='color:orange;'>{Lang.SELECT_TILES_PROMPT}</span>"))
+                    display(HTML(f"<span style='color:{THEME['WARNING']};'>{Lang.SELECT_TILES_PROMPT}</span>"))
         btn_del_sel.on_click(_del_sel)
         btn_del_all = widgets.Button(description=Lang.DELETE_ALL, button_style='warning', layout=L(width='130px', height='26px'))
         def _del_all(_):
             n = self._delete_tiles(tile_fqpaths, fs)
             with self.out_msg:
                 clear_output()
-                display(HTML(f"<span style='color:red;'>{Lang.TILES_DELETED.format(n=n)}</span>"))
+                display(HTML(f"<span style='color:{THEME['ERROR']};'>{Lang.TILES_DELETED.format(n=n)}</span>"))
             self._refresh_tile_list(job, container)
         btn_del_all.on_click(_del_all)
         actions = widgets.HBox([btn_del_sel, btn_del_all], layout=L(margin='3px 0 0 20px'))
@@ -1311,6 +1311,12 @@ class M5WorkplanUI:
 
     # --- REFRESH ---
 
+    def _sync_data(self):
+        from M_cache import CacheManager
+        CacheManager.build_full_cache()
+        self._populate_dropdowns()
+        self._refresh_ui()
+
     def _refresh_ui(self):
         self.plan = load_workplan()
 
@@ -1349,7 +1355,7 @@ class M5WorkplanUI:
         if n_sync > 0:
             with self.out_msg:
                 clear_output()
-                display(HTML(f"<span style='color:green;'>{Lang.SYNC_FROM_GCS.format(n=n_sync)}</span>"))
+                display(HTML(f"<span style='color:{THEME['SUCCESS']};'>{Lang.SYNC_FROM_GCS.format(n=n_sync)}</span>"))
         self._build_guide()
         self._refresh_ui()
 
@@ -1371,7 +1377,7 @@ class M5WorkplanUI:
 
         header_actions = widgets.HBox([
             widgets.HTML(f"<b style='color:#2c3e50; font-size:14px; margin-right:15px;'>{Lang.GLOBAL_ACTIONS}:</b>"),
-            self.btn_refresh_container
+            self.btn_sync
         ], layout=L(margin='0 0 15px 0', align_items='center', padding='10px', border='1px solid #e0e0e0', background_color='#fcfcfc', border_radius='5px'))
 
         display(widgets.VBox([header_actions, self.tabs]))

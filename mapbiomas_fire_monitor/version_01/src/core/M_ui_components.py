@@ -3,8 +3,22 @@ Componentes de UI Base (Ipywidgets)
 MapBiomas Fire Monitor Pipeline - ASCII Version
 """
 import ipywidgets as widgets
+import time
 from IPython.display import display, clear_output
 from M_lang import L
+
+THEME = {
+    'ERROR': '#d32f2f',
+    'WARNING': '#e67e22',
+    'SUCCESS': '#27ae60',
+    'INFO': '#3498db',
+    'DEFAULT': '#333333',
+}
+
+def cell_log(message, type="info"):
+    """Exibe mensagem colorida na célula atual (não dentro de um PipelineStepUI)."""
+    color = THEME.get(type.upper(), THEME['DEFAULT'])
+    display(widgets.HTML(f"<span style='color:{color}'>[{type.upper()}] {message}</span>"))
 
 class PipelineStepUI:
     """
@@ -100,11 +114,7 @@ class PipelineStepUI:
 
     def log(self, message, type="info"):
         """Adiciona uma mensagem textualmente formatada no Output de Logs."""
-        color = "black"
-        if type == "error": color = "red"
-        elif type == "success": color = "green"
-        elif type == "warning": color = "orange"
-        
+        color = THEME.get(type.upper(), THEME['DEFAULT'])
         with self.log_output:
             display(widgets.HTML(f"<span style='color:{color}'>[{type.upper()}] {message}</span>"))
             
@@ -406,3 +416,49 @@ def make_card_body(left_col, right_col, border_color='#e2e8f0', background='#fff
                       margin='6px 0', background=background,
                       box_shadow='0 1px 3px rgba(0,0,0,0.08)',
                       align_items='stretch'))
+
+
+# ---------------------------------------------------------------------------
+# _fmt_time — formata segundos para hh:mm:ss
+# ---------------------------------------------------------------------------
+def _fmt_time(s):
+    h, r = divmod(int(s), 3600)
+    m, s = divmod(r, 60)
+    if h:
+        return f"{h}h{m:02d}m{s:02d}s"
+    if m:
+        return f"{m}m{s:02d}s"
+    return f"{s}s"
+
+
+class ProgressTracker:
+    """Tracks progress with estimated remaining time.
+
+    Usage:
+        p = ProgressTracker(total=10, description=\"Example\")
+        for item in items:
+            process(item)
+            p.step()
+            print(p.summary())
+    """
+    def __init__(self, total, description="Progress"):
+        self.total = total
+        self.completed = 0
+        self.description = description
+        self._start = time.time()
+
+    def step(self, n=1):
+        self.completed += n
+
+    @property
+    def remaining(self):
+        if self.completed == 0:
+            return 0
+        elapsed = time.time() - self._start
+        rate = self.completed / max(elapsed, 0.001)
+        return (self.total - self.completed) / max(rate, 0.001)
+
+    def summary(self):
+        elapsed = _fmt_time(time.time() - self._start)
+        remaining = _fmt_time(self.remaining)
+        return f"[{self.completed}/{self.total}] elapsed {elapsed} remaining ~{remaining}"

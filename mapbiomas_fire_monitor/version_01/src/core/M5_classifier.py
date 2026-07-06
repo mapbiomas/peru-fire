@@ -11,21 +11,23 @@ from M5_workplan import load_workplan, save_workplan, make_job_id, tile_path, gc
 from M5_inference import load_model_from_gcs, classify_cell_with_cogs, build_band_paths
 from M_lang import L as Lang
 from M_regions import REGION_NAME_PROPERTY
+from M_ui_components import THEME, _fmt_time
+
+_C_INFO = THEME['INFO']
+_C_ERROR = THEME['ERROR']
 
 _log_lock = threading.Lock()
 
-def _fmt_time(s):
-    h, r = divmod(int(s), 3600)
-    m, s = divmod(r, 60)
-    if h:
-        return f"{h}h{m:02d}m{s:02d}s"
-    if m:
-        return f"{m}m{s:02d}s"
-    return f"{s}s"
-
 def _log(out, msg):
+    """Exibe mensagem no Output widget. [ERROR] em vermelho, [WARN] em laranja."""
+    from IPython.display import display, HTML
     with _log_lock, out:
-        print(msg)
+        if '[ERROR]' in msg:
+            display(HTML('<span style="color:{};">{}</span>'.format(THEME['ERROR'], msg)))
+        elif '[WARN' in msg:
+            display(HTML('<span style="color:{};">{}</span>'.format(THEME['WARNING'], msg)))
+        else:
+            print(msg)
 
 def _auto_workers():
     return max(1, os.cpu_count() or 1)
@@ -63,7 +65,7 @@ def _run_classification(plan, out, progress_callback=None, n_workers=None):
     if not pending:
         with out:
             clear_output()
-            display(HTML(f"<b style='color:green;'>{Lang.NO_PENDING_JOBS}</b>"))
+            display(HTML(f"<b style='color:{THEME['SUCCESS']};'>{Lang.NO_PENDING_JOBS}</b>"))
         return
 
     with out:
@@ -189,7 +191,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
         chunk = 65536
         out = []
         for i in range(0, len(x), chunk):
-            out.append(model.predict_on_batch(x[i:i+chunk]))
+            out.append(np.asarray(model.predict_on_batch(x[i:i+chunk])))
         return np.concatenate(out, axis=0) if len(out) > 1 else out[0]
 
     # 2. Construir paths e verificar COGs via CacheManager primeiro
@@ -272,7 +274,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                 futures[future] = cell['name']
 
             completed_in_region = 0
-            _last_eta_log = time.time()
+            _last_progress_log = time.time()
             for future in as_completed(futures):
                 status, cell_id, reg, stats, wid = future.result()
                 completed_in_region += 1
@@ -316,11 +318,11 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                         global_pixels_processed = (_avg_pixels_per_tile * global_completed) + _pixels_processed if _avg_pixels_per_tile > 0 else 0
                         global_pixels_per_sec = global_pixels_processed / max(global_elapsed, 1)
                         global_pixels_remaining = (_avg_pixels_per_tile * (total_tiles_all_groups - (global_completed + _done))) if _avg_pixels_per_tile > 0 else 0
-                        global_eta = global_pixels_remaining / global_pixels_per_sec if global_pixels_per_sec > 0 else 0
-                        global_total = global_elapsed + global_eta
-                        eta_str = f" | TOTAL GLOBAL ~{_fmt_time(global_total)} | remaining ~{_fmt_time(global_eta)}"
+                        global_remaining = global_pixels_remaining / global_pixels_per_sec if global_pixels_per_sec > 0 else 0
+                        global_total = global_elapsed + global_remaining
+                        remaining_str = f" | total global ~{_fmt_time(global_total)} | remaining ~{_fmt_time(global_remaining)}"
                     else:
-                        eta_str = f" | total ~{_fmt_time(group_total)} | remaining ~{_fmt_time(group_remaining)}"
+                        remaining_str = f" | total ~{_fmt_time(group_total)} | remaining ~{_fmt_time(group_remaining)}"
                     
                     px_rate = f" [{int(pixels_per_sec):,} px/s]" if pixels_per_sec > 0 else ""
                     _log(out, f"    [W{wid}] <<< {cell_id} done in {_fmt_time(tile_elapsed)} ({tile_pixels:,} px){px_rate}")
@@ -329,53 +331,53 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
                           f" | region {job_idx+1}/{_total_cards}"
                           f" | group {_done}/{total_cells_group}")
                     _log(out, f"    [W{wid}]     elapsed group {_fmt_time(group_elapsed)}"
-                          + eta_str)
+                          + remaining_str)
 
-                # ETA log every 5 tiles or on the last one
-                if completed_in_region == total or now - _last_eta_log >= 15 or completed_in_region % 5 == 0:
-                    _last_eta_log = now
+                # Log de progresso a cada 5 tiles ou no último
+                if completed_in_region == total or now - _last_progress_log >= 15 or completed_in_region % 5 == 0:
+                    _last_progress_log = now
                     group_elapsed = now - _t0
                     pixels_per_sec = _pixels_processed / max(group_elapsed, 1)
                     pixels_remaining = max(0, (_avg_pixels_per_tile * (total_cells_group - _done))) if _avg_pixels_per_tile > 0 else 0
-                    eta = pixels_remaining / pixels_per_sec if pixels_per_sec > 0 else 0
-                    total_proj = group_elapsed + eta
+                    remaining = pixels_remaining / pixels_per_sec if pixels_per_sec > 0 else 0
+                    total_proj = group_elapsed + remaining
                     
-                    # Calcula tempo global
+                    # Global time estimate
                     if global_start_time is not None and total_tiles_all_groups > 0:
                         global_elapsed = now - global_start_time
                         global_pixels_processed = (_avg_pixels_per_tile * global_completed) + _pixels_processed if _avg_pixels_per_tile > 0 else 0
                         global_pixels_per_sec = global_pixels_processed / max(global_elapsed, 1)
                         global_pixels_remaining = (_avg_pixels_per_tile * (total_tiles_all_groups - (global_completed + _done))) if _avg_pixels_per_tile > 0 else 0
-                        global_eta = global_pixels_remaining / global_pixels_per_sec if global_pixels_per_sec > 0 else 0
-                        global_total = global_elapsed + global_eta
+                        global_remaining = global_pixels_remaining / global_pixels_per_sec if global_pixels_per_sec > 0 else 0
+                        global_total = global_elapsed + global_remaining
                         with out:
-                            display(HTML(f'<span style="color:#d32f2f;font-weight:bold;">  > Group progress: {_done}/{total_cells_group} tiles ({_pixels_processed:,} px @ {int(pixels_per_sec):,} px/s) | elapsed {_fmt_time(group_elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(eta)}</span>'))
-                            display(HTML(f'<span style="color:#d32f2f;font-weight:bold;">  > GLOBAL: {global_completed + _done}/{total_tiles_all_groups} tiles ({int(global_pixels_processed):,} px @ {int(global_pixels_per_sec):,} px/s) | elapsed {_fmt_time(global_elapsed)} | total ~{_fmt_time(global_total)} | remaining ~{_fmt_time(global_eta)}</span>'))
+                            display(HTML(f'<span style="color:{_C_INFO};">  > Group progress: {_done}/{total_cells_group} tiles ({_pixels_processed:,} px @ {int(pixels_per_sec):,} px/s) | elapsed {_fmt_time(group_elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(remaining)}</span>'))
+                            display(HTML(f'<span style="color:{_C_INFO};">  > GLOBAL: {global_completed + _done}/{total_tiles_all_groups} tiles ({int(global_pixels_processed):,} px @ {int(global_pixels_per_sec):,} px/s) | elapsed {_fmt_time(global_elapsed)} | total ~{_fmt_time(global_total)} | remaining ~{_fmt_time(global_remaining)}</span>'))
                     else:
                         with out:
-                            display(HTML(f'<span style="color:#d32f2f;font-weight:bold;">  > Group progress: {_done}/{total_cells_group} tiles ({_pixels_processed:,} px @ {int(pixels_per_sec):,} px/s) | elapsed {_fmt_time(group_elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(eta)}</span>'))
+                            display(HTML(f'<span style="color:{_C_INFO};">  > Group progress: {_done}/{total_cells_group} tiles ({_pixels_processed:,} px @ {int(pixels_per_sec):,} px/s) | elapsed {_fmt_time(group_elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(remaining)}</span>'))
 
-            # ETA final da regiao (garantido)
+            # Final remaining for region (guaranteed)
             elapsed = time.time() - _t0
             pixels_per_sec = _pixels_processed / max(elapsed, 1)
             pixels_remaining = max(0, (_avg_pixels_per_tile * (total_cells_group - _done))) if _avg_pixels_per_tile > 0 else 0
-            eta = pixels_remaining / pixels_per_sec if pixels_per_sec > 0 else 0
-            total_proj = elapsed + eta
+            remaining = pixels_remaining / pixels_per_sec if pixels_per_sec > 0 else 0
+            total_proj = elapsed + remaining
             
-            # Calcula tempo global final
+            # Global final time estimate
             if global_start_time is not None and total_tiles_all_groups > 0:
                 global_elapsed = time.time() - global_start_time
                 global_pixels_processed = (_avg_pixels_per_tile * global_completed) + _pixels_processed if _avg_pixels_per_tile > 0 else 0
                 global_pixels_per_sec = global_pixels_processed / max(global_elapsed, 1)
                 global_pixels_remaining = (_avg_pixels_per_tile * (total_tiles_all_groups - (global_completed + _done))) if _avg_pixels_per_tile > 0 else 0
-                global_eta = global_pixels_remaining / global_pixels_per_sec if global_pixels_per_sec > 0 else 0
-                global_total = global_elapsed + global_eta
+                global_remaining = global_pixels_remaining / global_pixels_per_sec if global_pixels_per_sec > 0 else 0
+                global_total = global_elapsed + global_remaining
                 with out:
-                    display(HTML(f'<span style="color:#d32f2f;font-weight:bold;">  > Group progress: {_done}/{total_cells_group} tiles ({_pixels_processed:,} px @ {int(pixels_per_sec):,} px/s) | elapsed {_fmt_time(elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(eta)}</span>'))
-                    display(HTML(f'<span style="color:#d32f2f;font-weight:bold;">  > GLOBAL: {global_completed + _done}/{total_tiles_all_groups} tiles ({int(global_pixels_processed):,} px @ {int(global_pixels_per_sec):,} px/s) | elapsed {_fmt_time(global_elapsed)} | total ~{_fmt_time(global_total)} | remaining ~{_fmt_time(global_eta)}</span>'))
+                    display(HTML(f'<span style="color:{_C_INFO};">  > Group progress: {_done}/{total_cells_group} tiles ({_pixels_processed:,} px @ {int(pixels_per_sec):,} px/s) | elapsed {_fmt_time(elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(remaining)}</span>'))
+                    display(HTML(f'<span style="color:{_C_INFO};">  > GLOBAL: {global_completed + _done}/{total_tiles_all_groups} tiles ({int(global_pixels_processed):,} px @ {int(global_pixels_per_sec):,} px/s) | elapsed {_fmt_time(global_elapsed)} | total ~{_fmt_time(global_total)} | remaining ~{_fmt_time(global_remaining)}</span>'))
             else:
                 with out:
-                    display(HTML(f'<span style="color:#d32f2f;font-weight:bold;">  > Group progress: {_done}/{total_cells_group} tiles ({_pixels_processed:,} px @ {int(pixels_per_sec):,} px/s) | elapsed {_fmt_time(elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(eta)}</span>'))
+                    display(HTML(f'<span style="color:{_C_INFO};">  > Group progress: {_done}/{total_cells_group} tiles ({_pixels_processed:,} px @ {int(pixels_per_sec):,} px/s) | elapsed {_fmt_time(elapsed)} | total ~{_fmt_time(total_proj)} | remaining ~{_fmt_time(remaining)}</span>'))
 
             # Salva progresso no workplan
             p = load_workplan()

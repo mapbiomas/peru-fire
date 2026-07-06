@@ -31,6 +31,7 @@ def load_model_from_gcs(model_dir, fs, logger=None):
     """
     import json
     import tensorflow as tf
+    tf.config.run_functions_eagerly(True)
 
     meta_path = f"{model_dir}/metadata.json"
     if not fs.exists(meta_path):
@@ -174,6 +175,8 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
             except Exception:
                 pass
 
+        doy_idx = band_order.index('dayOfYear') if 'dayOfYear' in band_order else None
+
         src_crs = sources[band_order[0]].crs
         src_transform = sources[band_order[0]].transform
         src_nodata = sources[band_order[0]].nodata or -9999
@@ -238,7 +241,10 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
 
                     hb, wb = bands_block[band_order[0]].shape
                     stack = np.stack([bands_block[b] for b in band_order], axis=-1)
-                    valid_mask = np.all(stack > src_nodata, axis=-1)
+                    if doy_idx is not None:
+                        valid_mask = stack[:, :, doy_idx] > 0
+                    else:
+                        valid_mask = np.all(stack > src_nodata, axis=-1)
                     n_valid = int(valid_mask.sum())
 
                     if n_valid == 0:
