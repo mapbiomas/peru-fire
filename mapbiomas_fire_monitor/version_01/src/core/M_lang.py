@@ -217,10 +217,11 @@ class L:
     M6_LABEL_PERIOD = "Period:"
     M6_GROUPS_PENDING = "{n} groups pending mosaic"
     M6_MOSAIC_OK = "mosaic OK"
+    M6_DOWNLOAD_MOSAIC = "OK \u2197"
     M6_PUBLISHED_GROUPS = "{n} published groups"
-    M6_BADGE_MOSAIC = "M"
-    M6_BADGE_STATS = "S"
-    M6_BADGE_GEE = "G"
+    M6_BADGE_MOSAIC = "Mosaic"
+    M6_BADGE_STATS = "Stats"
+    M6_BADGE_GEE = "GEE"
     M6_COL_PCT = "%"
     M6_COL_HA = "ha"
     M6_COL_TILES = "Tiles"
@@ -1172,10 +1173,11 @@ STRINGS_ES = {
     "M6_LABEL_PERIOD": "Período:",
     "M6_GROUPS_PENDING": "{n} grupos pendientes de mosaico",
     "M6_MOSAIC_OK": "mosaico OK",
+    "M6_DOWNLOAD_MOSAIC": "OK \u2197",
     "M6_PUBLISHED_GROUPS": "{n} grupos publicados",
-    "M6_BADGE_MOSAIC": "M",
-    "M6_BADGE_STATS": "E",
-    "M6_BADGE_GEE": "G",
+    "M6_BADGE_MOSAIC": "Mosaico",
+    "M6_BADGE_STATS": "Estats",
+    "M6_BADGE_GEE": "GEE",
     "M6_COL_PCT": "%",
     "M6_COL_HA": "ha",
     "M6_COL_TILES": "Tiles",
@@ -1766,10 +1768,11 @@ STRINGS_PT = {
     "M6_LABEL_PERIOD": "Período:",
     "M6_GROUPS_PENDING": "{n} grupos pendentes de mosaico",
     "M6_MOSAIC_OK": "mosaico OK",
+    "M6_DOWNLOAD_MOSAIC": "OK \u2197",
     "M6_PUBLISHED_GROUPS": "{n} grupos publicados",
-    "M6_BADGE_MOSAIC": "M",
-    "M6_BADGE_STATS": "E",
-    "M6_BADGE_GEE": "G",
+    "M6_BADGE_MOSAIC": "Mosaico",
+    "M6_BADGE_STATS": "Estats",
+    "M6_BADGE_GEE": "GEE",
     "M6_COL_PCT": "%",
     "M6_COL_HA": "ha",
     "M6_COL_TILES": "Tiles",
@@ -2360,10 +2363,11 @@ STRINGS_FR = {
     "M6_LABEL_PERIOD": "Période:",
     "M6_GROUPS_PENDING": "{n} groupes en attente de mosaïque",
     "M6_MOSAIC_OK": "mosaïque OK",
+    "M6_DOWNLOAD_MOSAIC": "OK \u2197",
     "M6_PUBLISHED_GROUPS": "{n} groupes publiés",
-    "M6_BADGE_MOSAIC": "M",
-    "M6_BADGE_STATS": "S",
-    "M6_BADGE_GEE": "G",
+    "M6_BADGE_MOSAIC": "Mosaïque",
+    "M6_BADGE_STATS": "Stats",
+    "M6_BADGE_GEE": "GEE",
     "M6_COL_PCT": "%",
     "M6_COL_HA": "ha",
     "M6_COL_TILES": "Tuiles",
@@ -2953,10 +2957,11 @@ STRINGS_ID = {
     "M6_LABEL_PERIOD": "Periode:",
     "M6_GROUPS_PENDING": "{n} grup menunggu mozaik",
     "M6_MOSAIC_OK": "mozaik OK",
+    "M6_DOWNLOAD_MOSAIC": "OK \u2197",
     "M6_PUBLISHED_GROUPS": "{n} grup dipublikasikan",
-    "M6_BADGE_MOSAIC": "M",
-    "M6_BADGE_STATS": "S",
-    "M6_BADGE_GEE": "G",
+    "M6_BADGE_MOSAIC": "Mosaik",
+    "M6_BADGE_STATS": "Statistik",
+    "M6_BADGE_GEE": "GEE",
     "M6_COL_PCT": "%",
     "M6_COL_HA": "ha",
     "M6_COL_TILES": "Ubin",

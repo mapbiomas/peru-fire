@@ -204,11 +204,13 @@ class M6WorkplanUI:
         rows = []
         for m, r, p, c in done:
             c_label = f"<span style='color:#7f8c8d;'> [{c}]</span>" if c else ""
+            mosaic_path = gcs_full(region_path(m, r, p, c))
+            mosaic_url = f"https://storage.googleapis.com/{mosaic_path}"
             rows.append(widgets.HBox([
                 widgets.HTML(f"<b>{m}</b>{c_label}", layout=L(width='220px')),
                 widgets.HTML(r, layout=L(width='150px')),
                 widgets.HTML(p, layout=L(width='120px')),
-                widgets.HTML(f"<span style='color:{THEME['SUCCESS']};'> {Lang.M6_MOSAIC_OK}</span>"),
+                widgets.HTML(f"<a href='{mosaic_url}' target='_blank' style='color:{THEME['SUCCESS']};font-weight:700;font-size:12px;text-decoration:underline;'>{Lang.M6_DOWNLOAD_MOSAIC}</a>"),
             ], layout=L(margin='2px 0', padding='4px', border='1px solid #eee')))
         self.tab_finished.children = [
             widgets.HTML(f"<b>{Lang.M6_PUBLISHED_GROUPS.format(n=len(done))}</b>"),
