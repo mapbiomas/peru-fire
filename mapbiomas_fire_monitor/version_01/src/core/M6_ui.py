@@ -147,48 +147,66 @@ class M6WorkplanUI:
             self.tab_to_publish.children = [make_empty_state(Lang.NO_TASKS_PUBLISH)]
             return
 
-        self._publish_checks.clear()
-        cards = []
-        for g in sorted(pending):
-            m, r, p, c = g
+        models = sorted(set(g[0] for g in self._groups))
+        regions = sorted(set(g[1] for g in self._groups))
+        periods = sorted(set(g[2] for g in self._groups), reverse=True)
+        campaigns = sorted(set(g[3] for g in self._groups if g[3]))
 
-            thumb_b64 = self._thumbnails.get(r, '')
-            left_col = build_thumbnail_column(thumb_b64)
+        f_model = widgets.Dropdown(options=[Lang.ALL] + models, value=Lang.ALL, description=Lang.ANALYTICS_FILTER_MODEL, layout=L(width='180px'))
+        f_region = widgets.Dropdown(options=[Lang.ALL_F] + regions, value=Lang.ALL_F, description=Lang.ANALYTICS_FILTER_REGION, layout=L(width='180px'))
+        f_period = widgets.Dropdown(options=[Lang.ALL] + periods, value=Lang.ALL, description=Lang.ANALYTICS_FILTER_PERIOD, layout=L(width='180px'))
+        f_campaign = widgets.Dropdown(options=[Lang.ALL] + campaigns, value=Lang.ALL, description='Campaign', layout=L(width='160px'))
+        filters_hbox = widgets.HBox([f_model, f_region, f_period, f_campaign])
 
-            cb = widgets.Checkbox(description='', indent=False, layout=L(width='24px', margin='2px 6px 0 0'))
-            self._publish_checks[g] = cb
+        cards_container = widgets.VBox()
 
-            c_label = f"<span style='color:#7f8c8d;font-size:12px;'>[{c}]</span>" if c else ""
+        def _render_cards(filtered=None):
+            if filtered is None:
+                fm, fr, fp, fc = f_model.value, f_region.value, f_period.value, f_campaign.value
+                filtered = [g for g in pending
+                            if (fm == Lang.ALL or g[0] == fm)
+                            and (fr == Lang.ALL_F or g[1] == fr)
+                            and (fp == Lang.ALL or g[2] == fp)
+                            and (fc == Lang.ALL or g[3] == fc)]
+            self._publish_checks.clear()
+            cards = []
+            for g in sorted(filtered):
+                m, r, p, c = g
+                thumb_b64 = self._thumbnails.get(r, '')
+                left_col = build_thumbnail_column(thumb_b64)
+                cb = widgets.Checkbox(description='', indent=False, layout=L(width='24px', margin='2px 6px 0 0'))
+                self._publish_checks[g] = cb
+                c_label = f"<span style='color:#7f8c8d;font-size:12px;'>[{c}]</span>" if c else ""
+                def _badge(ok, label):
+                    color = '#22c55e' if ok else '#ef4444'
+                    return f"<span style='display:inline-block;padding:0 6px;border-radius:8px;font-size:10px;font-weight:600;color:white;background:{color};margin:0 2px;'>{label}</span>"
+                badges = widgets.HTML(
+                    _badge(g in self._mosaics, Lang.M6_BADGE_MOSAIC) +
+                    _badge(g in self._stats_done, Lang.M6_BADGE_STATS) +
+                    _badge(g in self._gee_assets, Lang.M6_BADGE_GEE),
+                    layout=L(margin='0 0 0 30px'))
+                right_col = widgets.VBox([
+                    widgets.HBox([cb, widgets.HTML(f"<b style='font-size:15px;color:#0f172a;'>{m}</b> {c_label}")], layout=L(align_items='center')),
+                    widgets.HTML(f"<span style='color:#475569;margin-left:30px;'>{Lang.DROP_REGION} <b>{r}</b></span>"),
+                    widgets.HTML(f"<span style='color:#475569;margin-left:30px;'>{Lang.M6_LABEL_PERIOD} <b>{p}</b></span>"),
+                    badges,
+                ], layout=L(flex='1', margin='0 0 0 12px'))
+                cards.append(make_card_body(left_col, right_col))
+            cards_container.children = cards or [make_empty_state(Lang.M6_NO_MATCHING)]
 
-            def _badge(ok, label):
-                color = '#22c55e' if ok else '#ef4444'
-                return f"<span style='display:inline-block;padding:0 6px;border-radius:8px;font-size:10px;font-weight:600;color:white;background:{color};margin:0 2px;'>{label}</span>"
+        for f in [f_model, f_region, f_period, f_campaign]:
+            f.observe(lambda _: _render_cards(), names='value')
 
-            badges = widgets.HTML(
-                _badge(g in self._mosaics, Lang.M6_BADGE_MOSAIC) +
-                _badge(g in self._stats_done, Lang.M6_BADGE_STATS) +
-                _badge(g in self._gee_assets, Lang.M6_BADGE_GEE),
-                layout=L(margin='0 0 0 30px'))
-
-            right_col = widgets.VBox([
-                widgets.HBox([
-                    cb,
-                    widgets.HTML(f"<b style='font-size:15px;color:#0f172a;'>{m}</b> {c_label}"),
-                ], layout=L(align_items='center')),
-                widgets.HTML(f"<span style='color:#475569;margin-left:30px;'>{Lang.DROP_REGION} <b>{r}</b></span>"),
-                widgets.HTML(f"<span style='color:#475569;margin-left:30px;'>{Lang.M6_LABEL_PERIOD} <b>{p}</b></span>"),
-                badges,
-            ], layout=L(flex='1', margin='0 0 0 12px'))
-
-            cards.append(make_card_body(left_col, right_col))
+        _render_cards(filtered=pending)
 
         btn_all_pub, btn_none_pub, hbox_pub = make_select_all_none(
             on_all=lambda _: self._toggle_publish(True),
             on_none=lambda _: self._toggle_publish(False))
         self.tab_to_publish.children = [
             widgets.HTML(f"<b>{Lang.M6_GROUPS_PENDING.format(n=len(pending))}</b>"),
+            filters_hbox,
             hbox_pub,
-            widgets.VBox(cards),
+            cards_container,
         ]
 
     def _toggle_publish(self, value):
@@ -201,20 +219,49 @@ class M6WorkplanUI:
             self.tab_finished.children = [make_empty_state(Lang.NO_TASKS_DONE)]
             return
 
-        rows = []
-        for m, r, p, c in done:
-            c_label = f"<span style='color:#7f8c8d;'> [{c}]</span>" if c else ""
-            mosaic_path = gcs_full(region_path(m, r, p, c))
-            mosaic_url = f"https://storage.googleapis.com/{mosaic_path}"
-            rows.append(widgets.HBox([
-                widgets.HTML(f"<b>{m}</b>{c_label}", layout=L(width='220px')),
-                widgets.HTML(r, layout=L(width='150px')),
-                widgets.HTML(p, layout=L(width='120px')),
-                widgets.HTML(f"<a href='{mosaic_url}' target='_blank' style='color:{THEME['SUCCESS']};font-weight:700;font-size:12px;text-decoration:underline;'>{Lang.M6_DOWNLOAD_MOSAIC}</a>"),
-            ], layout=L(margin='2px 0', padding='4px', border='1px solid #eee')))
+        models = sorted(set(g[0] for g in self._groups))
+        regions = sorted(set(g[1] for g in self._groups))
+        periods = sorted(set(g[2] for g in self._groups), reverse=True)
+        campaigns = sorted(set(g[3] for g in self._groups if g[3]))
+
+        f_model = widgets.Dropdown(options=[Lang.ALL] + models, value=Lang.ALL, description=Lang.ANALYTICS_FILTER_MODEL, layout=L(width='180px'))
+        f_region = widgets.Dropdown(options=[Lang.ALL_F] + regions, value=Lang.ALL_F, description=Lang.ANALYTICS_FILTER_REGION, layout=L(width='180px'))
+        f_period = widgets.Dropdown(options=[Lang.ALL] + periods, value=Lang.ALL, description=Lang.ANALYTICS_FILTER_PERIOD, layout=L(width='180px'))
+        f_campaign = widgets.Dropdown(options=[Lang.ALL] + campaigns, value=Lang.ALL, description='Campaign', layout=L(width='160px'))
+        filters_hbox = widgets.HBox([f_model, f_region, f_period, f_campaign])
+
+        rows_container = widgets.VBox()
+
+        def _render_rows(filtered=None):
+            if filtered is None:
+                fm, fr, fp, fc = f_model.value, f_region.value, f_period.value, f_campaign.value
+                filtered = [g for g in done
+                            if (fm == Lang.ALL or g[0] == fm)
+                            and (fr == Lang.ALL_F or g[1] == fr)
+                            and (fp == Lang.ALL or g[2] == fp)
+                            and (fc == Lang.ALL or g[3] == fc)]
+            rows = []
+            for m, r, p, c in filtered:
+                c_label = f"<span style='color:#7f8c8d;'> [{c}]</span>" if c else ""
+                mosaic_path = gcs_full(region_path(m, r, p, c))
+                mosaic_url = f"https://storage.googleapis.com/{mosaic_path}"
+                rows.append(widgets.HBox([
+                    widgets.HTML(f"<b>{m}</b>{c_label}", layout=L(width='220px')),
+                    widgets.HTML(r, layout=L(width='150px')),
+                    widgets.HTML(p, layout=L(width='120px')),
+                    widgets.HTML(f"<a href='{mosaic_url}' target='_blank' style='color:{THEME['SUCCESS']};font-weight:700;font-size:12px;text-decoration:underline;'>{Lang.M6_DOWNLOAD_MOSAIC}</a>"),
+                ], layout=L(margin='2px 0', padding='4px', border='1px solid #eee')))
+            rows_container.children = rows or [make_empty_state(Lang.M6_NO_MATCHING)]
+
+        for f in [f_model, f_region, f_period, f_campaign]:
+            f.observe(lambda _: _render_rows(), names='value')
+
+        _render_rows(filtered=done)
+
         self.tab_finished.children = [
             widgets.HTML(f"<b>{Lang.M6_PUBLISHED_GROUPS.format(n=len(done))}</b>"),
-            widgets.VBox(rows, layout=L(margin='10px 0'))
+            filters_hbox,
+            rows_container,
         ]
 
     def _render_analytics(self):
