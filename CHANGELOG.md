@@ -12,6 +12,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+## [1.2.0] — 2026-07-05
+
+### Fixed
+- M5: `[FATAL]` group errors now rendered in red with friendly messages (e.g., "model not found in GCS")
+- M5: model existence validated (`fs.exists`) before creating classification jobs — prevents registering jobs for deleted models
+- M5: `list_trained_models(force_refresh=True)` on init prevents stale model entries in checkboxes
+
+### Changed
+- M6: badges renamed from single letters (`M`/`S`/`G`) to full words (`Mosaic`/`Stats`/`GEE`) in all 5 locales
+- M6: Finished tab — "mosaic OK" replaced with clickable download link (`OK ↗`) pointing to COG in GCS
+
 ## [1.1.0] — 2026-07-05
 
 ### Fixed
