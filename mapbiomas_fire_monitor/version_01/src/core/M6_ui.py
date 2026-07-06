@@ -126,7 +126,7 @@ class M6WorkplanUI:
         from M6_publisher import generate_region_thumbnail
         for r in sorted(set(g[1] for g in self._groups)):
             if r not in self._thumbnails:
-                b64 = generate_region_thumbnail(r, size=64)
+                b64 = generate_region_thumbnail(r, size=128)
                 if b64:
                     self._thumbnails[r] = b64
 

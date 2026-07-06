@@ -12,6 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+## [1.2.1] — 2026-07-05
+
+### Fixed
+- M4: auto-delete zombie training directories (only `workplan/pending/`, missing `metadata.json`) during `list_trained_models()`. Prevents deleted models from re-appearing in M5 after cache sync.
+
 ## [1.2.0] — 2026-07-05
 
 ### Fixed

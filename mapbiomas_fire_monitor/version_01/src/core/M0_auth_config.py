@@ -9,6 +9,7 @@ import logging
 
 # Silenciar avisos de autenticacao do Google e loggers verbosos do GCSFS
 warnings.filterwarnings("ignore", message="Your application has authenticated using end user credentials")
+warnings.filterwarnings("ignore", message=".*gdal.UseExceptions.*", category=FutureWarning)
 logging.getLogger("google.auth").setLevel(logging.ERROR)
 logging.getLogger("gcsfs").setLevel(logging.CRITICAL)
 logging.getLogger("fsspec").setLevel(logging.CRITICAL)
