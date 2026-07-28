@@ -1,44 +1,49 @@
 /********************************************
 MAPBIOMAS FUEGO - MONITOR_01 - M7_00
-Selecao e Merge de Classificacoes (UI)
+Selection, Merge and Export (UI)
 
 📅 DATA: julho 2026
-🏷️ VERSAO: 1.0
+🏷️ VERSAO: 2.0
 👥 EQUIPE: MapBiomas Fuego - IPAM
-   Wallace Silva, Vera Arruda
 
 📌 O QUE FAZ:
-1. Seleciona periodo (ano/mes ou anual)
-2. Visualiza mosaico min NBR do periodo
-3. Lista classificacoes disponiveis por regiao
-4. Permite selecionar 1+ classificacoes por regiao
-5. Exporta selecoes para pasta nomeada em M7_FILTERED/
+1. Formulario M0-like: campanha, sensor, mosaico, periodicidade, versao
+2. Seleciona periodo e visualiza mosaico min NBR
+3. Para cada regiao, escolhe qual modelo DNN usar
+4. Compõe imagem nacional por periodo (todas as regioes colapsadas)
+5. Exporta para FILTERED/{collection_name}-ft00/{period}
 
-🌍 IDIOMAS: ES, PT, EN, FR, ID
+🌍 IDIOMAS: pt, es, en, fr, id
 
-🔧 CONFIGURACAO:
-- Variaveis no topo: CAMPAIGN, CATALOG_ROOT, etc.
-- Interface ocupa ~60% da pagina, mapa ~40%
+🔧 ESTRUTURA DE SAIDA:
+  FILTERED/{campanha}-{sensor}_{mosaico}_{periodicidade}_{versao}-ft00/{periodo}
+  Ex: FILTERED/monitor_01-sentinel2_minnbr_monthly_01-ft00/2025_08
 ********************************************/
 
 // ─── CONFIGURAÇÃO GLOBAL ───────────────────────────────────────────────────
-var CAMPAIGN = 'MONITOR_01';
 var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
-var REGIONAL_FOLDER = CATALOG_ROOT + '/' + CAMPAIGN + '/LIBRARY_CLASSIFICATIONS/REGIONAL';
-var MOSAIC_BASE = CATALOG_ROOT + '/LIBRARY_IMAGES/SENTINEL2/MONTHLY/MINNBR';
-var M7_BASE = CATALOG_ROOT + '/' + CAMPAIGN + '/LIBRARY_CLASSIFICATIONS/M7_FILTERED';
-var APP_LANG = 'pt';
+var REGIONS = ee.FeatureCollection('projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1');
+var REGION_PROPERTY = 'region_nam';
+var MOSAIC_SENSORS = { sentinel2: 'SENTINEL2', landsat: 'LANDSAT' };
+var MOSAIC_METHODS = { minnbr: 'MINNBR', minnbr_buffer: 'MINNBR_BUFFER', median: 'MEDIAN', minndvi: 'MINNDVI' };
 var SCALE = 10;
 var START_YEAR = 2025;
+var APP_LANG = 'pt';
 
 // ─── IDIOMAS ───────────────────────────────────────────────────────────────
 var L = (function () {
     var dict = {
         pt: {
-            title: 'MapBiomas-Fogo | M7 — Selecao e Merge',
-            tab_period: 'PERIODO',
-            tab_regions: 'REGIOES',
-            tab_export: 'EXPORTAR',
+            title: 'MapBiomas-Fogo | M7 — Selecao e Export',
+            config: 'CONFIG',
+            period: 'PERIODO',
+            regions: 'REGIOES',
+            confirm: 'CONFIRMAR',
+            lbl_campaign: 'Campanha',
+            lbl_sensor: 'Sensor',
+            lbl_mosaic: 'Mosaico',
+            lbl_periodicity: 'Periodicidade',
+            lbl_version: 'Versao',
             lbl_year: 'Ano',
             lbl_month: 'Mes',
             lbl_annual: 'Anual',
@@ -48,65 +53,71 @@ var L = (function () {
             lbl_models: 'Modelos disponiveis',
             lbl_select_all: 'Selecionar todos',
             lbl_deselect_all: 'Limpar todos',
-            lbl_folder_name: 'Nome da pasta',
-            lbl_folder_placeholder: 'ex: fase_agosto_v1',
-            lbl_folder_existing: 'Pastas existentes:',
-            lbl_no_folder: '(nenhuma pasta existente)',
+            lbl_new_collection: 'Nova colecao',
+            lbl_add_existing: 'Adicionar a existente',
+            lbl_collection_name: 'Nome da colecao',
             lbl_btn_export: 'Exportar',
             lbl_confirm_title: 'Confirmar Exportacao',
-            lbl_confirm_folder: 'Pasta destino',
-            lbl_confirm_ok: 'Confirmar Export',
+            lbl_confirm_ok: 'Confirmar',
             lbl_confirm_cancel: 'Cancelar',
-            lbl_status_one: '1 selecao',
-            lbl_status_multi: 'selecionados — sera feito merge',
-            lbl_status_none: 'nenhuma selecao',
+            lbl_status_one: '1 modelo selecionado',
+            lbl_status_none: 'nenhum modelo',
             lbl_exporting: 'Exportando...',
             lbl_done: 'Concluido!',
-            lbl_no_selection: 'Nenhuma regiao selecionada.',
-            lbl_err_folder: 'Informe o nome da pasta.',
+            lbl_no_selection: 'Nenhuma regiao configurada.',
             lbl_mosaic_loading: 'Carregando mosaico...',
             lbl_class_loading: 'Carregando classificacoes...',
-            lbl_geometry: 'Geometria',
+            lbl_gen_name: 'Nome gerado',
+            lbl_error_no_region_model: 'Selecione ao menos 1 modelo por regiao.',
         },
         es: {
-            title: 'MapBiomas-Fuego | M7 — Seleccion y Merge',
-            tab_period: 'PERIODO',
-            tab_regions: 'REGIONES',
-            tab_export: 'EXPORTAR',
-            lbl_year: 'Año',
+            title: 'MapBiomas-Fuego | M7 — Seleccion y Export',
+            config: 'CONFIG',
+            period: 'PERIODO',
+            regions: 'REGIONES',
+            confirm: 'CONFIRMAR',
+            lbl_campaign: 'Campana',
+            lbl_sensor: 'Sensor',
+            lbl_mosaic: 'Mosaico',
+            lbl_periodicity: 'Periodicidad',
+            lbl_version: 'Version',
+            lbl_year: 'Ano',
             lbl_month: 'Mes',
             lbl_annual: 'Anual',
             lbl_loading: 'Cargando...',
-            lbl_no_data: 'Sin datos para el periodo seleccionado.',
+            lbl_no_data: 'Sin datos para el periodo.',
             lbl_region: 'Region',
             lbl_models: 'Modelos disponibles',
             lbl_select_all: 'Seleccionar todos',
             lbl_deselect_all: 'Limpiar todos',
-            lbl_folder_name: 'Nombre de la carpeta',
-            lbl_folder_placeholder: 'ej: fase_agosto_v1',
-            lbl_folder_existing: 'Carpetas existentes:',
-            lbl_no_folder: '(ninguna carpeta existente)',
+            lbl_new_collection: 'Nueva coleccion',
+            lbl_add_existing: 'Agregar a existente',
+            lbl_collection_name: 'Nombre de coleccion',
             lbl_btn_export: 'Exportar',
             lbl_confirm_title: 'Confirmar Exportacion',
-            lbl_confirm_folder: 'Carpeta destino',
-            lbl_confirm_ok: 'Confirmar Export',
+            lbl_confirm_ok: 'Confirmar',
             lbl_confirm_cancel: 'Cancelar',
-            lbl_status_one: '1 seleccion',
-            lbl_status_multi: 'seleccionados — se hara merge',
-            lbl_status_none: 'ninguna seleccion',
+            lbl_status_one: '1 modelo seleccionado',
+            lbl_status_none: 'ningun modelo',
             lbl_exporting: 'Exportando...',
             lbl_done: 'Completado!',
-            lbl_no_selection: 'Ninguna region seleccionada.',
-            lbl_err_folder: 'Informe el nombre de la carpeta.',
+            lbl_no_selection: 'Ninguna region configurada.',
             lbl_mosaic_loading: 'Cargando mosaico...',
             lbl_class_loading: 'Cargando clasificaciones...',
-            lbl_geometry: 'Geometria',
+            lbl_gen_name: 'Nombre generado',
+            lbl_error_no_region_model: 'Seleccione al menos 1 modelo por region.',
         },
         en: {
-            title: 'MapBiomas-Fire | M7 — Selection and Merge',
-            tab_period: 'PERIOD',
-            tab_regions: 'REGIONS',
-            tab_export: 'EXPORT',
+            title: 'MapBiomas-Fire | M7 — Selection and Export',
+            config: 'CONFIG',
+            period: 'PERIOD',
+            regions: 'REGIONS',
+            confirm: 'CONFIRM',
+            lbl_campaign: 'Campaign',
+            lbl_sensor: 'Sensor',
+            lbl_mosaic: 'Mosaic',
+            lbl_periodicity: 'Periodicity',
+            lbl_version: 'Version',
             lbl_year: 'Year',
             lbl_month: 'Month',
             lbl_annual: 'Annual',
@@ -115,190 +126,164 @@ var L = (function () {
             lbl_region: 'Region',
             lbl_models: 'Available models',
             lbl_select_all: 'Select all',
-            lbl_deselect_all: 'Deselect all',
-            lbl_folder_name: 'Folder name',
-            lbl_folder_placeholder: 'e.g. august_phase_v1',
-            lbl_folder_existing: 'Existing folders:',
-            lbl_no_folder: '(no existing folders)',
+            lbl_deselect_all: 'Clear all',
+            lbl_new_collection: 'New collection',
+            lbl_add_existing: 'Add to existing',
+            lbl_collection_name: 'Collection name',
             lbl_btn_export: 'Export',
             lbl_confirm_title: 'Confirm Export',
-            lbl_confirm_folder: 'Target folder',
-            lbl_confirm_ok: 'Confirm Export',
+            lbl_confirm_ok: 'Confirm',
             lbl_confirm_cancel: 'Cancel',
-            lbl_status_one: '1 selected',
-            lbl_status_multi: 'selected — merge will be performed',
-            lbl_status_none: 'no selection',
+            lbl_status_one: '1 model selected',
+            lbl_status_none: 'no model',
             lbl_exporting: 'Exporting...',
             lbl_done: 'Done!',
-            lbl_no_selection: 'No region selected.',
-            lbl_err_folder: 'Enter a folder name.',
+            lbl_no_selection: 'No region configured.',
             lbl_mosaic_loading: 'Loading mosaic...',
             lbl_class_loading: 'Loading classifications...',
-            lbl_geometry: 'Geometry',
+            lbl_gen_name: 'Generated name',
+            lbl_error_no_region_model: 'Select at least 1 model per region.',
         },
         fr: {
-            title: 'MapBiomas-Feu | M7 — Selection et Fusion',
-            tab_period: 'PERIODE',
-            tab_regions: 'REGIONS',
-            tab_export: 'EXPORTER',
+            title: 'MapBiomas-Feu | M7 — Selection et Export',
+            config: 'CONFIG',
+            period: 'PERIODE',
+            regions: 'REGIONS',
+            confirm: 'CONFIRMER',
+            lbl_campaign: 'Campagne',
+            lbl_sensor: 'Capteur',
+            lbl_mosaic: 'Mosaique',
+            lbl_periodicity: 'Periodicite',
+            lbl_version: 'Version',
             lbl_year: 'Annee',
             lbl_month: 'Mois',
             lbl_annual: 'Annuel',
             lbl_loading: 'Chargement...',
-            lbl_no_data: 'Pas de donnees pour la periode.',
+            lbl_no_data: 'Pas de donnees.',
             lbl_region: 'Region',
             lbl_models: 'Modeles disponibles',
             lbl_select_all: 'Tout selectionner',
             lbl_deselect_all: 'Tout effacer',
-            lbl_folder_name: 'Nom du dossier',
-            lbl_folder_placeholder: 'ex: phase_aout_v1',
-            lbl_folder_existing: 'Dossiers existants:',
-            lbl_no_folder: '(aucun dossier existant)',
+            lbl_new_collection: 'Nouvelle collection',
+            lbl_add_existing: 'Ajouter a existante',
+            lbl_collection_name: 'Nom de la collection',
             lbl_btn_export: 'Exporter',
             lbl_confirm_title: 'Confirmer l\'exportation',
-            lbl_confirm_folder: 'Dossier cible',
-            lbl_confirm_ok: 'Confirmer l\'export',
+            lbl_confirm_ok: 'Confirmer',
             lbl_confirm_cancel: 'Annuler',
-            lbl_status_one: '1 selectionne',
-            lbl_status_multi: 'selectionnes — fusion sera effectuee',
-            lbl_status_none: 'aucune selection',
+            lbl_status_one: '1 modele selectionne',
+            lbl_status_none: 'aucun modele',
             lbl_exporting: 'Exportation...',
             lbl_done: 'Termine!',
-            lbl_no_selection: 'Aucune region selectionnee.',
-            lbl_err_folder: 'Saisissez un nom de dossier.',
-            lbl_mosaic_loading: 'Chargement de la mosaique...',
-            lbl_class_loading: 'Chargement des classifications...',
-            lbl_geometry: 'Geometrie',
+            lbl_no_selection: 'Aucune region configuree.',
+            lbl_mosaic_loading: 'Chargement mosaique...',
+            lbl_class_loading: 'Chargement classifications...',
+            lbl_gen_name: 'Nom genere',
+            lbl_error_no_region_model: 'Selectionnez au moins 1 modele par region.',
         },
         id: {
-            title: 'MapBiomas-Api | M7 — Seleksi dan Gabung',
-            tab_period: 'PERIODE',
-            tab_regions: 'WILAYAH',
-            tab_export: 'EKSPOR',
+            title: 'MapBiomas-Api | M7 — Seleksi dan Ekspor',
+            config: 'KONFIG',
+            period: 'PERIODE',
+            regions: 'WILAYAH',
+            confirm: 'KONFIRMASI',
+            lbl_campaign: 'Kampanye',
+            lbl_sensor: 'Sensor',
+            lbl_mosaic: 'Mosaik',
+            lbl_periodicity: 'Periodisitas',
+            lbl_version: 'Versi',
             lbl_year: 'Tahun',
             lbl_month: 'Bulan',
             lbl_annual: 'Tahunan',
             lbl_loading: 'Memuat...',
-            lbl_no_data: 'Tidak ada data untuk periode ini.',
+            lbl_no_data: 'Tidak ada data.',
             lbl_region: 'Wilayah',
             lbl_models: 'Model tersedia',
             lbl_select_all: 'Pilih semua',
             lbl_deselect_all: 'Hapus semua',
-            lbl_folder_name: 'Nama folder',
-            lbl_folder_placeholder: 'cth: fase_agustus_v1',
-            lbl_folder_existing: 'Folder yang ada:',
-            lbl_no_folder: '(tidak ada folder)',
+            lbl_new_collection: 'Koleksi baru',
+            lbl_add_existing: 'Tambah ke yang ada',
+            lbl_collection_name: 'Nama koleksi',
             lbl_btn_export: 'Ekspor',
             lbl_confirm_title: 'Konfirmasi Ekspor',
-            lbl_confirm_folder: 'Folder tujuan',
-            lbl_confirm_ok: 'Konfirmasi Ekspor',
+            lbl_confirm_ok: 'Konfirmasi',
             lbl_confirm_cancel: 'Batal',
-            lbl_status_one: '1 dipilih',
-            lbl_status_multi: 'dipilih — penggabungan akan dilakukan',
-            lbl_status_none: 'tidak ada pilihan',
+            lbl_status_one: '1 model dipilih',
+            lbl_status_none: 'tidak ada model',
             lbl_exporting: 'Mengekspor...',
             lbl_done: 'Selesai!',
-            lbl_no_selection: 'Tidak ada wilayah dipilih.',
-            lbl_err_folder: 'Masukkan nama folder.',
+            lbl_no_selection: 'Tidak ada wilayah dikonfigurasi.',
             lbl_mosaic_loading: 'Memuat mosaik...',
             lbl_class_loading: 'Memuat klasifikasi...',
-            lbl_geometry: 'Geometri',
+            lbl_gen_name: 'Nama dibuat',
+            lbl_error_no_region_model: 'Pilih minimal 1 model per wilayah.',
         },
     };
     return dict[APP_LANG] || dict['pt'];
 })();
 
-// ─── ICONES BASE64 ──────────────────────────────────────────────────────────
-var ICONS = {
-    eye: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAbklEQVR4nO2UQQqAIBBFn5vDqkWbLtChiyA4rTtIl67egU5gNS0S2mRQs3Cm+WBmYAaGf2QGSqQIU0IS1iBRIcMBmEopcVxKCqSVtJbSStoBmiP4UMmH8V1ASmm0Q3DPeWdVgQty8ZuyQec/mR/mAPgyf/4fK4FQAAAAAElFTkSuQmCC',
-};
-
 // ─── ESTILOS ─────────────────────────────────────────────────────────────────
 var styles = {
-    main_panel: { margin: '0px', padding: '4px', backgroundColor: '#ffffff', border: '0px' },
+    main_panel: { margin: '0px', padding: '4px', backgroundColor: '#ffffff' },
     card: { margin: '2px', padding: '4px', border: '1px solid #e0e0e0', backgroundColor: '#fcfcfc', borderRadius: '4px' },
-    row: { margin: '0px', padding: '2px', stretch: 'horizontal', backgroundColor: 'ffffff00' },
+    row: { margin: '0px', padding: '2px', stretch: 'horizontal' },
     title: { margin: '2px', padding: '2px', fontSize: '13px', fontWeight: 'bold', color: '#333' },
     label: { margin: '1px', padding: '0px', fontSize: '11px', color: '#555' },
     input: { margin: '1px', padding: '2px', stretch: 'horizontal' },
-    btn_blue: { margin: '2px', padding: '4px 8px', color: '#1a73e8', fontWeight: 'bold', fontSize: '11px' },
-    btn_green: { margin: '2px', padding: '4px 8px', color: '#0f9d58', fontWeight: 'bold', fontSize: '11px' },
-    btn_red: { margin: '2px', padding: '4px 8px', color: '#d32f2f', fontWeight: 'bold', fontSize: '11px' },
-    btn_gray: { margin: '2px', padding: '4px 8px', color: '#70757a', fontWeight: 'bold', fontSize: '11px' },
+    btn_blue: { margin: '2px', padding: '4px 10px', color: '#1a73e8', fontWeight: 'bold', fontSize: '11px' },
+    btn_green: { margin: '2px', padding: '4px 10px', color: '#0f9d58', fontWeight: 'bold', fontSize: '11px' },
+    btn_red: { margin: '2px', padding: '4px 10px', color: '#d32f2f', fontWeight: 'bold', fontSize: '11px' },
+    btn_gray: { margin: '2px', padding: '4px 10px', color: '#70757a', fontWeight: 'bold', fontSize: '11px' },
     tab_active: { margin: '0px', padding: '6px 12px', border: '1px solid #1a73e8', color: '#1a73e8', fontWeight: 'bold', backgroundColor: '#e8f0fe', stretch: 'horizontal', fontSize: '12px' },
     tab_inactive: { margin: '0px', padding: '6px 12px', border: '1px solid #d3d3d3', color: '#70757a', backgroundColor: '#f1f3f4', stretch: 'horizontal', fontSize: '12px' },
-    region_card: { margin: '4px 0px', padding: '6px', border: '1px solid #e8e8e8', backgroundColor: '#fafafa', borderRadius: '4px' },
-    region_header: { fontSize: '13px', fontWeight: 'bold', color: '#1a73e8', margin: '2px 0px' },
-    model_row: { margin: '2px 0px', padding: '2px', stretch: 'horizontal' },
-    status_ok: { color: '#0f9d58', fontWeight: 'bold', fontSize: '12px' },
-    status_warn: { color: '#e37400', fontWeight: 'bold', fontSize: '12px' },
-    status_err: { color: '#d32f2f', fontWeight: 'bold', fontSize: '12px' },
+    region_card: { margin: '4px 0px', padding: '6px', border: '1px solid #e0e0e0', backgroundColor: '#fafafa', borderRadius: '4px' },
+    model_row: { margin: '1px 0px', padding: '2px', stretch: 'horizontal' },
+    status_ok: { color: '#0f9d58', fontWeight: 'bold', fontSize: '11px' },
+    status_warn: { color: '#e37400', fontWeight: 'bold', fontSize: '11px' },
+    status_err: { color: '#d32f2f', fontWeight: 'bold', fontSize: '11px' },
+    gen_name: { fontSize: '11px', color: '#1a73e8', fontWeight: 'bold', fontFamily: 'monospace', margin: '2px', padding: '2px', backgroundColor: '#f0f4ff', borderRadius: '3px' },
 };
 
-// ─── PALETAS ─────────────────────────────────────────────────────────────────
+// ─── CLASSIFICATION PALETTE ──────────────────────────────────────────────────
 var CLASS_PALETTE = [
     '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
     '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
     '#469990', '#dcbeff', '#9A6324', '#fffac8', '#800000',
-    '#aaffc3', '#808000', '#ffd8b1', '#000075', '#a9a9a9',
-    '#e6beff', '#d2f53c', '#ff46b7', '#008080', '#aa6e28',
-    '#ffcce0', '#808080', '#00ffff', '#ff69b4', '#556b2f',
 ];
-
-// ─── CONFIG DE PAIS ─────────────────────────────────────────────────────────
-var countryConfig = {
-    asset_regions: 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
-    property: 'region_nam',
-    id_property: 'id_region',
-};
-
-var current_regiones = ee.FeatureCollection(countryConfig.asset_regions);
 
 // ─── ESTADO GLOBAL ──────────────────────────────────────────────────────────
 var managedLayers = {};
-var regionCheckboxes = {}; // regionName -> [cb1, cb2, ...]
-var regionEyeButtons = {}; // regionName -> { modelId: { btn: btn, active: bool, color: str } }
-var selectedByRegion = {}; // regionName -> [modelId, ...]
+var availableModels = {};   // period -> { regionName: [{modelId, assetId, assetName}] }
+var regionModelMap = {};    // regionName -> modelId (selected, one per region)
+var regionEyeState = {};    // regionName -> { active: bool, color: str }
 var currentYear = null;
 var currentMonth = null;
-var currentPeriodLabel = '';
-var currentMosaicAsset = null; // ee.Image do mosaico min NBR atual
+var currentPeriodKey = '';  // "YYYY_MM" or "YYYY"
+var currentMosaicImg = null;
+var collectionBaseName = '';  // computed: {campanha}-{sensor}_{mosaico}_{periodicidade}_{versao}
+var _campaigns = [];
+var _existingCollections = [];
 
 var panel_root = null;
 var panel_body = null;
 var abas = {};
-var panel_confirm = null;
-var _m7ExistingFolders = [];
 
-// ─── FUNCOES AUXILIARES ────────────────────────────────────────────────────
+// ─── HELPER ──────────────────────────────────────────────────────────────────
 
 function createAssetIfNotExists(assetId, type) {
     type = type || 'ImageCollection';
-    try {
-        ee.data.getAsset(assetId);
-    } catch (e) {
-        print('Criando ' + type + ':', assetId);
-        ee.data.createAsset({ type: type }, assetId);
-    }
+    try { ee.data.getAsset(assetId); } catch (e) { ee.data.createAsset({ type: type }, assetId); }
 }
 
-function getDateStr(year, month) {
-    if (month !== null) {
-        var mm = month < 10 ? '0' + month : '' + month;
-        return year + '_' + mm;
-    }
-    return '' + year;
+function getDateKey(y, m) {
+    return m !== null ? y + '_' + ('0' + m).slice(-2) : '' + y;
 }
 
-function getPeriodLabel(year, month) {
-    if (month !== null) {
-        var mm = month < 10 ? '0' + month : '' + month;
-        return year + '-' + mm;
-    }
-    return '' + year;
+function computeCollectionName(campaign, sensor, mosaic, periodicity, version) {
+    return (campaign + '-' + sensor + '_' + mosaic + '_' + periodicity + '_' + version).toLowerCase().replace(' ', '_');
 }
 
-// ─── GERENCIAMENTO DE CAMADAS NO MAPA ──────────────────────────────────────
+// ─── MAP LAYER MANAGEMENT ───────────────────────────────────────────────────
 
 function updateManagedLayer(id, eeObject, vis, name) {
     if (managedLayers[id]) {
@@ -312,14 +297,7 @@ function updateManagedLayer(id, eeObject, vis, name) {
     }
 }
 
-function removeManagedLayer(id) {
-    if (managedLayers[id]) {
-        Map.layers().remove(managedLayers[id]);
-        delete managedLayers[id];
-    }
-}
-
-function removeAllClassificationLayers() {
+function removeAllClassLayers() {
     Object.keys(managedLayers).forEach(function (id) {
         if (id.indexOf('class_') === 0) {
             Map.layers().remove(managedLayers[id]);
@@ -328,418 +306,360 @@ function removeAllClassificationLayers() {
     });
 }
 
-// ─── CARREGAR MOSAICO MIN NBR ──────────────────────────────────────────────
+// ─── MOSAIC ──────────────────────────────────────────────────────────────────
 
 function loadMosaic(year, month) {
-    var isAnnual = (month === null);
-    var periodFolder = isAnnual ? 'YEARLY' : 'MONTHLY';
-    var dateKey = isAnnual ? '' + year : year + '_' + ('0' + month).slice(-2);
-    var mosaicBands = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2'];
+    var dateKey = getDateKey(year, month);
+    var mosaicBase = CATALOG_ROOT + '/LIBRARY_IMAGES/SENTINEL2/MONTHLY/MINNBR';
+    var bands = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2'];
 
     var mosaicImg = ee.Image().select();
-    var anyLoaded = false;
-
-    mosaicBands.forEach(function (b) {
-        var colId = [MOSAIC_BASE, b.toLowerCase()].join('/');
+    bands.forEach(function (b) {
+        var colId = [mosaicBase, b.toLowerCase()].join('/');
         var imgName = 'image_peru_fire_sentinel2_minnbr_' + b.toLowerCase() + '_' + dateKey;
         try {
-            var col = ee.ImageCollection(colId);
-            var bandImg = col.filter(ee.Filter.eq('system:index', imgName)).mosaic();
-            var safeImg = ee.Image(ee.Algorithms.If(
-                bandImg.bandNames().size().gt(0),
-                bandImg,
-                ee.Image(0).rename(b.toLowerCase()).updateMask(0)
-            ));
-            mosaicImg = mosaicImg.addBands(safeImg.select([0], [b.toLowerCase()]), null, true);
-            anyLoaded = true;
+            var bandImg = ee.ImageCollection(colId).filter(ee.Filter.eq('system:index', imgName)).mosaic();
+            var safe = ee.Image(ee.Algorithms.If(bandImg.bandNames().size().gt(0), bandImg, ee.Image(0).rename(b.toLowerCase()).updateMask(0)));
+            mosaicImg = mosaicImg.addBands(safe.select([0], [b.toLowerCase()]), null, true);
         } catch (e) {
             mosaicImg = mosaicImg.addBands(ee.Image(0).rename(b.toLowerCase()).updateMask(0), null, true);
         }
     });
 
-    if (!anyLoaded) {
-        print('Aviso: mosaico nao encontrado para ' + dateKey);
-        return ee.Image().select();
-    }
-
-    currentMosaicAsset = mosaicImg;
-
-    // Adiciona indices
-    var nbr = mosaicImg.normalizedDifference(['nir', 'swir2']).rename('nbr');
-    var ndvi = mosaicImg.normalizedDifference(['nir', 'red']).rename('ndvi');
-    mosaicImg = mosaicImg.addBands(nbr).addBands(ndvi);
-
-    // Layer RGB SWIR1/NIR/RED (visualizacao padrao)
-    var visMosaic = { bands: ['swir1', 'nir', 'red'], min: 3, max: 40, gamma: 0.85 };
-    updateManagedLayer('mosaic_minnbr', mosaicImg, visMosaic, 'Min NBR ' + dateKey);
-
+    mosaicImg = mosaicImg.addBands(mosaicImg.normalizedDifference(['nir', 'swir2']).rename('nbr'));
+    updateManagedLayer('mosaic_minnbr', mosaicImg, { bands: ['swir1', 'nir', 'red'], min: 3, max: 40, gamma: 0.85 }, 'Min NBR ' + dateKey);
+    currentMosaicImg = mosaicImg;
     return mosaicImg;
 }
 
-// ─── CARREGAR CLASSIFICACOES ────────────────────────────────────────────────
+// ─── CLASSIFICATIONS ────────────────────────────────────────────────────────
 
 function loadClassifications(year, month, callback) {
-    var dateKey = getDateStr(year, month);
+    var dateKey = getDateKey(year, month);
+    var regional = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/REGIONAL';
 
-    ee.data.listAssets(REGIONAL_FOLDER, {}, function (collections) {
-        if (!collections || !collections.assets) {
-            callback({});
-            return;
-        }
-
-        var modelAssets = collections.assets.filter(function (c) {
-            return c.type === 'IMAGE_COLLECTION';
-        });
-
-        if (modelAssets.length === 0) {
-            callback({});
-            return;
-        }
+    ee.data.listAssets(regional, {}, function (collections) {
+        if (!collections || !collections.assets) { callback({}); return; }
+        var modelDirs = collections.assets.filter(function (c) { return c.type === 'IMAGE_COLLECTION'; });
+        if (modelDirs.length === 0) { callback({}); return; }
 
         var result = {};
-        var pending = modelAssets.length;
+        var pending = modelDirs.length;
 
-        modelAssets.forEach(function (c, idx) {
+        modelDirs.forEach(function (c, idx) {
             var modelId = c.id.split('/').pop();
-            var colPath = REGIONAL_FOLDER + '/' + modelId;
-
-            ee.data.listAssets(colPath, {}, function (images) {
+            ee.data.listAssets(c.id, {}, function (images) {
                 if (images && images.assets) {
                     images.assets.forEach(function (img) {
-                        var imgName = img.id.split('/').pop();
-                        // Nome esperado: {modelo}_{region}_{periodo}
-                        // Ex: training_0001_selva_region3_2025_08
-                        var parts = imgName.split('_');
-                        if (parts.length < 3) return;
-
-                        // Extrai o periodo (ultimos elementos _YYYY ou _YYYY_MM)
-                        var imgYear, imgMonth;
-                        var lastPart = parts[parts.length - 1];
-                        var secondLast = parts[parts.length - 2];
-
-                        if (lastPart.length === 4 && /^\d{4}$/.test(lastPart)) {
-                            imgYear = parseInt(lastPart, 10);
-                            imgMonth = null;
-                        } else if (lastPart.length === 2 && secondLast.length === 4 && /^\d{4}$/.test(secondLast)) {
-                            imgYear = parseInt(secondLast, 10);
-                            imgMonth = parseInt(lastPart, 10);
-                        } else {
-                            return;
+                        if (img.type !== 'IMAGE') return;
+                        var name = img.id.split('/').pop();
+                        // Extract region from name: {model}_region{N}_{period}
+                        var regionIdx = name.indexOf('_region');
+                        if (regionIdx === -1) return;
+                        // Find region part
+                        var parts = name.split('_');
+                        var regionPart = null;
+                        for (var i = 0; i < parts.length; i++) {
+                            if (parts[i].indexOf('region') === 0) { regionPart = parts[i]; break; }
                         }
-
-                        if (imgYear !== year) return;
-                        if (month !== null && imgMonth !== month) return;
-
-                        // Extrai regiao
-                        var regionIdx = parts.indexOf('region');
-                        if (regionIdx === -1) {
-                            // Tenta encontrar parte com "region" no nome
-                            for (var i = 0; i < parts.length; i++) {
-                                if (parts[i].indexOf('region') === 0) {
-                                    regionIdx = i;
-                                    break;
+                        if (!regionPart) return;
+                        // Find period part (YYYY or YYYY_MM)
+                        var imgPeriod = null;
+                        for (var j = parts.length - 1; j >= 0; j--) {
+                            if (/^\d{4}$/.test(parts[j])) {
+                                if (j + 1 < parts.length && /^\d{2}$/.test(parts[j + 1])) {
+                                    imgPeriod = parts[j] + '_' + parts[j + 1];
+                                } else {
+                                    imgPeriod = parts[j];
                                 }
+                                break;
                             }
                         }
-                        if (regionIdx === -1) return;
-                        var regionName = parts[regionIdx];
-
-                        if (!result[regionName]) {
-                            result[regionName] = [];
-                        }
-
-                        // Evita duplicatas
-                        var alreadyIn = result[regionName].some(function (r) {
-                            return r.modelId === modelId && r.assetId === img.id;
-                        });
-                        if (!alreadyIn) {
-                            result[regionName].push({
-                                modelId: modelId,
-                                assetId: img.id,
-                                imgName: imgName,
-                                color: CLASS_PALETTE[idx % 30],
-                            });
+                        if (imgPeriod !== dateKey) return;
+                        if (!result[regionPart]) result[regionPart] = [];
+                        var already = result[regionPart].some(function (r) { return r.modelId === modelId; });
+                        if (!already) {
+                            result[regionPart].push({ modelId: modelId, assetId: img.id, color: CLASS_PALETTE[idx % 15] });
                         }
                     });
                 }
-
                 pending--;
-                if (pending === 0) {
-                    callback(result);
-                }
+                if (pending === 0) callback(result);
             });
         });
-
-        if (pending === 0) {
-            callback(result);
-        }
+        if (pending === 0) callback(result);
     });
 }
 
-// ─── UI ────────────────────────────────────────────────────────────────────
+// ─── CAMPAIGNS ──────────────────────────────────────────────────────────────
+
+function loadCampaigns(callback) {
+    var base = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS';
+    ee.data.listAssets(base, {}, function (result) {
+        if (!result || !result.assets) { callback([]); return; }
+        var camps = result.assets.filter(function (a) { return a.type === 'FOLDER'; }).map(function (a) { return a.id.split('/').pop(); });
+        callback(camps);
+    });
+}
+
+function loadExistingFilteredCollections(callback) {
+    var base = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/FILTERED';
+    ee.data.listAssets(base, {}, function (result) {
+        if (!result || !result.assets) { callback([]); return; }
+        var cols = result.assets.filter(function (a) { return a.type === 'IMAGE_COLLECTION'; }).map(function (a) { return a.id.split('/').pop(); });
+        callback(cols);
+    });
+}
+
+// ─── UI ─────────────────────────────────────────────────────────────────────
 
 function buildUI() {
     ui.root.clear();
 
-    // Painel principal
-    panel_root = ui.Panel({
-        layout: ui.Panel.Layout.flow('vertical'),
-        style: { width: '580px', margin: '0px', padding: '4px', backgroundColor: '#ffffff' }
-    });
+    panel_root = ui.Panel({ layout: ui.Panel.Layout.flow('vertical'), style: { width: '580px', margin: '0px', padding: '4px', backgroundColor: '#ffffff' } });
 
-    // Header
     var logo = ui.Label('MapBiomas-Fuego | M7', { fontSize: '15px', fontWeight: 'bold', color: '#d32f2f', margin: '4px' });
     var subtitle = ui.Label(L.title, { fontSize: '12px', color: '#555', margin: '2px 4px' });
     panel_root.add(logo).add(subtitle);
 
-    // Container de abas
     var tabBar = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: { margin: '4px 0px', stretch: 'horizontal' } });
-
-    abas.btnPeriod = ui.Button({ label: L.tab_period, style: styles.tab_active, onClick: function () { showTab('period'); } });
-    abas.btnRegions = ui.Button({ label: L.tab_regions, style: styles.tab_inactive, onClick: function () { showTab('regions'); } });
-    abas.btnExport = ui.Button({ label: L.tab_export, style: styles.tab_inactive, onClick: function () { showTab('export'); } });
-
-    tabBar.add(abas.btnPeriod).add(abas.btnRegions).add(abas.btnExport);
+    abas.btnConfig = ui.Button({ label: L.config, style: styles.tab_active, onClick: function () { showTab('config'); } });
+    abas.btnPeriod = ui.Button({ label: L.period, style: styles.tab_inactive, onClick: function () { showTab('period'); } });
+    abas.btnRegions = ui.Button({ label: L.regions, style: styles.tab_inactive, onClick: function () { showTab('regions'); } });
+    abas.btnConfirm = ui.Button({ label: L.confirm, style: styles.tab_inactive, onClick: function () { showTab('confirm'); } });
+    tabBar.add(abas.btnConfig).add(abas.btnPeriod).add(abas.btnRegions).add(abas.btnConfirm);
     panel_root.add(tabBar);
 
-    // Body (conteudo da aba ativa)
-    panel_body = ui.Panel({ style: { margin: '4px', padding: '4px', maxHeight: '600px' } });
+    panel_body = ui.Panel({ style: { margin: '4px', padding: '4px' } });
     panel_root.add(panel_body);
-
-    // Painel de confirmacao (inicialmente oculto)
-    panel_confirm = ui.Panel({ style: { margin: '4px', padding: '8px', shown: false } });
-    panel_root.add(panel_confirm);
-
-    // Container de status
-    var statusBar = ui.Label('', { fontSize: '10px', color: '#888', margin: '4px' });
-    panel_root.add(statusBar);
-
     ui.root.add(panel_root);
-    Map.setOptions('SATELLITE');
 
-    // Inicializa com aba Periodo
-    showTab('period');
-    loadExistingFolders();
+    Map.setOptions('SATELLITE');
+    Map.centerObject(REGIONS);
+    Map.addLayer(REGIONS.style({ color: 'ffffff', fillColor: '00000000', width: 1 }), {}, 'Regions');
+
+    showTab('config');
 }
 
 function showTab(tabName) {
-    // Atualiza estilos das abas
-    ['period', 'regions', 'export'].forEach(function (t) {
-        var btn = abas['btn' + t.charAt(0).toUpperCase() + t.slice(1)];
-        if (t === tabName) {
-            btn.style = styles.tab_active;
-        } else {
-            btn.style = styles.tab_inactive;
-        }
+    ['Config', 'Period', 'Regions', 'Confirm'].forEach(function (t) {
+        var key = 'btn' + t;
+        if (abas[key]) abas[key].style = (t.toLowerCase() === tabName) ? styles.tab_active : styles.tab_inactive;
     });
-
     panel_body.clear();
-
-    if (tabName === 'period') {
-        buildPeriodTab();
-    } else if (tabName === 'regions') {
-        buildRegionsTab();
-    } else if (tabName === 'export') {
-        buildExportTab();
-    }
+    if (tabName === 'config') buildConfigTab();
+    else if (tabName === 'period') buildPeriodTab();
+    else if (tabName === 'regions') buildRegionsTab();
+    else if (tabName === 'confirm') buildConfirmTab();
 }
 
-// ─── ABA PERIODO ────────────────────────────────────────────────────────────
+// ─── TAB: CONFIG ────────────────────────────────────────────────────────────
 
-function buildPeriodTab() {
-    // Determina anos disponiveis
-    var today = new Date();
-    var maxYear = today.getFullYear();
-    var maxMonth = today.getMonth(); // Janeiro = 0 -> dezembro do ano passado eh o ultimo completo
-    if (maxMonth === 0) {
-        maxMonth = 12;
-        maxYear--;
-    } else {
-        // Mes atual - 1 eh o ultimo completo
-        maxMonth = maxMonth;
-        // Se ainda nao tem dados do mes atual, usa o anterior
-    }
-
-    if (maxMonth < 1) {
-        maxMonth = 12;
-        maxYear--;
-    }
-
-    var years = [];
-    for (var y = START_YEAR; y <= maxYear; y++) {
-        years.push({ label: '' + y, value: y });
-    }
-    years.reverse();
-
-    var months = [];
-    for (var m = maxMonth; m >= 1; m--) {
-        var mm = m < 10 ? '0' + m : '' + m;
-        months.push({ label: mm, value: m });
-    }
-
-    var ddYear = ui.Select({ items: years.map(function (y) { return y.label; }), value: '' + maxYear, style: styles.input });
-    var ddMonth = ui.Select({ items: months.map(function (m) { return m.label; }), value: months[0].label, style: styles.input });
-    var chkAnnual = ui.Checkbox({ label: L.lbl_annual, value: false, style: { margin: '4px' } });
-
-    currentYear = maxYear;
-    currentMonth = months[0].value;
-
-    var lblYear = ui.Label(L.lbl_year, styles.label);
-    var lblMonth = ui.Label(L.lbl_month, styles.label);
-
-    var rowYear = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row, widgets: [lblYear, ddYear] });
-    var rowMonth = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row, widgets: [lblMonth, ddMonth] });
-    var rowAnnual = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row, widgets: [chkAnnual] });
-
-    ddMonth.style().set('shown', true);
-    ddMonth.setDisabled(false);
-
-    chkAnnual.onChange(function (v) {
-        if (v) {
-            ddMonth.style().set('shown', false);
-            ddMonth.setDisabled(true);
-            currentMonth = null;
-        } else {
-            ddMonth.style().set('shown', true);
-            ddMonth.setDisabled(false);
-            currentMonth = parseInt(ddMonth.getValue(), 10);
-        }
-        refreshAll();
-    });
-
-    ddYear.onChange(function (v) {
-        currentYear = parseInt(v, 10);
-        refreshAll();
-    });
-
-    ddMonth.onChange(function (v) {
-        currentMonth = parseInt(v, 10);
-        if (!chkAnnual.getValue()) {
-            refreshAll();
-        }
-    });
-
-    var btnRefresh = ui.Button({ label: 'Carregar', style: styles.btn_blue, onClick: refreshAll });
-
+function buildConfigTab() {
     var card = ui.Panel({ layout: ui.Panel.Layout.flow('vertical'), style: styles.card });
-    card.add(rowYear).add(rowMonth).add(rowAnnual).add(btnRefresh);
-    panel_body.add(card);
 
-    // Carrega automaticamente na primeira vez
-    refreshAll();
+    // Campaign dropdown
+    card.add(ui.Label(L.lbl_campaign, styles.label));
+    var ddCampaign = ui.Select({ items: ['MONITOR_01', 'MONITOR_DEV'], value: 'MONITOR_01', style: styles.input });
+    card.add(ddCampaign);
+
+    // Sensor dropdown
+    card.add(ui.Label(L.lbl_sensor, styles.label));
+    var ddSensor = ui.Select({ items: ['sentinel2', 'landsat'], value: 'sentinel2', style: styles.input });
+    card.add(ddSensor);
+
+    // Mosaic dropdown
+    card.add(ui.Label(L.lbl_mosaic, styles.label));
+    var ddMosaic = ui.Select({ items: ['minnbr', 'minnbr_buffer', 'median', 'minndvi'], value: 'minnbr', style: styles.input });
+    card.add(ddMosaic);
+
+    // Periodicity dropdown
+    card.add(ui.Label(L.lbl_periodicity, styles.label));
+    var ddPeriodicity = ui.Select({ items: ['monthly', 'yearly'], value: 'monthly', style: styles.input });
+    card.add(ddPeriodicity);
+
+    // Version (auto-increment)
+    card.add(ui.Label(L.lbl_version, styles.label));
+    var txtVersion = ui.Textbox({ value: '01', style: { stretch: 'horizontal', margin: '2px', padding: '2px', width: '60px', fontSize: '12px' } });
+    card.add(txtVersion);
+
+    // Generated name display
+    card.add(ui.Label(L.lbl_gen_name, styles.label));
+    var lblGenName = ui.Label('', styles.gen_name);
+
+    function updateGenName() {
+        collectionBaseName = computeCollectionName(ddCampaign.getValue(), ddSensor.getValue(), ddMosaic.getValue(), ddPeriodicity.getValue(), txtVersion.getValue());
+        lblGenName.setValue(collectionBaseName);
+    }
+    ddCampaign.onChange(updateGenName);
+    ddSensor.onChange(updateGenName);
+    ddMosaic.onChange(updateGenName);
+    ddPeriodicity.onChange(updateGenName);
+    txtVersion.onChange(updateGenName);
+    updateGenName();
+    card.add(lblGenName);
+
+    // Action buttons
+    card.add(ui.Label('', { margin: '2px' }));
+    var btnRow = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row });
+    var btnNew = ui.Button({ label: L.lbl_new_collection, style: styles.btn_green, onClick: function () { onCreateNew(); } });
+    var btnAdd = ui.Button({ label: L.lbl_add_existing, style: styles.btn_blue, onClick: function () { onAddExisting(); } });
+    btnRow.add(btnNew).add(btnAdd);
+    card.add(btnRow);
+
+    panel_body.add(card);
 }
 
-function refreshAll() {
-    removeAllClassificationLayers();
-    selectedByRegion = {};
-    regionCheckboxes = {};
-    regionEyeButtons = {};
+function onCreateNew() {
+    var destFolder = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/FILTERED/' + collectionBaseName + '-ft00';
+    createAssetIfNotExists(destFolder);
+    print('Colecao criada: ' + destFolder);
+    showTab('period');
+}
 
-    currentPeriodLabel = getPeriodLabel(currentYear, currentMonth);
-    var statusLabel = ui.Label(L.lbl_mosaic_loading + ' ' + currentPeriodLabel, { fontSize: '10px', color: '#888' });
-
-    loadMosaic(currentYear, currentMonth);
-
-    panel_body.clear();
-    panel_body.add(statusLabel);
-
-    loadClassifications(currentYear, currentMonth, function (classifications) {
-        panel_body.clear();
-        buildPeriodTab(); // Reconstroi aba periodo com dados carregados
+function onAddExisting() {
+    // Find all ft00 collections matching this base name
+    loadExistingFilteredCollections(function (cols) {
+        var matching = cols.filter(function (c) {
+            return c.indexOf(collectionBaseName + '-ft00') !== -1;
+        });
+        if (matching.length === 0) {
+            print('Nenhuma colecao ft00 encontrada para ' + collectionBaseName + '. Use "Nova colecao".');
+            return;
+        }
+        print('Colecoes ft00 existentes: ' + matching.join(', '));
         showTab('period');
     });
 }
 
-// ─── ABA REGIOES ────────────────────────────────────────────────────────────
+// ─── TAB: PERIOD ─────────────────────────────────────────────────────────────
+
+function buildPeriodTab() {
+    var card = ui.Panel({ layout: ui.Panel.Layout.flow('vertical'), style: styles.card });
+
+    var today = new Date();
+    var maxY = today.getFullYear();
+    var maxM = today.getMonth();
+    if (maxM === 0) { maxM = 12; maxY--; }
+
+    var years = [];
+    for (var y = START_YEAR; y <= maxY; y++) years.push({ label: '' + y, value: y });
+    years.reverse();
+
+    var months = [];
+    for (var m = maxM; m >= 1; m--) { var mm = m < 10 ? '0' + m : '' + m; months.push({ label: mm, value: m }); }
+
+    var ddYear = ui.Select({ items: years.map(function (y) { return y.label; }), value: '' + maxY, style: styles.input });
+    var ddMonth = ui.Select({ items: months.map(function (m) { return m.label; }), value: months[0].label, style: styles.input });
+
+    currentYear = maxY;
+    currentMonth = months[0].value;
+    currentPeriodKey = getDateKey(currentYear, currentMonth);
+
+    var rowY = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row, widgets: [ui.Label(L.lbl_year, styles.label), ddYear] });
+    var rowM = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row, widgets: [ui.Label(L.lbl_month, styles.label), ddMonth] });
+
+    ddYear.onChange(function (v) { currentYear = parseInt(v, 10); refreshPeriod(); });
+    ddMonth.onChange(function (v) { currentMonth = parseInt(v, 10); refreshPeriod(); });
+
+    var btnLoad = ui.Button({ label: 'Carregar periodo', style: styles.btn_blue, onClick: refreshPeriod });
+
+    card.add(rowY).add(rowM).add(btnLoad);
+    panel_body.add(card);
+
+    refreshPeriod();
+}
+
+function refreshPeriod() {
+    currentPeriodKey = getDateKey(currentYear, currentMonth);
+    loadMosaic(currentYear, currentMonth);
+    Map.centerObject(REGIONS);
+    print('Periodo carregado: ' + currentPeriodKey);
+}
+
+// ─── TAB: REGIONS ────────────────────────────────────────────────────────────
 
 function buildRegionsTab() {
-    if (!currentYear) {
-        panel_body.add(ui.Label(L.lbl_no_data, { color: '#888' }));
-        return;
-    }
+    panel_body.add(ui.Label(L.lbl_class_loading + ' ' + currentPeriodKey, { fontSize: '10px', color: '#888' }));
 
-    panel_body.add(ui.Label(L.lbl_class_loading, { fontSize: '10px', color: '#888' }));
-
-    loadClassifications(currentYear, currentMonth, function (classifications) {
+    loadClassifications(currentYear, currentMonth, function (data) {
+        availableModels = {};
+        availableModels[currentPeriodKey] = data;
         panel_body.clear();
-        var regionNames = Object.keys(classifications).sort();
 
+        var regionNames = Object.keys(data).sort();
         if (regionNames.length === 0) {
-            panel_body.add(ui.Label(L.lbl_no_data + ' (' + currentPeriodLabel + ')', { color: '#d32f2f', fontSize: '12px', margin: '10px' }));
+            panel_body.add(ui.Label(L.lbl_no_data, { color: '#d32f2f', fontSize: '12px', margin: '10px' }));
             return;
         }
 
-        // Painel scrollavel
-        var scrollPanel = ui.Panel({ style: { maxHeight: '520px', margin: '2px', padding: '2px' } });
+        var scrollPanel = ui.Panel({ style: { margin: '2px', padding: '2px' } });
 
-        // Header com botoes globais
+        // Select all / clear all
         var headerRow = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: { margin: '2px', padding: '4px', stretch: 'horizontal' } });
-        var btnAll = ui.Button({ label: L.lbl_select_all, style: styles.btn_blue, onClick: function () { toggleAllRegions(true); } });
-        var btnNone = ui.Button({ label: L.lbl_deselect_all, style: styles.btn_gray, onClick: function () { toggleAllRegions(false); } });
+        var btnAll = ui.Button({ label: L.lbl_select_all, style: styles.btn_blue, onClick: function () { selectFirstEachRegion(data); } });
+        var btnNone = ui.Button({ label: L.lbl_deselect_all, style: styles.btn_gray, onClick: function () { clearAllRegions(); } });
         headerRow.add(btnAll).add(btnNone);
         scrollPanel.add(headerRow);
 
-        regionCheckboxes = {};
-        regionEyeButtons = {};
-        if (!selectedByRegion) selectedByRegion = {};
-
-        regionNames.forEach(function (regionName, regionIdx) {
-            var models = classifications[regionName].sort(function (a, b) {
-                return a.modelId.localeCompare(b.modelId);
-            });
-
-            // Card da regiao
+        regionNames.forEach(function (regionName, idx) {
+            var models = data[regionName].sort(function (a, b) { return a.modelId.localeCompare(b.modelId); });
             var card = ui.Panel({ layout: ui.Panel.Layout.flow('vertical'), style: styles.region_card });
 
-            // Header da regiao
-            var regionLabel = ui.Label('Region ' + regionName.replace('region', ''), styles.region_header);
-            card.add(regionLabel);
+            var displayName = regionName.replace('region', 'Region ');
+            card.add(ui.Label(displayName, { fontSize: '13px', fontWeight: 'bold', color: '#1a73e8', margin: '2px 0px' }));
 
-            regionCheckboxes[regionName] = [];
-            regionEyeButtons[regionName] = {};
-            if (!selectedByRegion[regionName]) selectedByRegion[regionName] = [];
+            // Auto-select first model for this region if not already set
+            if (!regionModelMap[regionName] && models.length > 0) {
+                regionModelMap[regionName] = models[0].modelId;
+            }
 
             models.forEach(function (m) {
+                var isSelected = (regionModelMap[regionName] === m.modelId);
+
                 var cb = ui.Checkbox({
                     label: m.modelId,
-                    value: selectedByRegion[regionName].indexOf(m.modelId) !== -1,
-                    style: { fontSize: '10px', margin: '1px 4px', stretch: 'horizontal' }
+                    value: isSelected,
+                    style: { fontSize: '10px', margin: '1px 4px' }
                 });
-                regionCheckboxes[regionName].push({ cb: cb, modelId: m.modelId });
-
                 cb.onChange(function (v) {
                     if (v) {
-                        if (selectedByRegion[regionName].indexOf(m.modelId) === -1) {
-                            selectedByRegion[regionName].push(m.modelId);
-                        }
+                        regionModelMap[regionName] = m.modelId;
+                        // Uncheck other checkboxes for this region
+                        updateRegionCheckboxes(regionName, m.modelId);
                     } else {
-                        var idx = selectedByRegion[regionName].indexOf(m.modelId);
-                        if (idx !== -1) selectedByRegion[regionName].splice(idx, 1);
-                        // Remove layer se estiver ativa
-                        removeClassificationLayer(regionName, m.modelId);
+                        if (regionModelMap[regionName] === m.modelId) {
+                            regionModelMap[regionName] = null;
+                        }
                     }
                 });
 
-                // Botao olho
-                var eyeActive = false;
+                // Store checkbox reference
+                if (!window['_cb_' + regionName]) window['_cb_' + regionName] = {};
+                window['_cb_' + regionName][m.modelId] = cb;
+
+                // Eye button
                 var eyeBtn = ui.Button({
                     label: ' o ',
                     style: styles.btn_gray,
                     onClick: function () {
-                        eyeActive = !eyeActive;
-                        if (eyeActive) {
-                            addClassificationLayer(regionName, m);
+                        var key = regionName + '_' + m.modelId;
+                        if (!regionEyeState[key]) regionEyeState[key] = { active: false };
+                        regionEyeState[key].active = !regionEyeState[key].active;
+                        if (regionEyeState[key].active) {
+                            regionEyeState[key].color = m.color;
+                            var img = ee.Image(m.assetId).select(0).divide(10).toByte();
+                            updateManagedLayer('class_' + key, img.selfMask(), { min: 0, max: 100, palette: ['#ffcccc', '#ff6666', '#cc0000', '#660000'] }, m.modelId + ' | ' + regionName);
                             this.style = styles.btn_blue;
-                            this.setLabel(' - ');
                         } else {
-                            removeClassificationLayer(regionName, m.modelId);
+                            if (managedLayers['class_' + key]) {
+                                Map.layers().remove(managedLayers['class_' + key]);
+                                delete managedLayers['class_' + key];
+                            }
                             this.style = styles.btn_gray;
-                            this.setLabel(' o ');
                         }
                     }
                 });
-                eyeBtn.style = styles.btn_gray;
-                regionEyeButtons[regionName][m.modelId] = { btn: eyeBtn, active: false, model: m };
 
                 var row = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.model_row, widgets: [cb, eyeBtn] });
                 card.add(row);
@@ -752,279 +672,154 @@ function buildRegionsTab() {
     });
 }
 
-function toggleAllRegions(select) {
-    Object.keys(regionCheckboxes).forEach(function (regionName) {
-        regionCheckboxes[regionName].forEach(function (item) {
-            item.cb.setValue(select);
-        });
-    });
-}
-
-function addClassificationLayer(regionName, model) {
-    var layerId = 'class_' + regionName + '_' + model.modelId;
-    var img = ee.Image(model.assetId);
-
-    // Carrega a banda de probabilidade (banda 0) e converte para 0-100
-    var probBand = img.select(0).divide(10).toByte();
-
-    updateManagedLayer(layerId, probBand.selfMask(), {
-        min: 0, max: 100,
-        palette: ['#ffcccc', '#ff6666', '#cc0000', '#660000']
-    }, model.modelId + ' | ' + regionName);
-}
-
-function removeClassificationLayer(regionName, modelId) {
-    var layerId = 'class_' + regionName + '_' + modelId;
-    removeManagedLayer(layerId);
-
-    if (regionEyeButtons[regionName] && regionEyeButtons[regionName][modelId]) {
-        regionEyeButtons[regionName][modelId].active = false;
-        regionEyeButtons[regionName][modelId].btn.style = styles.btn_gray;
-        regionEyeButtons[regionName][modelId].btn.setLabel(' o ');
-    }
-}
-
-// ─── ABA EXPORTAR ───────────────────────────────────────────────────────────
-
-function buildExportTab() {
-    var card = ui.Panel({ layout: ui.Panel.Layout.flow('vertical'), style: styles.card });
-
-    card.add(ui.Label(L.lbl_folder_name, styles.label));
-
-    // Campo de texto para nome da pasta
-    var txtFolder = ui.Textbox({
-        placeholder: L.lbl_folder_placeholder,
-        value: '',
-        style: { stretch: 'horizontal', margin: '2px', padding: '4px', fontSize: '12px' }
-    });
-    card.add(txtFolder);
-
-    // Sugestoes de pastas existentes
-    card.add(ui.Label(L.lbl_folder_existing, { fontSize: '10px', color: '#888', margin: '4px 2px 0px 2px' }));
-
-    var ddExisting = ui.Select({
-        items: [],
-        value: null,
-        style: { stretch: 'horizontal', margin: '2px' },
-        disabled: true
-    });
-
-    loadExistingFoldersDropdown(ddExisting);
-    ddExisting.onChange(function (v) {
-        if (v && v !== '') {
-            txtFolder.setValue(v);
+function selectFirstEachRegion(data) {
+    Object.keys(data).forEach(function (regionName) {
+        if (data[regionName].length > 0) {
+            regionModelMap[regionName] = data[regionName][0].modelId;
         }
     });
-    card.add(ddExisting);
+    buildRegionsTab();
+}
 
-    // Botao Exportar
-    var btnExport = ui.Button({
-        label: L.lbl_btn_export,
-        style: styles.btn_green,
-        onClick: function () {
-            var folderName = txtFolder.getValue().trim();
-            if (!folderName) {
-                print(L.lbl_err_folder);
-                return;
-            }
-            showConfirmation(folderName);
-        }
+function clearAllRegions() {
+    regionModelMap = {};
+    buildRegionsTab();
+}
+
+function updateRegionCheckboxes(regionName, selectedModelId) {
+    var cbs = window['_cb_' + regionName];
+    if (!cbs) return;
+    Object.keys(cbs).forEach(function (mid) {
+        if (mid !== selectedModelId) cbs[mid].setValue(false);
     });
-    card.add(btnExport);
-
-    panel_body.add(card);
 }
 
-// ─── CARREGAR PASTAS EXISTENTES ─────────────────────────────────────────────
+// ─── TAB: CONFIRM ────────────────────────────────────────────────────────────
 
-function loadExistingFolders() {
-    // Tenta listar pastas em M7_FILTERED
-    try {
-        ee.data.listAssets(M7_BASE, {}, function (result) {
-            if (result && result.assets) {
-                var folders = result.assets
-                    .filter(function (a) { return a.type === 'IMAGE_COLLECTION'; })
-                    .map(function (a) { return a.id.split('/').pop(); })
-                    .sort();
-                // Armazena para uso futuro
-                _m7ExistingFolders = folders;
-            } else {
-                _m7ExistingFolders = [];
-            }
-        });
-    } catch (e) {
-        _m7ExistingFolders = [];
-    }
-}
-
-function loadExistingFoldersDropdown(dd) {
-    var folders = _m7ExistingFolders || [];
-    if (folders.length === 0) {
-        dd.items().reset([L.lbl_no_folder]);
-        dd.setDisabled(true);
-    } else {
-        dd.items().reset(folders);
-        dd.setDisabled(false);
-    }
-}
-
-// ─── TELA DE CONFIRMACAO ───────────────────────────────────────────────────
-
-function showConfirmation(folderName) {
-    panel_body.style().set('shown', false);
-    panel_confirm.clear();
-    panel_confirm.style().set('shown', true);
-
+function buildConfirmTab() {
     var card = ui.Panel({ layout: ui.Panel.Layout.flow('vertical'), style: styles.card });
+    var fullName = collectionBaseName + '-ft00';
 
-    // Titulo
-    card.add(ui.Label(L.lbl_confirm_title, { fontSize: '15px', fontWeight: 'bold', color: '#333', margin: '4px' }));
-    card.add(ui.Label(L.lbl_confirm_folder + ': ' + folderName, { fontSize: '12px', color: '#1a73e8', fontWeight: 'bold', margin: '4px' }));
+    card.add(ui.Label(L.lbl_confirm_title, { fontSize: '14px', fontWeight: 'bold', color: '#333', margin: '4px' }));
+    card.add(ui.Label(L.lbl_collection_name + ': ' + fullName, { fontSize: '12px', color: '#1a73e8', fontWeight: 'bold', fontFamily: 'monospace', margin: '4px' }));
+    card.add(ui.Label(L.lbl_periodicity + ': ' + currentPeriodKey, { fontSize: '11px', margin: '4px' }));
 
-    var hasSelection = false;
-    var hasMulti = false;
-    var hasEmpty = false;
+    var regionNames = Object.keys(regionModelMap).sort();
+    var hasAll = true;
 
-    // Lista regioes e status
-    var regionNames = Object.keys(selectedByRegion).sort();
+    regionNames.forEach(function (r) {
+        var m = regionModelMap[r];
+        var status = m ? L.lbl_status_one + ' (' + m + ')' : L.lbl_status_none;
+        var style = m ? styles.status_ok : styles.status_err;
+        if (!m) hasAll = false;
+        card.add(ui.Label('  ' + r.replace('region', 'Region ') + ': ' + status, style));
+    });
+
     if (regionNames.length === 0) {
         card.add(ui.Label(L.lbl_no_selection, styles.status_err));
-    } else {
-        regionNames.forEach(function (regionName) {
-            var selected = selectedByRegion[regionName] || [];
-            var count = selected.length;
-            var statusLabel;
-            var statusStyle;
-
-            if (count === 0) {
-                statusLabel = L.lbl_status_none;
-                statusStyle = styles.status_err;
-                hasEmpty = true;
-            } else if (count === 1) {
-                statusLabel = L.lbl_status_one;
-                statusStyle = styles.status_ok;
-                hasSelection = true;
-            } else {
-                statusLabel = count + ' ' + L.lbl_status_multi;
-                statusStyle = styles.status_warn;
-                hasSelection = true;
-                hasMulti = true;
-            }
-
-            var row = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: styles.row });
-            var label = ui.Label('Region ' + regionName.replace('region', '') + ': ' + selected.join(', '), { fontSize: '11px', margin: '2px' });
-            var status = ui.Label(statusLabel, statusStyle);
-            row.add(label).add(status);
-            card.add(row);
-        });
     }
+
+    // Metadata preview
+    var metadataStr = 'region_models: ' + regionNames.map(function (r) { return r + ':' + (regionModelMap[r] || '?'); }).join(', ');
+    card.add(ui.Label(metadataStr, { fontSize: '9px', color: '#888', margin: '4px', fontFamily: 'monospace' }));
 
     card.add(ui.Label('', { margin: '4px' }));
 
-    // Botoes
-    var btnRow = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: { stretch: 'horizontal', margin: '8px 0px' } });
+    var btnRow = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: { stretch: 'horizontal' } });
+    var btnCancel = ui.Button({ label: L.lbl_confirm_cancel, style: styles.btn_gray, onClick: function () { showTab('regions'); } });
+    var btnExport = ui.Button({ label: L.lbl_btn_export, style: styles.btn_green, onClick: function () { executeExport(); } });
 
-    var btnCancel = ui.Button({
-        label: L.lbl_confirm_cancel,
-        style: styles.btn_gray,
-        onClick: function () {
-            panel_confirm.style().set('shown', false);
-            panel_body.style().set('shown', true);
-        }
-    });
+    if (!hasAll || regionNames.length === 0) btnExport.setDisabled(true);
 
-    var btnConfirm = ui.Button({
-        label: L.lbl_confirm_ok,
-        style: styles.btn_green,
-        onClick: function () {
-            executeExport(folderName);
-        }
-    });
+    btnRow.add(btnCancel).add(btnExport);
+    card.add(btnRow);
+    panel_body.add(card);
+}
 
-    if (!hasSelection) {
-        btnConfirm.setDisabled(true);
+// ─── EXPORT ──────────────────────────────────────────────────────────────────
+
+function executeExport() {
+    panel_body.clear();
+    panel_body.add(ui.Label(L.lbl_exporting, { fontSize: '12px', color: '#1a73e8', margin: '8px' }));
+
+    var fullName = collectionBaseName + '-ft00';
+    var destPath = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/FILTERED/' + fullName;
+    createAssetIfNotExists(destPath);
+
+    // Build national image: for each region, paint the selected model's classification
+    var regionNames = Object.keys(regionModelMap).filter(function (r) { return !!regionModelMap[r]; });
+
+    if (regionNames.length === 0) {
+        print('Nenhuma regiao configurada.');
+        return;
     }
 
-    btnRow.add(btnCancel).add(btnConfirm);
-    card.add(btnRow);
-
-    panel_confirm.add(card);
-}
-
-// ─── EXECUTAR EXPORT ───────────────────────────────────────────────────────
-
-function executeExport(folderName) {
-    panel_confirm.clear();
-    panel_confirm.add(ui.Label(L.lbl_exporting, { fontSize: '12px', color: '#1a73e8', margin: '8px' }));
-
-    var targetFolder = M7_BASE + '/' + folderName;
-    createAssetIfNotExists(targetFolder);
-
-    var totalJobs = 0;
-    var regionNames = Object.keys(selectedByRegion).sort();
+    var nationalImg = ee.Image(0).rename('probability');
+    var doyImg = ee.Image(0).rename('dayOfYear');
+    var modelList = [];
 
     regionNames.forEach(function (regionName) {
-        var selected = selectedByRegion[regionName] || [];
-        if (selected.length === 0) return;
+        var modelId = regionModelMap[regionName];
+        modelList.push(regionName + ':' + modelId);
 
-        // Para cada selecao, copia o asset para a pasta destino
-        selected.forEach(function (modelId) {
-            // Encontra o assetId correspondente
-            var assetId = null;
-            var imgName = null;
-            if (regionEyeButtons[regionName] && regionEyeButtons[regionName][modelId]) {
-                var m = regionEyeButtons[regionName][modelId].model;
-                assetId = m.assetId;
-                imgName = m.imgName;
-            }
-
-            if (!assetId) return;
-
-            var destAsset = targetFolder + '/' + imgName;
-
-            try {
-                // Verifica se ja existe
-                ee.data.getAsset(destAsset);
-                print('  Ja existe: ' + destAsset);
-            } catch (e) {
-                totalJobs++;
-                print('  Exportando: ' + assetId + ' -> ' + destAsset);
-
-                // Carrega a imagem e re-exporta para a nova pasta
-                var img = ee.Image(assetId);
-                Export.image.toAsset({
-                    image: img,
-                    description: imgName.replace(/\./g, '_').substring(0, 80),
-                    assetId: destAsset,
-                    pyramidingPolicy: 'mode',
-                    scale: SCALE,
-                    maxPixels: 1e13,
-                });
-            }
-        });
-    });
-
-    panel_confirm.clear();
-    panel_confirm.add(ui.Label(L.lbl_done + ' (' + totalJobs + ' tarefas)', { fontSize: '13px', color: '#0f9d58', fontWeight: 'bold', margin: '8px' }));
-
-    var btnBack = ui.Button({
-        label: '<- Voltar',
-        style: styles.btn_blue,
-        onClick: function () {
-            panel_confirm.style().set('shown', false);
-            panel_body.style().set('shown', true);
+        // Find the asset for this region + model + period
+        var modelAssets = availableModels[currentPeriodKey] && availableModels[currentPeriodKey][regionName];
+        if (!modelAssets) return;
+        var modelAsset = null;
+        for (var i = 0; i < modelAssets.length; i++) {
+            if (modelAssets[i].modelId === modelId) { modelAsset = modelAssets[i]; break; }
         }
-    });
-    panel_confirm.add(btnBack);
+        if (!modelAsset) return;
 
-    // Atualiza pastas existentes
-    loadExistingFolders();
+        var regionGeom = REGIONS.filter(ee.Filter.eq(REGION_PROPERTY, regionName));
+        var regionMask = ee.Image(0).paint(regionGeom, 1);
+
+        var srcImg = ee.Image(modelAsset.assetId);
+        var probBand = srcImg.select(0);     // probability
+        var doyBand = srcImg.select(1);       // dayOfYear
+
+        nationalImg = nationalImg.where(regionMask.eq(1), probBand);
+        doyImg = doyImg.where(regionMask.eq(1), doyBand);
+    });
+
+    nationalImg = nationalImg.addBands(doyImg).selfMask();
+    nationalImg = nationalImg.set({
+        'region_models': modelList.join(','),
+        'campaign': 'MONITOR_01',
+        'filter_stage': 'ft00',
+        'period': currentPeriodKey,
+    });
+
+    var imgName = currentPeriodKey;
+    var destAsset = destPath + '/' + imgName;
+
+    // Plot
+    Map.addLayer(nationalImg.select('probability').selfMask(), { min: 0, max: 1000, palette: ['#ffcccc', '#ff0000', '#660000'] }, 'National ' + currentPeriodKey, false);
+
+    try {
+        ee.data.getAsset(destAsset);
+        print('Ja existe: ' + destAsset);
+    } catch (e) {
+        print('Exportando: ' + destAsset);
+        Export.image.toAsset({
+            image: nationalImg.toInt16(),
+            description: imgName.replace(/_/g, ''),
+            assetId: destAsset,
+            pyramidingPolicy: 'mode',
+            region: REGIONS.geometry().bounds(),
+            scale: SCALE,
+            maxPixels: 1e13,
+        });
+    }
+
+    panel_body.clear();
+    panel_body.add(ui.Label(L.lbl_done, { fontSize: '13px', color: '#0f9d58', fontWeight: 'bold', margin: '8px' }));
+    panel_body.add(ui.Label('Destino: FILTERED/' + fullName + '/' + imgName, { fontSize: '10px', color: '#555', fontFamily: 'monospace', margin: '2px' }));
+    panel_body.add(ui.Label('Metadata: region_models=' + modelList.join(','), { fontSize: '9px', color: '#888', fontFamily: 'monospace', margin: '2px' }));
+    panel_body.add(ui.Button({ label: '<- Voltar', style: styles.btn_blue, onClick: function () { showTab('config'); } }));
 }
 
-// ─── INICIALIZACAO ─────────────────────────────────────────────────────────
+// ─── INIT ────────────────────────────────────────────────────────────────────
 
 buildUI();
-Map.centerObject(current_regiones);
-Map.addLayer(current_regiones.style({ color: 'ffffff', fillColor: '00000000', width: 1 }), {}, 'Regions');
-print('M7_00 — Selecao e Merge carregado.');
-print('Periodo: ' + currentPeriodLabel);
+print('M7_00 — Selecao e Export 2.0 carregado.');

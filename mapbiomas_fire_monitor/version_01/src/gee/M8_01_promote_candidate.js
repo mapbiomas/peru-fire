@@ -3,209 +3,94 @@ MAPBIOMAS FUEGO - MONITOR_01 - M8_01
 Promover a Candidato
 
 📅 DATA: julho 2026
-🏷️ VERSAO: 1.0
-👥 EQUIPE: MapBiomas Fuego - IPAM
+🏷️ VERSAO: 2.0
 
 📌 O QUE FAZ:
-1. Seleciona fase/versao do M7
-2. Copia versao final (maior sufixo _m7_0N) para M8_CANDIDATES/
-3. Calcula area queimada por regiao (ha)
-4. Registra metadata de proveniencia
-
-🔧 CONFIGURACAO:
-   Altere FASE para indicar qual fase M7 promover.
+1. Copia ultima etapa de filtro (-ft04) para CANDIDATES/
+2. Remove sufixo -ft04 do nome da collection
+3. Calcula area queimada (ha) por periodo
 ============================================================ */
 
-// ─── CONFIGURACAO ───────────────────────────────────────────────────────────
-var CAMPAIGN = 'MONITOR_01';
 var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
-var M7_BASE = CATALOG_ROOT + '/' + CAMPAIGN + '/LIBRARY_CLASSIFICATIONS/M7_FILTERED';
-var M8_CANDIDATES = CATALOG_ROOT + '/' + CAMPAIGN + '/LIBRARY_CLASSIFICATIONS/M8_CANDIDATES';
-var SCALE = 10;
 var REGIONS = ee.FeatureCollection('projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1');
-var REGION_PROPERTY = 'region_nam';
-var GEOMETRY = REGIONS.geometry().bounds();
+var SCALE = 10;
 
-// ═══ EDITE AQUI ═══
-var FASE = 'fase_agosto_v1';  // Nome da fase M7 a promover
-// ═══════════════════
+// ═══ CONFIG ═══
+var COLLECTION_BASE = 'monitor_01-sentinel2_minnbr_monthly_01';
+var STAGE_SRC = '-ft04';
+// ═══════════════
 
-var PASTA_ENTRADA = M7_BASE + '/' + FASE;
+var PATH_FILTERED = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/FILTERED/';
+var PATH_CANDIDATES = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/CANDIDATES/';
 
-// ─── FUNCOES ─────────────────────────────────────────────────────────────────
+var COLL_IN = PATH_FILTERED + COLLECTION_BASE + STAGE_SRC;
+var COLL_OUT = PATH_CANDIDATES + COLLECTION_BASE;
 
 function createAssetIfNotExists(assetId, type) {
     type = type || 'ImageCollection';
     try { ee.data.getAsset(assetId); } catch (e) { ee.data.createAsset({ type: type }, assetId); }
 }
 
-function _shortName(fullId) { return fullId.split('/').pop(); }
+print('=== M8_01 — Promote Candidate ===');
+print('Source:  ' + COLL_IN);
+print('Target:  ' + COLL_OUT);
 
-function _extractRegion(name) {
-    var parts = name.split('_');
-    for (var i = 0; i < parts.length; i++) {
-        if (parts[i].indexOf('region') === 0) return parts[i];
-    }
-    return null;
-}
+createAssetIfNotExists(PATH_CANDIDATES);
+createAssetIfNotExists(COLL_OUT);
 
-// ─── ENCONTRAR ULTIMA ETAPA DE FILTRO ───────────────────────────────────────
+var images = ee.data.listAssets(COLL_IN).assets.filter(function (a) { return a.type === 'IMAGE'; });
 
-function findLatestStage(images) {
-    // Agrupa por regiao+periodo (base) e encontra maior sufixo _m7_0N
-    var baseMap = {};
+if (images.length === 0) {
+    print('Nenhuma imagem em ' + COLL_IN);
+} else {
+    Map.addLayer(REGIONS.style({ color: 'ffffff', fillColor: '00000000', width: 1 }), {}, 'Regions');
+    Map.centerObject(REGIONS);
+
+    var total = 0;
+    var areaImage = ee.Image.pixelArea().divide(10000);
+
     images.forEach(function (img) {
-        var name = img.name;
-        var match = name.match(/(.*?)(_m7_\d+)?(\.tif)?$/);
-        if (!match) return;
+        var name = img.id.split('/').pop();
+        var eeImg = ee.Image(img.id);
+        var destAsset = COLL_OUT + '/' + name;
 
-        var baseName = match[1];
-        var suffix = match[2] || '_m7_00';
-
-        if (!baseMap[baseName]) {
-            baseMap[baseName] = { name: img.name, suffixNum: 0, assetId: img.id };
-        }
-
-        var num = parseInt(suffix.replace('_m7_', ''), 10) || 0;
-        if (num > baseMap[baseName].suffixNum) {
-            baseMap[baseName] = { name: img.name, suffixNum: num, assetId: img.id };
-        }
-    });
-
-    return baseMap;
-}
-
-function _extractPeriod(name) {
-    // Extrai YYYY ou YYYY_MM do nome
-    var parts = name.split('_');
-    for (var i = 0; i < parts.length; i++) {
-        if (/^\d{4}$/.test(parts[i]) && parts[i].length === 4) {
-            if (i + 1 < parts.length && /^\d{2}$/.test(parts[i + 1]) && parts[i + 1].length === 2) {
-                return parts[i] + '_' + parts[i + 1];
-            }
-            return parts[i];
-        }
-    }
-    return 'unknown';
-}
-
-// ─── CALCULAR AREA QUEIMADA ─────────────────────────────────────────────────
-
-function calcBurnedArea(image, regionName) {
-    var regionGeom = REGIONS.filter(ee.Filter.eq(REGION_PROPERTY, regionName));
-    var areaImage = ee.Image.pixelArea().divide(10000); // m2 -> ha
-
-    var stats = image.selfMask()
-        .gt(0)
-        .selfMask()
-        .multiply(areaImage)
-        .reduceRegion({
+        // Area queimada (ha)
+        var stats = eeImg.select('probability').gt(0).selfMask().multiply(areaImage).reduceRegion({
             reducer: ee.Reducer.sum(),
-            geometry: regionGeom.geometry(),
+            geometry: REGIONS.geometry(),
             scale: SCALE,
             maxPixels: 1e13,
         });
+        var areaHa = 0;
+        var k = stats.keys().get(0);
+        if (k) areaHa = ee.Number(stats.get(k)).getInfo() || 0;
 
-    return ee.Number(stats.get(ee.String(stats.keys().get(0))));
-}
-
-// ─── EXECUTAR ───────────────────────────────────────────────────────────────
-
-print('=== M8_01 — Promover a Candidato ===');
-print('Fase M7: ' + FASE);
-print('');
-
-createAssetIfNotExists(M8_CANDIDATES);
-
-var allImages = ee.data.listAssets(PASTA_ENTRADA).assets
-    .filter(function (a) { return a.type === 'IMAGE'; })
-    .map(function (a) { return { id: a.id, name: _shortName(a.id) }; });
-
-print('Total de assets na fase: ' + allImages.length);
-
-// Encontra ultima etapa de cada base
-var latest = findLatestStage(allImages);
-var latestList = Object.keys(latest).map(function (k) { return latest[k]; });
-
-print('Assets na ultima etapa: ' + latestList.length);
-
-if (latestList.length === 0) {
-    print('Nenhum asset encontrado.');
-} else {
-    var total = 0;
-    var statsCsv = ['model_id,region,period,area_queimada_ha,etapa_filtro,data_promocao,fase_origem'];
-
-    Map.addLayer(REGIONS.style({ color: 'ffffff', fillColor: '00000000', width: 1 }), {}, 'Regioes');
-    Map.centerObject(REGIONS);
-
-    latestList.forEach(function (item) {
-        var name = item.name;
-        var region = _extractRegion(name);
-        var period = _extractPeriod(name);
-
-        // Nome do candidato: remove sufixo _m7_0N, adiciona _candidate
-        var candidateName = name.replace(/_m7_\d+/, '') + '_candidate';
-        var destAsset = M8_CANDIDATES + '/' + candidateName;
-
-        var eeImg = ee.Image(item.assetId);
-
-        // Calcula area queimada
-        var areaHa = calcBurnedArea(eeImg, region);
-
-        areaHa.evaluate(function (val) {
-            areaHa = val || 0;
+        var promotedImg = eeImg.set({
+            'burned_area_ha': Math.round(areaHa),
+            'promotion_date': new Date().toISOString().split('T')[0],
+            'source_collection': COLL_IN,
         });
 
-        // Plota candidato no mapa
-        Map.addLayer(eeImg.selfMask(), { min: 0, max: 1, palette: ['3355ff'] }, candidateName + ' | CANDIDATO', false);
+        Map.addLayer(eeImg.select('probability').selfMask(), { min: 0, max: 1000, palette: ['3355ff'] }, 'CANDIDATE ' + name, false);
 
-        // Exporta copia para M8_CANDIDATES
         try {
             ee.data.getAsset(destAsset);
-            print('  Ja existe: ' + candidateName);
+            print('  OK: ' + name + ' | area: ' + areaHa.toFixed(0) + ' ha');
         } catch (e) {
             total++;
-            print('  Promovendo: ' + candidateName);
-
-            var metadata = {
-                'source_fase': FASE,
-                'source_asset': item.assetId,
-                'filtro_etapa': 'm7_0' + item.suffixNum,
-                'promotion_date': new Date().toISOString().split('T')[0],
-                'campaign': CAMPAIGN,
-            };
-
-            var exportedImg = eeImg.set(metadata).toByte();
-
+            print('  Promote: ' + name + ' | area: ' + areaHa.toFixed(0) + ' ha');
             Export.image.toAsset({
-                image: exportedImg,
-                description: candidateName.substring(0, 80),
+                image: promotedImg.toInt16(),
+                description: ('cand_' + name).substring(0, 80).replace(/[^a-zA-Z0-9_]/g, '_'),
                 assetId: destAsset,
                 pyramidingPolicy: 'mode',
-                region: GEOMETRY,
+                region: REGIONS.geometry().bounds(),
                 scale: SCALE,
                 maxPixels: 1e13,
             });
         }
-
-        // Acumula estatisticas
-        var modelId = name.split('_' + region)[0] || 'unknown';
-        statsCsv.push([modelId, region, period, 'PENDING', 'm7_0' + item.suffixNum, new Date().toISOString().split('T')[0], FASE].join(','));
     });
 
-    // Exibe CSV de estatisticas no console (para copiar para Google Sheets)
-    print('');
-    print('--- CSV de Area Queimada (copie para Google Sheets / Looker Studio) ---');
-    print(statsCsv.join('\n'));
-
-    if (total === 0) {
-        print('');
-        print('Todos os candidatos ja existem.');
-    } else {
-        print('');
-        print('Total de tarefas de export: ' + total);
-    }
+    print('Total export: ' + total);
 }
-
-print('');
-print('=== M8_01 concluido ===');
+print('=== M8_01 done ===');

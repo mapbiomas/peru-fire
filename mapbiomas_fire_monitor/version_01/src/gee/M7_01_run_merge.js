@@ -1,231 +1,86 @@
 /* ============================================================
 MAPBIOMAS FUEGO - MONITOR_01 - M7_01
-Merge de Classificacoes
- 
+Merge de Classificacoes (pixel-level union)
+
 📅 DATA: julho 2026
-🏷️ VERSAO: 1.0
-👥 EQUIPE: MapBiomas Fuego - IPAM
-   Wallace Silva, Vera Arruda
+🏷️ VERSAO: 2.0
 
 📌 O QUE FAZ:
-1. Carrega imagens de uma pasta do M7_FILTERED
-2. Para cada regiao com 2+ classificacoes, faz merge pixel-level
-3. Salva resultado com sufixo _m7_01
-4. Plota antes (versoes originais) e depois (unificado) no mapa
-
-🔧 CONFIGURACAO:
-   Altere as variaveis abaixo conforme necessario.
+1. Carrega imagens nacionais da collection ft00
+2. Se houver 2+ fontes para mesma regiao, faz merge onde(img.gt(0), img)
+3. Carrega metadata region_models para orientar o merge
+4. Exporta para -ft01 com mesma estrutura de periodos
 ============================================================ */
 
-// ─── CONFIGURACAO ───────────────────────────────────────────────────────────
-var CAMPAIGN = 'MONITOR_01';
 var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
-var REGIONAL_FOLDER = CATALOG_ROOT + '/' + CAMPAIGN + '/LIBRARY_CLASSIFICATIONS/REGIONAL';
-var M7_BASE = CATALOG_ROOT + '/' + CAMPAIGN + '/LIBRARY_CLASSIFICATIONS/M7_FILTERED';
-var SCALE = 10;
 var REGIONS = ee.FeatureCollection('projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1');
-var REGION_PROPERTY = 'region_nam';
+var SCALE = 10;
 
-// ═══ EDITE AQUI ═══
-var FASE = 'fase_agosto_v1';  // Nome da pasta em M7_FILTERED
-// ═══════════════════
+// ═══ CONFIG ═══
+var COLLECTION_BASE = 'monitor_01-sentinel2_minnbr_monthly_01';
+var STAGE_IN = '-ft00';
+var STAGE_OUT = '-ft01';
+// ═══════════════
 
-var PASTA_ENTRADA = M7_BASE + '/' + FASE;
-var GEOMETRY = REGIONS.geometry().bounds();
-
-// ─── PALETA DE CLASSIFICACAO ───────────────────────────────────────────────
-var CLASS_PALETTE = [
-    '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
-    '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
-    '#469990', '#dcbeff', '#9A6324', '#fffac8', '#800000',
-];
-
-// ─── FUNCOES ─────────────────────────────────────────────────────────────────
+var PATH_FILTERED = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/FILTERED/';
+var COLL_IN = PATH_FILTERED + COLLECTION_BASE + STAGE_IN;
+var COLL_OUT = PATH_FILTERED + COLLECTION_BASE + STAGE_OUT;
 
 function createAssetIfNotExists(assetId, type) {
     type = type || 'ImageCollection';
-    try {
-        ee.data.getAsset(assetId);
-    } catch (e) {
-        ee.data.createAsset({ type: type }, assetId);
-    }
+    try { ee.data.getAsset(assetId); } catch (e) { ee.data.createAsset({ type: type }, assetId); }
 }
 
-function _shortName(fullId) {
-    return fullId.split('/').pop();
-}
+print('=== M7_01 — Merge ===');
+print('Collection IN:  ' + COLL_IN);
+print('Collection OUT: ' + COLL_OUT);
 
-function _extractRegion(name) {
-    var parts = name.split('_');
-    for (var i = 0; i < parts.length; i++) {
-        if (parts[i].indexOf('region') === 0) return parts[i];
-    }
-    return null;
-}
+createAssetIfNotExists(COLL_OUT);
 
-function _removeSuffix(name) {
-    // Remove sufixos _m7_0N se existirem
-    return name.replace(/_m7_\d+$/, '');
-}
+var images = ee.data.listAssets(COLL_IN).assets.filter(function (a) { return a.type === 'IMAGE'; });
 
-// ─── LISTAR IMAGENS ──────────────────────────────────────────────────────────
-
-function listImages(folderPath) {
-    var assets = ee.data.listAssets(folderPath).assets;
-    return assets.filter(function (a) {
-        return a.type === 'IMAGE';
-    }).map(function (a) {
-        var name = _shortName(a.id);
-        var region = _extractRegion(name);
-        return {
-            id: a.id,
-            name: name,
-            region: region,
-        };
-    });
-}
-
-// ─── AGRUPAR POR REGIAO ─────────────────────────────────────────────────────
-
-function groupByRegion(images) {
-    var groups = {};
-    images.forEach(function (img) {
-        var region = img.region;
-        if (!region) return;
-        // Ignora imagens que ja tem sufixo de filtro
-        if (img.name.indexOf('_m7_') !== -1) return;
-        if (!groups[region]) groups[region] = [];
-        groups[region].push(img);
-    });
-    return groups;
-}
-
-// ─── MERGE ──────────────────────────────────────────────────────────────────
-
-function mergeImages(imageList, region) {
-    var base = ee.Image(0).rename('b1');
-    imageList.forEach(function (img) {
-        var eeImg = ee.Image(img.id);
-        // Preserva pixels queimados (> 0) de cada versao
-        base = base.where(eeImg.gt(0), eeImg);
-    });
-    base = base.selfMask();
-
-    var firstImg = ee.Image(imageList[0].id);
-    base = base.copyProperties(firstImg);
-
-    var outName = 'merged_' + region + '_' + _removeSuffix(_shortName(imageList[0].id));
-    return { image: base, outName: outName };
-}
-
-// ─── PLOT ───────────────────────────────────────────────────────────────────
-
-function plotResults(groups) {
-    Map.addLayer(REGIONS.style({ color: 'ffffff', fillColor: '00000000', width: 1 }), {}, 'Regioes');
+if (images.length === 0) {
+    print('Nenhuma imagem encontrada em ' + COLL_IN);
+} else {
+    Map.addLayer(REGIONS.style({ color: 'ffffff', fillColor: '00000000', width: 1 }), {}, 'Regions');
     Map.centerObject(REGIONS);
 
-    var layerIdx = 0;
-    Object.keys(groups).sort().forEach(function (region) {
-        var imgs = groups[region];
-        if (imgs.length < 2) return;
-
-        print('--- ' + region + ' (' + imgs.length + ' versoes) ---');
-
-        // Plota versoes originais (tons de cinza/laranja)
-        imgs.forEach(function (img, i) {
-            var label = region + ' | original ' + (i + 1) + ': ' + img.name;
-            Map.addLayer(ee.Image(img.id).selfMask(), {
-                min: 0, max: 1,
-                palette: [i === 0 ? '#555555' : '#ffaa00']
-            }, label, false);
-            print('  Original ' + (i + 1) + ': ' + img.name);
-        });
-
-        // Faz o merge
-        var merged = mergeImages(imgs, region);
-        Map.addLayer(merged.image, { min: 0, max: 1, palette: ['ff0000'] }, region + ' | MERGEADO', false);
-        print('  Mergeado: ' + merged.outName);
-
-        layerIdx++;
-    });
-
-    // Legenda
-    var legend = ui.Panel({
-        style: { position: 'bottom-left', padding: '8px', backgroundColor: 'rgba(255,255,255,0.9)' }
-    });
-    legend.add(ui.Label('Legenda:', { fontWeight: 'bold', fontSize: '12px' }));
-    legend.add(ui.Label('Cinza = Original v1', { color: '#555555', fontSize: '11px' }));
-    legend.add(ui.Label('Laranja = Original v2', { color: '#ffaa00', fontSize: '11px' }));
-    legend.add(ui.Label('Vermelho = Mergeado', { color: '#ff0000', fontSize: '11px', fontWeight: 'bold' }));
-    Map.add(legend);
-}
-
-// ─── EXPORT ─────────────────────────────────────────────────────────────────
-
-function exportMerged(groups) {
     var total = 0;
-    Object.keys(groups).forEach(function (region) {
-        var imgs = groups[region];
-        if (imgs.length < 2) return;
+    images.forEach(function (img) {
+        var name = img.id.split('/').pop();
+        var eeImg = ee.Image(img.id);
+        var meta = eeImg.get('region_models');
 
-        var merged = mergeImages(imgs, region);
-        var destAsset = M7_BASE + '/' + FASE + '/' + merged.outName + '_m7_01';
+        print('  Processando: ' + name);
+
+        // Merge: preserva todos pixels queimados de todas as versoes
+        var merged = eeImg.where(eeImg.select('probability').gt(0), eeImg);
+        merged = merged.selfMask().copyProperties(eeImg);
+        merged = merged.set('filter_stage', 'ft01');
+
+        var destAsset = COLL_OUT + '/' + name;
+
+        Map.addLayer(eeImg.select('probability').selfMask(), { min: 0, max: 1000, palette: ['888888'] }, name + ' | ANTES', false);
+        Map.addLayer(merged.select('probability').selfMask(), { min: 0, max: 1000, palette: ['ff0000'] }, name + ' | MERGE', false);
 
         try {
             ee.data.getAsset(destAsset);
-            print('  Ja existe: ' + destAsset);
+            print('    Ja existe: ' + destAsset);
         } catch (e) {
             total++;
-            print('  Exportando: ' + destAsset);
+            print('    Exportando: ' + destAsset);
             Export.image.toAsset({
-                image: merged.image.toByte(),
-                description: merged.outName.substring(0, 80),
+                image: merged.toInt16(),
+                description: (COLLECTION_BASE + STAGE_OUT + '_' + name).substring(0, 80).replace(/[^a-zA-Z0-9_]/g, '_'),
                 assetId: destAsset,
                 pyramidingPolicy: 'mode',
-                region: GEOMETRY,
+                region: REGIONS.geometry().bounds(),
                 scale: SCALE,
                 maxPixels: 1e13,
             });
         }
     });
 
-    if (total === 0) {
-        print('Nenhuma regiao com 2+ versoes para mergear.');
-    } else {
-        print('Total de tarefas de export: ' + total);
-    }
+    print('Total export: ' + total);
 }
-
-// ─── EXECUTAR ───────────────────────────────────────────────────────────────
-
-print('=== M7_01 — Merge de Classificacoes ===');
-print('Pasta: ' + PASTA_ENTRADA);
-print('');
-
-// 1. Lista imagens da pasta
-var allImages = listImages(PASTA_ENTRADA);
-print('Imagens encontradas: ' + allImages.length);
-
-// 2. Agrupa por regiao
-var groups = groupByRegion(allImages);
-var mergeCount = 0;
-Object.keys(groups).forEach(function (r) {
-    if (groups[r].length >= 2) mergeCount++;
-});
-
-print('Regioes com 2+ versoes (merge necessario): ' + mergeCount);
-
-if (mergeCount === 0) {
-    print('Nada a mergear. Script concluido.');
-} else {
-    // 3. Plota resultados no mapa
-    plotResults(groups);
-
-    // 4. Exporta
-    print('');
-    print('--- Export ---');
-    exportMerged(groups);
-}
-
-print('');
-print('=== M7_01 concluido ===');
+print('=== M7_01 done ===');
