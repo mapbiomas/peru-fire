@@ -40,7 +40,7 @@ var L = (function () {
 // ─── ESTADOS ─────────────────────────────────────────────────────────────────
 var S = {
     tab_inactive:  { margin:'0px', padding:'6px 12px', border:'1px solid #d3d3d3', color:'#70757a', backgroundColor:'#f1f3f4', stretch:'horizontal', fontSize:'12px' },
-    section:       { margin:'0px', padding:'8px', borderBottom:'1px solid #eee' },
+    section:       { margin:'0px', padding:'8px' },
     sectionTitle:  { fontSize:'13px', fontWeight:'bold', color:'#333', margin:'2px 0px 6px 0px' },
     card:          { margin:'4px 0px', padding:'6px', border:'1px solid #e0e0e0', backgroundColor:'#fafafa', borderRadius:'4px' },
     row:           { margin:'2px 0px', padding:'2px', stretch:'horizontal' },
@@ -186,6 +186,7 @@ function buildForm() {
     txtName.onChange(function(v){collectionName=v; buildConfirmSection(confirmPanel);});
 
     root.add(secCfg);
+    root.add(ui.Label('──────────────────────────────', {fontSize:'9px',color:'#ddd',margin:'0',stretch:'horizontal'}));
 
     // ═══ PERIOD ═══
     var secPeriod = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:S.section});
@@ -215,6 +216,7 @@ function buildForm() {
     rowP.add(ui.Label(L.month,S.lbl)); rowP.add(ddM); rowP.add(btnLoad);
     secPeriod.add(rowP);
     root.add(secPeriod);
+    root.add(ui.Label('──────────────────────────────', {fontSize:'9px',color:'#ddd',margin:'0',stretch:'horizontal'}));
 
     // ═══ REGIONS ═══
     var regionsPanel = ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
@@ -223,6 +225,7 @@ function buildForm() {
     secRegions.add(regionsPanel);
     root.add(secRegions);
     buildRegionsSection(regionsPanel);
+    root.add(ui.Label('──────────────────────────────', {fontSize:'9px',color:'#ddd',margin:'0',stretch:'horizontal'}));
 
     // ═══ CONFIRM ═══
     var confirmPanel = ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
