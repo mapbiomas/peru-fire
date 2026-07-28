@@ -101,7 +101,7 @@ function loadExisting(cb){
 
 // ─── FORM ───────────────────────────────────────────────────────────────────
 
-var rootBox, regionsBox, confirmBox, contentsBox, ddExisting, ddPeriod, txtName;
+var rootBox, regionsBox, confirmBox, contentsBox, summaryBox, ddExisting, ddPeriod, txtName;
 
 function buildForm(){
     rootBox = ui.root;
@@ -179,6 +179,8 @@ function buildForm(){
     // ═══ REGIONS ═══
     var cRgn=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:COLORS.regions});
     cRgn.add(ui.Label(L.regions,{fontSize:'12px',fontWeight:'bold',color:'#333',margin:'0 0 6px 0'}));
+    summaryBox=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{margin:'0 0 6px 0',padding:'6px',backgroundColor:'#fff',border:'1px solid #e0e0e0',borderRadius:'4px'}});
+    cRgn.add(summaryBox);
     regionsBox=ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
     cRgn.add(regionsBox);
     root.add(cRgn);
@@ -249,9 +251,18 @@ function loadCollectionContents(){
 function buildRegionsPanel(){
     regionsBox.clear();
     regionsBox.add(ui.Label(L.loading+' '+cPeriod,{fontSize:'10px',color:'#888'}));
+    var fn=collName+'-ft00';
+    summaryBox.clear();
+    summaryBox.add(ui.Label('Periodo: '+cPeriod+' | Colecao: '+fn,{fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
     loadClassifications(cYear,cMonth,function(data){
         avMods={};avMods[cPeriod]=data;regionsBox.clear();
-        var names=Object.keys(data).sort();if(names.length===0){regionsBox.add(ui.Label(L.no_data,{color:'#d32f2f',margin:'6px'}));buildConfirmPanel();return}
+        var names=Object.keys(data).sort();if(names.length===0){
+            regionsBox.add(ui.Label(L.no_data,{color:'#d32f2f',margin:'6px'}));
+            summaryBox.clear();
+            summaryBox.add(ui.Label('Periodo: '+cPeriod+' | Colecao: '+fn,{fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
+            summaryBox.add(ui.Label('Sem modelos disponiveis para este periodo.',{fontSize:'10px',color:'#d32f2f',margin:'2px 0'}));
+            buildConfirmPanel();return
+        }
         var hr=ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'0 0 4px 0'}});
         hr.add(ui.Button({label:L.select_all,style:S.btn_blue,onClick:function(){names.forEach(function(r){if(data[r].length>0)rMap[r]=data[r][0].modelId});buildRegionsPanel();buildConfirmPanel();}}));
         hr.add(ui.Button({label:L.clear_all,style:S.btn_gray,onClick:function(){rMap={};buildRegionsPanel();buildConfirmPanel();}}));
@@ -276,6 +287,16 @@ function buildRegionsPanel(){
             });
             regionsBox.add(card);
         });
+
+        // Update summary card
+        summaryBox.clear();
+        var fn=collName+'-ft00';
+        summaryBox.add(ui.Label('Periodo: '+cPeriod+' | Colecao: '+fn,{fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
+        var totalModels=names.length;
+        var totalRegions=names.length;
+        summaryBox.add(ui.Label('Regioes com dados: '+totalRegions+' | Modelos disponiveis: '+totalModels,{fontSize:'10px',color:'#333',margin:'1px 0'}));
+        var selected=names.filter(function(r){return!!rMap[r]}).length;
+        summaryBox.add(ui.Label('Modelos selecionados: '+selected+'/'+totalRegions+' regioes',{fontSize:'9px',color:selected===totalRegions?'#0f9d58':'#e37400',margin:'1px 0'}));
         buildConfirmPanel();
     });
 }
