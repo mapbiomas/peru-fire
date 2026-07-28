@@ -1,20 +1,13 @@
 /********************************************
 MAPBIOMAS FUEGO - MONITOR_01 - M7_00
-Selection and Export (UI) — Formulario Corrido
+Selection and Export (UI) — Formulario Corrido v3.1
 
 📅 DATA: julho 2026
-🏷️ VERSAO: 3.0
-👥 EQUIPE: MapBiomas Fuego - IPAM
+🏷️ VERSAO: 3.1
 
-📌 O QUE FAZ:
-Formulario unico (sem abas) para:
-1. Selecionar campanha
-2. Escolher colecao existente OU criar nova
-3. Selecionar periodo e visualizar mosaico min NBR
-4. Atribuir modelo DNN por regiao
-5. Exportar imagem nacional para FILTERED/{collection}-ft00/
-
-🌍 IDIOMAS: pt, es, en, fr, id
+📌 SEÇÕES COM FUNDO COLORIDO:
+  CONFIG — cinza   |   PERIODO — azul claro
+  REGIOES — cinza  |   CONFIRMAR — verde claro
 ********************************************/
 
 var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
@@ -25,357 +18,281 @@ var SCALE = 10;
 var START_YEAR = 2025;
 var APP_LANG = 'pt';
 
-// ─── IDIOMAS ────────────────────────────────────────────────────────────────
-var L = (function () {
-    var d = {
-        pt: { title:'M7 — Selecao e Export', section_config:'CONFIGURACAO', section_period:'PERIODO', section_regions:'REGIOES', section_confirm:'CONFIRMAR', campaign:'Campanha', existing:'Adicionar a existente', existing_empty:'(carregando...)', existing_none:'(nenhuma colecao)', or:'── OU ──', new_title:'Criar nova', collection_placeholder:'ex: propose_a', create:'Criar e selecionar', year:'Ano', month:'Mes', load:'Carregar periodo', loading:'Carregando...', no_data:'Sem dados para o periodo.', select_all:'Selecionar todos', clear_all:'Limpar todos', collection_target:'Collection', export_btn:'Exportar', confirm_title:'Confirmar Exportacao', pre_title:'Pre-Confirmacao', pre_body:'Sera criada/atualizada:', pre_warn:'O GEE solicitara confirmacao no navegador.', pre_ok:'OK, continuar', cancel:'Cancelar', done:'Concluido!', label_status_one:'1 modelo', label_status_none:'nenhum' },
-        es: { title:'M7 — Seleccion', section_config:'CONFIGURACION', section_period:'PERIODO', section_regions:'REGIONES', section_confirm:'CONFIRMAR', campaign:'Campana', existing:'Agregar a existente', existing_empty:'(cargando...)', existing_none:'(ninguna)', or:'── O ──', new_title:'Crear nueva', collection_placeholder:'ej: propose_a', create:'Crear y seleccionar', year:'Ano', month:'Mes', load:'Cargar periodo', loading:'Cargando...', no_data:'Sin datos.', select_all:'Todos', clear_all:'Limpiar', collection_target:'Coleccion', export_btn:'Exportar', confirm_title:'Confirmar', pre_title:'Pre-Confirmacion', pre_body:'Se creara:', pre_warn:'GEE solicitara confirmacion.', pre_ok:'OK', cancel:'Cancelar', done:'Completado!', label_status_one:'1 modelo', label_status_none:'ninguno' },
-        en: { title:'M7 — Selection & Export', section_config:'CONFIGURATION', section_period:'PERIOD', section_regions:'REGIONS', section_confirm:'CONFIRM', campaign:'Campaign', existing:'Add to existing', existing_empty:'(loading...)', existing_none:'(none)', or:'── OR ──', new_title:'Create new', collection_placeholder:'e.g. propose_a', create:'Create & select', year:'Year', month:'Month', load:'Load period', loading:'Loading...', no_data:'No data.', select_all:'Select all', clear_all:'Clear', collection_target:'Collection', export_btn:'Export', confirm_title:'Confirm Export', pre_title:'Pre-Confirmation', pre_body:'Will create/update:', pre_warn:'GEE will prompt for confirmation.', pre_ok:'OK, continue', cancel:'Cancel', done:'Done!', label_status_one:'1 model', label_status_none:'none' },
-        fr: { title:'M7 — Selection', section_config:'CONFIGURATION', section_period:'PERIODE', section_regions:'REGIONS', section_confirm:'CONFIRMER', campaign:'Campagne', existing:'Ajouter a existante', existing_empty:'(chargement...)', existing_none:'(aucune)', or:'── OU ──', new_title:'Creer', collection_placeholder:'ex: propose_a', create:'Creer', year:'Annee', month:'Mois', load:'Charger', loading:'Chargement...', no_data:'Pas de donnees.', select_all:'Tous', clear_all:'Effacer', collection_target:'Collection', export_btn:'Exporter', confirm_title:'Confirmer', pre_title:'Pre-Confirmation', pre_body:'Va creer:', pre_warn:'GEE demandera confirmation.', pre_ok:'OK', cancel:'Annuler', done:'Termine!', label_status_one:'1 modele', label_status_none:'aucun' },
-        id: { title:'M7 — Seleksi', section_config:'KONFIGURASI', section_period:'PERIODE', section_regions:'WILAYAH', section_confirm:'KONFIRMASI', campaign:'Kampanye', existing:'Tambah ke yang ada', existing_empty:'(memuat...)', existing_none:'(tidak ada)', or:'── ATAU ──', new_title:'Buat baru', collection_placeholder:'cth: propose_a', create:'Buat & pilih', year:'Tahun', month:'Bulan', load:'Muat periode', loading:'Memuat...', no_data:'Tidak ada data.', select_all:'Pilih semua', clear_all:'Hapus', collection_target:'Koleksi', export_btn:'Ekspor', confirm_title:'Konfirmasi', pre_title:'Pra-Konfirmasi', pre_body:'Akan dibuat:', pre_warn:'GEE akan minta konfirmasi.', pre_ok:'OK', cancel:'Batal', done:'Selesai!', label_status_one:'1 model', label_status_none:'tidak ada' },
+var L = (function(){
+    var d={
+        pt:{title:'M7 — Selecao e Export',cfg:'CONFIGURACAO',period:'PERIODO',regions:'REGIOES',confirm:'CONFIRMAR',campaign:'Campanha',existing:'Colecoes existentes',new_title:'Criar nova',select:'Selecionar',create:'Criar e selecionar',placeholder:'ex: propose_a',year:'Ano',month:'Mes',load:'Carregar',loading:'Carregando...',no_data:'Sem dados.',select_all:'Selecionar todos',clear_all:'Limpar',target:'Collection',export_btn:'Exportar',pre_title:'Pre-Confirmacao',pre_body:'Sera criado/atualizado:',pre_warn:'O GEE solicitara confirmacao.',pre_ok:'OK',cancel:'Cancelar',done:'Concluido!',one:'1 modelo',none:'nenhum'},
+        es:{title:'M7 — Seleccion',cfg:'CONFIG',period:'PERIODO',regions:'REGIONES',confirm:'CONFIRMAR',campaign:'Campana',existing:'Colecciones existentes',new_title:'Crear nueva',select:'Seleccionar',create:'Crear y seleccionar',placeholder:'ej: propose_a',year:'Ano',month:'Mes',load:'Cargar',loading:'Cargando...',no_data:'Sin datos.',select_all:'Todos',clear_all:'Limpiar',target:'Coleccion',export_btn:'Exportar',pre_title:'Pre-Confirmacion',pre_body:'Se creara:',pre_warn:'GEE solicitara confirmacion.',pre_ok:'OK',cancel:'Cancelar',done:'Completado!',one:'1 modelo',none:'ninguno'},
+        en:{title:'M7 — Selection & Export',cfg:'CONFIGURATION',period:'PERIOD',regions:'REGIONS',confirm:'CONFIRM',campaign:'Campaign',existing:'Existing collections',new_title:'Create new',select:'Select',create:'Create & select',placeholder:'e.g. propose_a',year:'Year',month:'Month',load:'Load',loading:'Loading...',no_data:'No data.',select_all:'Select all',clear_all:'Clear',target:'Collection',export_btn:'Export',pre_title:'Pre-Confirmation',pre_body:'Will create/update:',pre_warn:'GEE will prompt for confirmation.',pre_ok:'OK',cancel:'Cancel',done:'Done!',one:'1 model',none:'none'},
+        fr:{title:'M7 — Selection',cfg:'CONFIG',period:'PERIODE',regions:'REGIONS',confirm:'CONFIRMER',campaign:'Campagne',existing:'Existantes',new_title:'Creer',select:'Selectionner',create:'Creer',placeholder:'ex: propose_a',year:'Annee',month:'Mois',load:'Charger',loading:'Chargement...',no_data:'Pas de donnees.',select_all:'Tous',clear_all:'Effacer',target:'Collection',export_btn:'Exporter',pre_title:'Pre-Confirmation',pre_body:'Va creer:',pre_warn:'GEE demandera confirmation.',pre_ok:'OK',cancel:'Annuler',done:'Termine!',one:'1 modele',none:'aucun'},
+        id:{title:'M7 — Seleksi',cfg:'KONFIG',period:'PERIODE',regions:'WILAYAH',confirm:'KONFIRMASI',campaign:'Kampanye',existing:'Koleksi ada',new_title:'Buat baru',select:'Pilih',create:'Buat & pilih',placeholder:'cth: propose_a',year:'Tahun',month:'Bulan',load:'Muat',loading:'Memuat...',no_data:'Tidak ada.',select_all:'Semua',clear_all:'Hapus',target:'Koleksi',export_btn:'Ekspor',pre_title:'Pra-Konfirmasi',pre_body:'Akan dibuat:',pre_warn:'GEE akan minta konfirmasi.',pre_ok:'OK',cancel:'Batal',done:'Selesai!',one:'1 model',none:'tidak ada'},
     };
-    return d[APP_LANG] || d.pt;
+    return d[APP_LANG]||d.pt;
 })();
 
-// ─── ESTADOS ─────────────────────────────────────────────────────────────────
+var COLORS = {
+    cfg:     { margin:'4px', padding:'8px', backgroundColor:'#f8f9fa', border:'1px solid #e0e0e0', borderRadius:'6px' },
+    period:  { margin:'4px', padding:'8px', backgroundColor:'#f0f4ff', border:'1px solid #c8d6f0', borderRadius:'6px' },
+    regions: { margin:'4px', padding:'8px', backgroundColor:'#f8f9fa', border:'1px solid #e0e0e0', borderRadius:'6px' },
+    confirm: { margin:'4px', padding:'8px', backgroundColor:'#e8f5e9', border:'1px solid #b8d8ba', borderRadius:'6px' },
+    sub:     { margin:'2px 0', padding:'6px', backgroundColor:'#fff', border:'1px solid #e0e0e0', borderRadius:'4px', stretch:'horizontal' },
+    divider: { margin:'0 4px', backgroundColor:'#d0d0d0', width:'1px' },
+    stack:   { margin:'2px 0', stretch:'horizontal' },
+};
 var S = {
-    tab_inactive:  { margin:'0px', padding:'6px 12px', border:'1px solid #d3d3d3', color:'#70757a', backgroundColor:'#f1f3f4', stretch:'horizontal', fontSize:'12px' },
-    section:       { margin:'0px', padding:'8px' },
-    sectionTitle:  { fontSize:'13px', fontWeight:'bold', color:'#333', margin:'2px 0px 6px 0px' },
-    card:          { margin:'4px 0px', padding:'6px', border:'1px solid #e0e0e0', backgroundColor:'#fafafa', borderRadius:'4px' },
-    row:           { margin:'2px 0px', padding:'2px', stretch:'horizontal' },
-    lbl:           { margin:'1px 0px', fontSize:'11px', color:'#555' },
-    inp:           { margin:'2px 0px', stretch:'horizontal', fontSize:'12px' },
-    btn_blue:      { margin:'2px', padding:'4px 10px', color:'#1a73e8', fontWeight:'bold' },
-    btn_green:     { margin:'2px', padding:'4px 10px', color:'#0f9d58', fontWeight:'bold' },
-    btn_gray:      { margin:'2px', padding:'4px 10px', color:'#70757a', fontWeight:'bold' },
-    status_ok:     { color:'#0f9d58', fontWeight:'bold', fontSize:'11px' },
-    status_err:    { color:'#d32f2f', fontWeight:'bold', fontSize:'11px' },
-    orLabel:       { fontSize:'10px', color:'#aaa', textAlign:'center', margin:'4px 0px', stretch:'horizontal' },
-    pre_box:       { margin:'6px 0px', padding:'10px', backgroundColor:'#fff8e1', border:'1px solid #ffcc00', borderRadius:'6px' },
+    lbl:{fontSize:'11px',color:'#555',margin:'2px 0'},
+    inp:{stretch:'horizontal',fontSize:'12px',margin:'2px 0'},
+    btn_blue:{margin:'2px',padding:'4px 10px',color:'#1a73e8',fontWeight:'bold'},
+    btn_green:{margin:'2px',padding:'4px 10px',color:'#0f9d58',fontWeight:'bold'},
+    btn_gray:{margin:'2px',padding:'4px 10px',color:'#70757a',fontWeight:'bold'},
+    ok:{color:'#0f9d58',fontWeight:'bold',fontSize:'11px'},
+    err:{color:'#d32f2f',fontWeight:'bold',fontSize:'11px'},
+    pre:{margin:'6px 0',padding:'10px',backgroundColor:'#fff8e1',border:'1px solid #ffcc00',borderRadius:'6px'},
 };
 
-var CLASS_PALETTE = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#fffac8','#800000'];
-
-var managedLayers = {};
-var availableModels = {};
-var regionModelMap = {};
-var regionEyeState = {};
-var _cbStore = {};
-var currentYear = null, currentMonth = null, currentPeriodKey = '';
-var collectionName = 'propose_a';
+var CPAL = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#fffac8','#800000'];
+var mLayers={}, avMods={}, rMap={}, eyeSt={}, _cbs={};
+var cYear=null,cMonth=null,cPeriod='';
+var collName='propose_a';
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-function ensureFolder(name) {
-    var parts = name.split('/');
-    var cur = CLASSIFICATIONS_ROOT;
-    for (var i = 0; i < parts.length; i++) {
-        cur += parts[i];
-        try { ee.data.getAsset(cur); }
-        catch (e) { ee.data.createAsset({ type: (i === parts.length - 1 && parts[i].indexOf('-ft') !== -1) ? 'IMAGE_COLLECTION' : 'FOLDER' }, cur); }
-        cur += '/';
-    }
+function ensureFolder(name){
+    var p=name.split('/'), cur=CLASSIFICATIONS_ROOT;
+    for(var i=0;i<p.length;i++){cur+=p[i];try{ee.data.getAsset(cur)}catch(e){ee.data.createAsset({type:(i===p.length-1&&p[i].indexOf('-ft')!==-1)?'IMAGE_COLLECTION':'FOLDER'},cur)}cur+='/';}
 }
-
-function getDateKey(y, m) {
-    return m !== null ? y + '_' + ('0' + m).slice(-2) : '' + y;
-}
+function getDK(y,m){return m!==null?y+'_'+('0'+m).slice(-2):''+y;}
 
 // ─── MAP ────────────────────────────────────────────────────────────────────
 
-function mLayer(id, obj, vis, name) {
-    if (managedLayers[id]) { managedLayers[id].setEeObject(obj); managedLayers[id].setVisParams(vis); managedLayers[id].setName(name); }
-    else { managedLayers[id] = ui.Map.Layer(obj, vis, name); Map.layers().add(managedLayers[id]); }
+function mL(id,obj,vis,name){
+    if(mLayers[id]){mLayers[id].setEeObject(obj);mLayers[id].setVisParams(vis);mLayers[id].setName(name)}
+    else{mLayers[id]=ui.Map.Layer(obj,vis,name);Map.layers().add(mLayers[id]);}
 }
-
-function mRemoveClass() { Object.keys(managedLayers).forEach(function(k){if(k.indexOf('class_')===0){Map.layers().remove(managedLayers[k]);delete managedLayers[k];}}); }
-
-function loadMosaic(year, month) {
-    var dk = getDateKey(year, month);
-    var bs = CATALOG_ROOT + '/LIBRARY_IMAGES/SENTINEL2/MONTHLY/MINNBR';
-    var m = ee.Image().select();
+function loadMosaic(y,m){
+    var dk=getDK(y,m),bs=CATALOG_ROOT+'/LIBRARY_IMAGES/SENTINEL2/MONTHLY/MINNBR',img=ee.Image().select();
     ['blue','green','red','nir','swir1','swir2'].forEach(function(b){
-        try {var bi=ee.ImageCollection(bs+'/'+b.toLowerCase()).filter(ee.Filter.eq('system:index','image_peru_fire_sentinel2_minnbr_'+b.toLowerCase()+'_'+dk)).mosaic(); var s=ee.Image(ee.Algorithms.If(bi.bandNames().size().gt(0),bi,ee.Image(0).rename(b.toLowerCase()).updateMask(0))); m=m.addBands(s.select([0],[b.toLowerCase()]),null,true);}
-        catch(e){m=m.addBands(ee.Image(0).rename(b.toLowerCase()).updateMask(0),null,true);}
+        try{var bi=ee.ImageCollection(bs+'/'+b.toLowerCase()).filter(ee.Filter.eq('system:index','image_peru_fire_sentinel2_minnbr_'+b.toLowerCase()+'_'+dk)).mosaic();img=img.addBands(ee.Image(ee.Algorithms.If(bi.bandNames().size().gt(0),bi,ee.Image(0).rename(b.toLowerCase()).updateMask(0))).select([0],[b.toLowerCase()]),null,true)}
+        catch(e){img=img.addBands(ee.Image(0).rename(b.toLowerCase()).updateMask(0),null,true)}
     });
-    m = m.addBands(m.normalizedDifference(['nir','swir2']).rename('nbr'));
-    mLayer('mosaic_minnbr', m, {bands:['swir1','nir','red'],min:3,max:40,gamma:0.85}, 'Min NBR '+dk);
+    img=img.addBands(img.normalizedDifference(['nir','swir2']).rename('nbr'));
+    mL('mosaic_minnbr',img,{bands:['swir1','nir','red'],min:3,max:40,gamma:0.85},'Min NBR '+dk);
 }
 
 // ─── CLASSIFICATIONS ────────────────────────────────────────────────────────
 
-function loadClassifications(year, month, cb) {
-    var dk = getDateKey(year, month);
+function loadClassifications(y,m,cb){
+    var dk=getDK(y,m);
     ee.data.listAssets(CLASSIFICATIONS_ROOT+'REGIONAL',{},function(cols){
-        if(!cols||!cols.assets){cb({});return;}
-        var dirs=cols.assets.filter(function(c){return c.type==='IMAGE_COLLECTION';});
-        if(dirs.length===0){cb({});return;}
-        var r={}; var p=dirs.length;
-        dirs.forEach(function(c,idx){
-            var mid=c.id.split('/').pop();
-            ee.data.listAssets(c.id,{},function(imgs){
-                if(imgs&&imgs.assets)imgs.assets.forEach(function(img){
-                    if(img.type!=='IMAGE')return;
-                    var name=img.id.split('/').pop(), parts=name.split('_');
-                    var rp=null; for(var i=0;i<parts.length;i++){if(parts[i].indexOf('region')===0){rp=parts[i];break;}} if(!rp)return;
-                    var ip=null; for(var j=parts.length-1;j>=0;j--){if(/^\d{4}$/.test(parts[j])){ip=parts[j]+(j+1<parts.length&&/^\d{2}$/.test(parts[j+1])?'_'+parts[j+1]:'');break;}} if(ip!==dk)return;
-                    if(!r[rp])r[rp]=[];
-                    if(!r[rp].some(function(x){return x.modelId===mid;})) r[rp].push({modelId:mid,assetId:img.id,color:CLASS_PALETTE[idx%15]});
-                });
-                p--; if(p===0)cb(r);
-            });
-        });
+        if(!cols||!cols.assets){cb({});return} var dirs=cols.assets.filter(function(c){return c.type==='IMAGE_COLLECTION'}),r={},p=dirs.length;if(dirs.length===0){cb({});return}
+        dirs.forEach(function(c,idx){var mid=c.id.split('/').pop();ee.data.listAssets(c.id,{},function(imgs){
+            if(imgs&&imgs.assets)imgs.assets.forEach(function(img){if(img.type!=='IMAGE')return;var name=img.id.split('/').pop(),parts=name.split('_');var rp=null;for(var i=0;i<parts.length;i++){if(parts[i].indexOf('region')===0){rp=parts[i];break}}if(!rp)return;var ip=null;for(var j=parts.length-1;j>=0;j--){if(/^\d{4}$/.test(parts[j])){ip=parts[j]+(j+1<parts.length&&/^\d{2}$/.test(parts[j+1])?'_'+parts[j+1]:'');break}}if(ip!==dk)return;if(!r[rp])r[rp]=[];if(!r[rp].some(function(x){return x.modelId===mid}))r[rp].push({modelId:mid,assetId:img.id,color:CPAL[idx%15]})});
+            p--;if(p===0)cb(r);
+        })});
         if(p===0)cb(r);
     });
 }
 
-// ─── EXISTING ────────────────────────────────────────────────────────────────
-
-function loadExisting(cb) {
+function loadExisting(cb){
     ensureFolder('FILTERED');
     ee.data.listAssets(CLASSIFICATIONS_ROOT+'FILTERED/',{},function(r){
-        if(!r||!r.assets){cb([]);return;}
-        cb(r.assets.filter(function(a){return a.type==='IMAGE_COLLECTION';}).map(function(a){return a.id.split('/').pop();}).sort());
+        if(!r||!r.assets){cb([]);return}cb(r.assets.filter(function(a){return a.type==='IMAGE_COLLECTION'}).map(function(a){return a.id.split('/').pop()}).sort());
     });
 }
 
 // ─── FORM ───────────────────────────────────────────────────────────────────
 
-function buildForm() {
-    ui.root.clear();
-    var root = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:{width:'580px',margin:'0px',padding:'4px',backgroundColor:'#fff'}});
-    root.add(ui.Label('MapBiomas-Fuego | '+L.title, {fontSize:'14px',fontWeight:'bold',color:'#d32f2f',margin:'4px'}));
+var rootBox, regionsBox, confirmBox, ddExisting, txtName;
+
+function buildForm(){
+    rootBox = ui.root;
+    // Não limpa o root para manter o mapa visível — mas GEE exige root.clear() para reconstruir
+    rootBox.clear();
+    var root=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{width:'580px',margin:'0',padding:'4px',backgroundColor:'#fff'}});
+
+    // HEADER
+    root.add(ui.Label('MapBiomas-Fuego | '+L.title,{fontSize:'14px',fontWeight:'bold',color:'#d32f2f',margin:'4px'}));
 
     // ═══ CONFIG ═══
-    var secCfg = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:S.section});
-    secCfg.add(ui.Label('— '+L.section_config, S.sectionTitle));
+    var cCfg=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:COLORS.cfg});
+    cCfg.add(ui.Label(L.cfg,{fontSize:'12px',fontWeight:'bold',color:'#333',margin:'0 0 6px 0'}));
+    cCfg.add(ui.Label(L.campaign,S.lbl));
+    cCfg.add(ui.Select({items:['MONITOR_01','MONITOR_DEV'],value:'MONITOR_01',style:S.inp}));
 
-    // Campaign
-    secCfg.add(ui.Label(L.campaign, S.lbl));
-    var ddCampaign = ui.Select({items:['MONITOR_01','MONITOR_DEV'], value:'MONITOR_01', style:S.inp});
-    secCfg.add(ddCampaign);
+    // 2 sub-paineis lado a lado
+    var subRow=ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{margin:'6px 0',stretch:'horizontal'}});
 
-    // Existing dropdown
-    secCfg.add(ui.Label(L.existing, S.lbl));
-    var ddExisting = ui.Select({items:[L.existing_empty], value:null, style:S.inp, disabled:true});
-    secCfg.add(ddExisting);
-
-    loadExisting(function(names){
-        if(names.length===0){ddExisting.items().reset([L.existing_none]);ddExisting.setDisabled(true);}
-        else {ddExisting.items().reset(names);ddExisting.setDisabled(false);}
-    });
-
-    // OR separator
-    secCfg.add(ui.Label(L.or, S.orLabel));
-
-    // New collection
-    secCfg.add(ui.Label(L.new_title, S.lbl));
-    var txtName = ui.Textbox({placeholder:L.collection_placeholder, value:collectionName, style:S.inp});
-    secCfg.add(txtName);
-    var btnCreate = ui.Button({label:L.create, style:S.btn_green, onClick:function(){
-        collectionName = txtName.getValue().trim() || collectionName;
-        ensureFolder('FILTERED/'+collectionName+'-ft00');
-        print('OK: FILTERED/'+collectionName+'-ft00');
-        buildRegionsSection(regionsPanel);
-        buildConfirmSection(confirmPanel);
+    // LEFT: existentes
+    var subLeft=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:COLORS.sub});
+    subLeft.add(ui.Label(L.existing,{fontSize:'11px',fontWeight:'bold',color:'#555',margin:'0 0 2px 0'}));
+    ddExisting=ui.Select({items:['...'],value:null,style:S.inp,disabled:true});
+    subLeft.add(ddExisting);
+    var btnSelect=ui.Button({label:L.select,style:S.btn_blue,onClick:function(){
+        var v=ddExisting.getValue();if(!v||v==='...')return;
+        collName=v.split('-ft')[0]||v;txtName.setValue(collName);refreshAll();
     }});
-    secCfg.add(btnCreate);
+    subLeft.add(btnSelect);
 
-    ddExisting.onChange(function(v){if(v&&v.indexOf('(')===-1){txtName.setValue(v); collectionName = v; buildRegionsSection(regionsPanel); buildConfirmSection(confirmPanel);}});
-    txtName.onChange(function(v){collectionName=v; buildConfirmSection(confirmPanel);});
+    // RIGHT: nova
+    var subRight=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:COLORS.sub});
+    subRight.add(ui.Label(L.new_title,{fontSize:'11px',fontWeight:'bold',color:'#555',margin:'0 0 2px 0'}));
+    txtName=ui.Textbox({placeholder:L.placeholder,value:collName,style:S.inp});
+    subRight.add(txtName);
+    var btnCreate=ui.Button({label:L.create,style:S.btn_green,onClick:function(){
+        var name=txtName.getValue().trim()||collName;collName=name;
+        ensureFolder('FILTERED/'+name+'-ft00');
+        loadExisting(function(names){
+            ddExisting.items().reset(names);ddExisting.setDisabled(false);
+            var target=names.filter(function(n){return n.indexOf(name+'-ft')===0;})[0];
+            if(target){ddExisting.setValue(target);collName=name;}else{ddExisting.setValue(null);}
+            refreshAll();
+        });
+        print('OK: FILTERED/'+name+'-ft00');
+    }});
+    subRight.add(btnCreate);
+    txtName.onChange(function(v){collName=v;});
 
-    root.add(secCfg);
-    root.add(ui.Label('──────────────────────────────', {fontSize:'9px',color:'#ddd',margin:'0',stretch:'horizontal'}));
+    subRow.add(subLeft).add(subRight);
+    cCfg.add(subRow);
+    root.add(cCfg);
 
     // ═══ PERIOD ═══
-    var secPeriod = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:S.section});
-    secPeriod.add(ui.Label('— '+L.section_period, S.sectionTitle));
+    var cPrd=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:COLORS.period});
+    cPrd.add(ui.Label(L.period,{fontSize:'12px',fontWeight:'bold',color:'#333',margin:'0 0 6px 0'}));
 
-    var today = new Date();
-    var mY=today.getFullYear(), mM=today.getMonth();
-    if(mM===0){mM=12;mY--;}
-    var yrs=[]; for(var y=START_YEAR;y<=mY;y++)yrs.push({label:''+y,value:y}); yrs.reverse();
-    var mths=[]; for(var m=mM;m>=1;m--){var mm=m<10?'0'+m:''+m;mths.push({label:mm,value:m});}
-    currentYear=mY; currentMonth=mths[0].value; currentPeriodKey=getDateKey(mY,mths[0].value);
+    var today=new Date(); var mY=today.getFullYear(),mM=today.getMonth();
+    if(mM===0){mM=12;mY--}
+    cYear=mY;cMonth=mM;cPeriod=getDK(mY,mM);
 
-    var ddY = ui.Select({items:yrs.map(function(y){return y.label;}),value:''+mY,style:S.inp});
-    var ddM = ui.Select({items:mths.map(function(m){return m.label;}),value:mths[0].label,style:S.inp});
+    var sldY=ui.Slider({min:START_YEAR,max:mY,value:mY,step:1,style:{stretch:'horizontal'}});
+    var lblY=ui.Label(L.year+': '+mY,S.lbl);
+    sldY.onChange(function(v){lblY.setValue(L.year+': '+v);cYear=v;cPeriod=getDK(cYear,cMonth);if(v===mY)sldM.setMax(mM);else sldM.setMax(12);});
+    var sldM=ui.Slider({min:1,max:mM,value:mM,step:1,style:{stretch:'horizontal'}});
+    var lblM=ui.Label(L.month+': '+('0'+mM).slice(-2),S.lbl);
+    sldM.onChange(function(v){lblM.setValue(L.month+': '+('0'+v).slice(-2));cMonth=v;cPeriod=getDK(cYear,cMonth);});
 
-    ddY.onChange(function(v){currentYear=parseInt(v,10);});
-    ddM.onChange(function(v){currentMonth=parseInt(v,10);});
-    var btnLoad = ui.Button({label:L.load, style:S.btn_blue, onClick:function(){
-        currentPeriodKey = getDateKey(currentYear, currentMonth);
-        loadMosaic(currentYear, currentMonth);
-        Map.centerObject(REGIONS);
-        buildRegionsSection(regionsPanel);
-    }});
-
-    var rowP = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:S.row});
-    rowP.add(ui.Label(L.year,S.lbl)); rowP.add(ddY);
-    rowP.add(ui.Label(L.month,S.lbl)); rowP.add(ddM); rowP.add(btnLoad);
-    secPeriod.add(rowP);
-    root.add(secPeriod);
-    root.add(ui.Label('──────────────────────────────', {fontSize:'9px',color:'#ddd',margin:'0',stretch:'horizontal'}));
+    cPrd.add(lblY).add(sldY).add(lblM).add(sldM);
+    cPrd.add(ui.Button({label:L.load,style:S.btn_blue,onClick:function(){
+        cPeriod=getDK(cYear,cMonth);loadMosaic(cYear,cMonth);Map.centerObject(REGIONS);
+        buildRegionsPanel();
+    }}));
+    root.add(cPrd);
 
     // ═══ REGIONS ═══
-    var regionsPanel = ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
-    var secRegions = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:S.section});
-    secRegions.add(ui.Label('— '+L.section_regions, S.sectionTitle));
-    secRegions.add(regionsPanel);
-    root.add(secRegions);
-    buildRegionsSection(regionsPanel);
-    root.add(ui.Label('──────────────────────────────', {fontSize:'9px',color:'#ddd',margin:'0',stretch:'horizontal'}));
+    var cRgn=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:COLORS.regions});
+    cRgn.add(ui.Label(L.regions,{fontSize:'12px',fontWeight:'bold',color:'#333',margin:'0 0 6px 0'}));
+    regionsBox=ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
+    cRgn.add(regionsBox);
+    root.add(cRgn);
+    buildRegionsPanel();
 
     // ═══ CONFIRM ═══
-    var confirmPanel = ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
-    var secConfirm = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:S.section});
-    secConfirm.add(ui.Label('— '+L.section_confirm, S.sectionTitle));
-    secConfirm.add(confirmPanel);
-    root.add(secConfirm);
-    buildConfirmSection(confirmPanel);
+    var cCfm=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:COLORS.confirm});
+    cCfm.add(ui.Label(L.confirm,{fontSize:'12px',fontWeight:'bold',color:'#333',margin:'0 0 6px 0'}));
+    confirmBox=ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
+    cCfm.add(confirmBox);
+    root.add(cCfm);
+    buildConfirmPanel();
 
-    ui.root.add(root);
+    rootBox.add(root);
     Map.setOptions('SATELLITE');
     Map.centerObject(REGIONS);
     Map.addLayer(REGIONS.style({color:'ffffff',fillColor:'00000000',width:1}),{},'Regions');
+
+    // Carrega dropdown inicial
+    loadExisting(function(names){
+        if(names.length===0){ddExisting.items().reset(['(nenhuma)']);ddExisting.setDisabled(true);}
+        else {ddExisting.items().reset(names);ddExisting.setDisabled(false);}
+    });
 }
 
-// ─── REGIONS SECTION ────────────────────────────────────────────────────────
+// ─── REGIONS ────────────────────────────────────────────────────────────────
 
-function buildRegionsSection(panel) {
-    panel.clear();
-    panel.add(ui.Label(L.loading+' '+currentPeriodKey, {fontSize:'10px',color:'#888'}));
-
-    loadClassifications(currentYear, currentMonth, function(data){
-        availableModels={};
-        availableModels[currentPeriodKey]=data;
-        panel.clear();
-        var names=Object.keys(data).sort();
-        if(names.length===0){panel.add(ui.Label(L.no_data,{color:'#d32f2f',fontSize:'12px',margin:'6px'}));return;}
-
-        var hr=ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:S.row});
-        hr.add(ui.Button({label:L.select_all,style:S.btn_blue,onClick:function(){names.forEach(function(r){if(data[r].length>0)regionModelMap[r]=data[r][0].modelId;});buildRegionsSection(panel);}}));
-        hr.add(ui.Button({label:L.clear_all,style:S.btn_gray,onClick:function(){regionModelMap={};buildRegionsSection(panel);}}));
-        panel.add(hr);
-
+function buildRegionsPanel(){
+    regionsBox.clear();
+    regionsBox.add(ui.Label(L.loading+' '+cPeriod,{fontSize:'10px',color:'#888'}));
+    loadClassifications(cYear,cMonth,function(data){
+        avMods={};avMods[cPeriod]=data;regionsBox.clear();
+        var names=Object.keys(data).sort();if(names.length===0){regionsBox.add(ui.Label(L.no_data,{color:'#d32f2f',margin:'6px'}));buildConfirmPanel();return}
+        var hr=ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'0 0 4px 0'}});
+        hr.add(ui.Button({label:L.select_all,style:S.btn_blue,onClick:function(){names.forEach(function(r){if(data[r].length>0)rMap[r]=data[r][0].modelId});buildRegionsPanel();buildConfirmPanel();}}));
+        hr.add(ui.Button({label:L.clear_all,style:S.btn_gray,onClick:function(){rMap={};buildRegionsPanel();buildConfirmPanel();}}));
+        regionsBox.add(hr);
         names.forEach(function(rn){
-            var models=data[rn].sort(function(a,b){return a.modelId.localeCompare(b.modelId);});
-            var card=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:S.card});
-            card.add(ui.Label(rn.replace('region','Region '),{fontSize:'12px',fontWeight:'bold',color:'#1a73e8',margin:'2px 0'}));
-            if(!regionModelMap[rn]&&models.length>0)regionModelMap[rn]=models[0].modelId;
-            if(!_cbStore[rn])_cbStore[rn]={};
+            var models=data[rn].sort(function(a,b){return a.modelId.localeCompare(b.modelId)});
+            var card=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{margin:'2px 0',padding:'4px',backgroundColor:'#fff',border:'1px solid #e0e0e0',borderRadius:'4px'}});
+            card.add(ui.Label(rn.replace('region','Region '),{fontSize:'12px',fontWeight:'bold',color:'#1a73e8',margin:'1px 0'}));
+            if(!rMap[rn]&&models.length>0)rMap[rn]=models[0].modelId;
+            if(!_cbs[rn])_cbs[rn]={};
             models.forEach(function(m){
-                var sel=(regionModelMap[rn]===m.modelId);
+                var sel=(rMap[rn]===m.modelId);
                 var cb=ui.Checkbox({label:m.modelId,value:sel,style:{fontSize:'10px',margin:'1px 4px'}});
-                cb.onChange(function(v){if(v){regionModelMap[rn]=m.modelId;Object.keys(_cbStore[rn]).forEach(function(k){if(k!==m.modelId)_cbStore[rn][k].setValue(false);});}else{if(regionModelMap[rn]===m.modelId)regionModelMap[rn]=null;}buildConfirmSection();});
-                _cbStore[rn][m.modelId]=cb;
-                var eye=ui.Button({label:' o ',style:S.btn_gray,onClick:function(){
-                    var key=rn+'_'+m.modelId;
-                    if(!regionEyeState[key])regionEyeState[key]=false;
-                    regionEyeState[key]=!regionEyeState[key];
-                    if(regionEyeState[key]){mLayer('class_'+key,ee.Image(m.assetId).select(0).divide(10).toByte().selfMask(),{min:0,max:100,palette:['#ffcccc','#ff6666','#cc0000','#660000']},m.modelId+' | '+rn);this.style=S.btn_blue;}
-                    else{if(managedLayers['class_'+key]){Map.layers().remove(managedLayers['class_'+key]);delete managedLayers['class_'+key];}this.style=S.btn_gray;}
+                cb.onChange(function(v){if(v){rMap[rn]=m.modelId;Object.keys(_cbs[rn]).forEach(function(k){if(k!==m.modelId)_cbs[rn][k].setValue(false)})}else{if(rMap[rn]===m.modelId)rMap[rn]=null}buildConfirmPanel()});
+                _cbs[rn][m.modelId]=cb;
+                var eye=ui.Button({label:'o',style:S.btn_gray,onClick:function(){
+                    var key=rn+'_'+m.modelId;if(!eyeSt[key])eyeSt[key]=false;eyeSt[key]=!eyeSt[key];
+                    if(eyeSt[key]){mL('class_'+key,ee.Image(m.assetId).select(0).divide(10).toByte().selfMask(),{min:0,max:100,palette:['#fcc','#f66','#c00','#600']},m.modelId+'|'+rn);this.style=S.btn_blue}
+                    else{if(mLayers['class_'+key]){Map.layers().remove(mLayers['class_'+key]);delete mLayers['class_'+key]}this.style=S.btn_gray}
                 }});
-                card.add(ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{margin:'1px 0',padding:'2px',stretch:'horizontal'},widgets:[cb,eye]}));
+                card.add(ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'1px 0',padding:'1px'},widgets:[cb,eye]}));
             });
-            panel.add(card);
+            regionsBox.add(card);
         });
+        buildConfirmPanel();
     });
 }
 
-// ─── CONFIRM SECTION ────────────────────────────────────────────────────────
+// ─── CONFIRM ────────────────────────────────────────────────────────────────
 
-function buildConfirmSection(panel) {
-    if (!panel) {
-        // Find the confirm panel in the UI
-        var secs = ui.root.widgets().get(0).widgets();
-        for (var s = 0; s < secs.length(); s++) {
-            var w = secs.get(s);
-            // Look for the section containing confirm
-        }
-        return;
-    }
-    panel.clear();
-    var fullName = collectionName + '-ft00';
-    panel.add(ui.Label(L.collection_target+': '+fullName+' / '+currentPeriodKey, {fontSize:'11px',fontFamily:'monospace',color:'#1a73e8',margin:'2px','padding':'4px',backgroundColor:'#f0f4ff',borderRadius:'3px'}));
-
-    var names = Object.keys(regionModelMap).sort();
-    var hasAll = true;
-    names.forEach(function(r){
-        var m=regionModelMap[r];
-        panel.add(ui.Label('  '+r.replace('region','Region ')+': '+(m?m:L.label_status_none), m?S.status_ok:S.status_err));
-        if(!m)hasAll=false;
-    });
-    if(names.length===0)panel.add(ui.Label('Nenhuma regiao configurada.',S.status_err));
-
-    // Export button
-    var btnExport = ui.Button({label:L.export_btn, style:S.btn_green, disabled:!hasAll||names.length===0, onClick:function(){
-        showPrePopup(panel);
-    }});
-    panel.add(btnExport);
+function buildConfirmPanel(){
+    if(!confirmBox)return;
+    confirmBox.clear();var fn=collName+'-ft00';
+    confirmBox.add(ui.Label(L.target+': '+fn+' / '+cPeriod,{fontSize:'11px',fontFamily:'monospace',color:'#1a73e8',margin:'2px',padding:'4px',backgroundColor:'#fff',borderRadius:'3px'}));
+    var names=Object.keys(rMap).sort(),hasAll=true;
+    names.forEach(function(r){var m=rMap[r];confirmBox.add(ui.Label('  '+r.replace('region','Region ')+': '+(m?m:L.none),m?S.ok:S.err));if(!m)hasAll=false});
+    if(names.length===0)confirmBox.add(ui.Label('Nenhuma regiao configurada.',S.err));
+    confirmBox.add(ui.Button({label:L.export_btn,style:S.btn_green,disabled:!hasAll||names.length===0,onClick:function(){showPrePopup()}}));
 }
 
 // ─── PRE-POPUP ──────────────────────────────────────────────────────────────
 
-function showPrePopup(parentPanel) {
-    parentPanel.clear();
-    var fullName = collectionName + '-ft00';
-    var box = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:S.pre_box});
-    box.add(ui.Label('⚠ '+L.pre_title, {fontSize:'13px',fontWeight:'bold',color:'#cc8800',margin:'2px'}));
-    box.add(ui.Label(L.pre_body, {fontSize:'11px',color:'#333',margin:'2px'}));
-    box.add(ui.Label('FILTERED/'+fullName+'/'+currentPeriodKey, {fontSize:'11px',fontWeight:'bold',fontFamily:'monospace',color:'#1a73e8',margin:'2px','padding':'4px',backgroundColor:'#fff'}));
-    box.add(ui.Label(L.pre_warn, {fontSize:'10px',color:'#888',margin:'4px 2px'}));
-    var br = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{stretch:'horizontal',margin:'4px 0 0 0'}});
-    br.add(ui.Button({label:L.cancel, style:S.btn_gray, onClick:function(){buildConfirmSection(parentPanel);}}));
-    br.add(ui.Button({label:L.pre_ok, style:S.btn_green, onClick:function(){executeExport(parentPanel);}}));
-    box.add(br);
-    parentPanel.add(box);
+function showPrePopup(){
+    confirmBox.clear();var fn=collName+'-ft00';
+    var bx=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:S.pre});
+    bx.add(ui.Label('⚠ '+L.pre_title,{fontSize:'13px',fontWeight:'bold',color:'#cc8800',margin:'2px'}));
+    bx.add(ui.Label(L.pre_body,{fontSize:'11px',color:'#333',margin:'2px'}));
+    bx.add(ui.Label('FILTERED/'+fn+'/'+cPeriod,{fontSize:'11px',fontWeight:'bold',fontFamily:'monospace',color:'#1a73e8',margin:'2px',padding:'4px',backgroundColor:'#fff'}));
+    bx.add(ui.Label(L.pre_warn,{fontSize:'10px',color:'#888',margin:'4px 2px'}));
+    var br=ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'4px 0 0 0'}});
+    br.add(ui.Button({label:L.cancel,style:S.btn_gray,onClick:function(){buildConfirmPanel()}}));
+    br.add(ui.Button({label:L.pre_ok,style:S.btn_green,onClick:function(){doExport()}}));
+    bx.add(br);confirmBox.add(bx);
 }
 
 // ─── EXPORT ─────────────────────────────────────────────────────────────────
 
-function executeExport(parentPanel) {
-    parentPanel.clear();
-    parentPanel.add(ui.Label(L.loading, {fontSize:'11px',color:'#1a73e8',margin:'4px'}));
-
-    var fullName = collectionName + '-ft00';
-    ensureFolder('FILTERED/'+fullName);
-
-    var rns = Object.keys(regionModelMap).filter(function(r){return!!regionModelMap[r];});
-    if(rns.length===0){parentPanel.add(ui.Label('Erro: nenhuma regiao.',S.status_err));return;}
-
-    var nImg = ee.Image(0).rename('probability');
-    var dImg = ee.Image(0).rename('dayOfYear');
-    var mList = [];
-
+function doExport(){
+    confirmBox.clear();confirmBox.add(ui.Label(L.loading,{fontSize:'11px',color:'#1a73e8',margin:'4px'}));
+    var fn=collName+'-ft00';ensureFolder('FILTERED/'+fn);
+    var rns=Object.keys(rMap).filter(function(r){return!!rMap[r]});if(rns.length===0){confirmBox.add(ui.Label('Erro: nenhuma regiao.',S.err));return}
+    var nImg=ee.Image(0).rename('probability'),dImg=ee.Image(0).rename('dayOfYear'),mL=[];
     rns.forEach(function(rn){
-        var mid=regionModelMap[rn]; mList.push(rn+':'+mid);
-        var assets=availableModels[currentPeriodKey]&&availableModels[currentPeriodKey][rn];
-        if(!assets)return;
-        var found=null; for(var i=0;i<assets.length;i++){if(assets[i].modelId===mid){found=assets[i];break;}} if(!found)return;
-        var rMask=ee.Image(0).paint(REGIONS.filter(ee.Filter.eq(REGION_PROPERTY,rn)),1);
-        var src=ee.Image(found.assetId);
-        nImg=nImg.where(rMask.eq(1),src.select(0));
-        dImg=dImg.where(rMask.eq(1),src.select(1));
+        var mid=rMap[rn];mL.push(rn+':'+mid);var assets=avMods[cPeriod]&&avMods[cPeriod][rn];if(!assets)return;
+        var found=null;for(var i=0;i<assets.length;i++){if(assets[i].modelId===mid){found=assets[i];break}}if(!found)return;
+        var rMask=ee.Image(0).paint(REGIONS.filter(ee.Filter.eq(REGION_PROPERTY,rn)),1),src=ee.Image(found.assetId);
+        nImg=nImg.where(rMask.eq(1),src.select(0));dImg=dImg.where(rMask.eq(1),src.select(1));
     });
-
-    nImg=nImg.addBands(dImg).selfMask().set({'region_models':mList.join(','),'campaign':'MONITOR_01','filter_stage':'ft00','period':currentPeriodKey});
-
-    var destPath=CLASSIFICATIONS_ROOT+'FILTERED/'+fullName;
-    var destAsset=destPath+'/'+currentPeriodKey;
-
-    Map.addLayer(nImg.select('probability').selfMask(),{min:0,max:1000,palette:['#ffcccc','#ff0000','#660000']},'National '+currentPeriodKey,false);
-
-    try{ee.data.getAsset(destAsset);print('Ja existe: '+destAsset);}
-    catch(e){print('Exportando: '+destAsset);Export.image.toAsset({image:nImg.toInt16(),description:currentPeriodKey.replace(/_/g,''),assetId:destAsset,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
-
-    parentPanel.clear();
-    parentPanel.add(ui.Label(L.done,{fontSize:'12px',color:'#0f9d58',fontWeight:'bold',margin:'4px'}));
-    parentPanel.add(ui.Label('FILTERED/'+fullName+'/'+currentPeriodKey,{fontSize:'10px',color:'#555',fontFamily:'monospace',margin:'2px'}));
+    nImg=nImg.addBands(dImg).selfMask().set({'region_models':mL.join(','),'campaign':'MONITOR_01','filter_stage':'ft00','period':cPeriod});
+    var dest=CLASSIFICATIONS_ROOT+'FILTERED/'+fn+'/'+cPeriod;
+    Map.addLayer(nImg.select('probability').selfMask(),{min:0,max:1000,palette:['#fcc','#f00','#600']},'National '+cPeriod,false);
+    try{ee.data.getAsset(dest);print('Ja existe: '+dest)}
+    catch(e){print('Exportando: '+dest);Export.image.toAsset({image:nImg.toInt16(),description:cPeriod.replace(/_/g,''),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13})}
+    confirmBox.clear();confirmBox.add(ui.Label(L.done,{fontSize:'12px',color:'#0f9d58',fontWeight:'bold',margin:'4px'}));
+    confirmBox.add(ui.Label('FILTERED/'+fn+'/'+cPeriod,{fontSize:'10px',color:'#555',fontFamily:'monospace',margin:'2px'}));
 }
+
+function refreshAll(){buildRegionsPanel();buildConfirmPanel();}
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
 buildForm();
-print('M7_00 3.0 carregado.');
+print('M7_00 3.1 carregado.');
