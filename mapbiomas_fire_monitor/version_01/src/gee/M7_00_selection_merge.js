@@ -369,8 +369,7 @@ function buildConfigTab() {
     var card = ui.Panel({ layout: ui.Panel.Layout.flow('vertical'), style: styles.card });
 
     // Existing collections dropdown
-    var lblEx = ui.Label(L.lbl_existing, styles.label);
-    lblEx.setStyle('margin', '4px 1px 0px 1px');
+    var lblEx = ui.Label(L.lbl_existing, { margin: '4px 1px 0px 1px', fontSize: '11px', color: '#555' });
     card.add(lblEx);
     var ddExisting = ui.Select({ items: [L.lbl_existing_loading], value: null, style: styles.input });
     ddExisting.setDisabled(true);
