@@ -101,7 +101,7 @@ function loadExisting(cb){
 
 // ─── FORM ───────────────────────────────────────────────────────────────────
 
-var rootBox, regionsBox, confirmBox, ddExisting, txtName;
+var rootBox, regionsBox, confirmBox, contentsBox, ddExisting, txtName;
 
 function buildForm(){
     rootBox = ui.root;
@@ -175,6 +175,10 @@ function buildForm(){
         cPeriod=getDK(cYear,cMonth);loadMosaic(cYear,cMonth);Map.centerObject(REGIONS);
         buildRegionsPanel();
     }}));
+
+    // Contents panel: mostra periodos ja na colecao
+    contentsBox=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{margin:'6px 0 0 0'}});
+    cPrd.add(contentsBox);
     root.add(cPrd);
 
     // ═══ REGIONS ═══
@@ -202,6 +206,36 @@ function buildForm(){
     loadExisting(function(names){
         if(names.length===0){ddExisting.items().reset(['(nenhuma)']);ddExisting.setDisabled(true);}
         else {ddExisting.items().reset(names);ddExisting.setDisabled(false);}
+    });
+    loadCollectionContents();
+}
+
+// ─── COLLECTION CONTENTS ────────────────────────────────────────────────────
+
+function loadCollectionContents(){
+    if(!contentsBox)return;
+    contentsBox.clear();
+    var fn=collName+'-ft00';
+    var path=CLASSIFICATIONS_ROOT+'FILTERED/'+fn+'/';
+
+    ee.data.listAssets(path,{},function(r){
+        var periods=[];
+        if(r&&r.assets)periods=r.assets.filter(function(a){return a.type==='IMAGE'}).map(function(a){return a.id.split('/').pop()}).sort().reverse();
+
+        var card=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{margin:'4px 0',padding:'6px',backgroundColor:'#fff',border:'1px solid #c8d6f0',borderRadius:'4px'}});
+        card.add(ui.Label(L.existing+': '+fn,{fontSize:'10px',fontWeight:'bold',color:'#1a73e8',margin:'0 0 4px 0'}));
+
+        if(periods.length===0){
+            card.add(ui.Label('(vazia)',{fontSize:'10px',color:'#aaa',margin:'2px'}));
+        } else {
+            var list=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{maxHeight:'140px'}});
+            periods.forEach(function(p){
+                list.add(ui.Label(' '+p+'  ✅',{fontSize:'11px',fontFamily:'monospace',color:'#0f9d58',margin:'1px 0'}));
+            });
+            card.add(list);
+            card.add(ui.Label('Total: '+periods.length+' | Ultimo: '+periods[0],{fontSize:'10px',color:'#888',margin:'4px 0 0 0'}));
+        }
+        contentsBox.add(card);
     });
 }
 
@@ -288,9 +322,10 @@ function doExport(){
     catch(e){print('Exportando: '+dest);Export.image.toAsset({image:nImg.toInt16(),description:cPeriod.replace(/_/g,''),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13})}
     confirmBox.clear();confirmBox.add(ui.Label(L.done,{fontSize:'12px',color:'#0f9d58',fontWeight:'bold',margin:'4px'}));
     confirmBox.add(ui.Label('FILTERED/'+fn+'/'+cPeriod,{fontSize:'10px',color:'#555',fontFamily:'monospace',margin:'2px'}));
+    loadCollectionContents();
 }
 
-function refreshAll(){buildRegionsPanel();buildConfirmPanel();}
+function refreshAll(){buildRegionsPanel();buildConfirmPanel();loadCollectionContents();}
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
