@@ -193,8 +193,8 @@ class CacheManager:
                 if logger:
                     elapsed = time.time() - start_time
                     # Estimativa mais realista para paralelo
-                    eta = (elapsed / completed) * (total_steps - completed) if completed > 0 else 0
-                    logger(f"Tiempo Estimado: {int(eta):02d}s || [{completed}/{total_steps}]")
+                    remaining = (elapsed / completed) * (total_steps - completed) if completed > 0 else 0
+                    logger(f"Estimated remaining: {int(remaining):02d}s || [{completed}/{total_steps}]")
         
         CacheManager._state = state
         CacheManager.save()

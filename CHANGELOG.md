@@ -12,6 +12,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+## [1.3.2] — 2026-07-06
+
+### Fixed
+- M5: universal dayOfYear mask — uses `bands_block['dayOfYear'] > 0` for ALL models. Cloud/border holes no longer classified as fire regardless of model band selection.
+
+## [1.3.1] — 2026-07-06
+
+### Fixed
+- Hotfix: `passo()` alias added to ProgressTracker (M6_publisher compatibility)
+
 ## [1.3.0] — 2026-07-05
 
 ### Added

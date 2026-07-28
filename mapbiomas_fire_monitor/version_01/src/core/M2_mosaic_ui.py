@@ -8,7 +8,7 @@ from IPython.display import display, clear_output
 from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode, monthly_cog_path, yearly_cog_path
 import M0_auth_config as config_module
 from M_cache import CacheManager
-from M_ui_components import PipelineStepUI, cell_log
+from M_ui_components import PipelineStepUI, cell_log, ProgressTracker
 from M_lang import L as Lang
 from M2_mosaic_logic import assemble_country_mosaic
 
@@ -368,10 +368,11 @@ def start_mosaic_assembly(ui_obj):
     from M2_mosaic_logic import assemble_country_mosaic
 
     succeeded = 0
+    prog = ProgressTracker(len(selected), "COG Assembly")
     for item in selected:
         d_label = f"{item['year']}_{item['month']:02d}" if item['month'] else f"{item['year']}"
         try:
-            print(f"\n--- Processing: {item['sensor']} {d_label} {item['band']} ---")
+            cell_log(f"[{prog.completed+1}/{prog.total}] Processing {item['sensor']} {d_label} {item['band']}...", type='info')
             
             assemble_country_mosaic(
                 year=item['year'],
@@ -383,10 +384,12 @@ def start_mosaic_assembly(ui_obj):
                 logger=print
             )
             succeeded += 1
-            cell_log(f"COG montado: {item['sensor']} {d_label} {item['band']}", type='success')
+            cell_log(f"OK: {item['sensor']} {d_label} {item['band']}", type='success')
         except Exception as e:
             print(f"[ERR] Failed {item['sensor']} {d_label} {item['band']}: {e}")
             cell_log(f"Failed {item['sensor']} {d_label} {item['band']}: {e}", type='error')
             traceback.print_exc()
+        finally:
+            prog.step()
     print(f"\n[SUMMARY] Assembly completed: {succeeded}/{len(selected)} succeeded.")
-    cell_log(f"Assembly completed: {succeeded}/{len(selected)}", type='success')
+    cell_log(f"Assembly completed: {succeeded}/{len(selected)} | {prog.summary()}", type='success')
