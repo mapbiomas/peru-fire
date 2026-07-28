@@ -268,6 +268,7 @@ var panel_root = null;
 var panel_body = null;
 var abas = {};
 var panel_confirm = null;
+var _m7ExistingFolders = [];
 
 // ─── FUNCOES AUXILIARES ────────────────────────────────────────────────────
 
@@ -502,7 +503,7 @@ function buildUI() {
     panel_root.add(tabBar);
 
     // Body (conteudo da aba ativa)
-    panel_body = ui.Panel({ style: { margin: '4px', padding: '4px', overflowY: 'auto', maxHeight: '600px' } });
+    panel_body = ui.Panel({ style: { margin: '4px', padding: '4px', maxHeight: '600px' } });
     panel_root.add(panel_body);
 
     // Painel de confirmacao (inicialmente oculto)
@@ -669,7 +670,7 @@ function buildRegionsTab() {
         }
 
         // Painel scrollavel
-        var scrollPanel = ui.Panel({ style: { overflowY: 'auto', maxHeight: '520px', margin: '2px', padding: '2px' } });
+        var scrollPanel = ui.Panel({ style: { maxHeight: '520px', margin: '2px', padding: '2px' } });
 
         // Header com botoes globais
         var headerRow = ui.Panel({ layout: ui.Panel.Layout.flow('horizontal'), style: { margin: '2px', padding: '4px', stretch: 'horizontal' } });
@@ -846,18 +847,18 @@ function loadExistingFolders() {
                     .map(function (a) { return a.id.split('/').pop(); })
                     .sort();
                 // Armazena para uso futuro
-                window._m7ExistingFolders = folders;
+                _m7ExistingFolders = folders;
             } else {
-                window._m7ExistingFolders = [];
+                _m7ExistingFolders = [];
             }
         });
     } catch (e) {
-        window._m7ExistingFolders = [];
+        _m7ExistingFolders = [];
     }
 }
 
 function loadExistingFoldersDropdown(dd) {
-    var folders = window._m7ExistingFolders || [];
+    var folders = _m7ExistingFolders || [];
     if (folders.length === 0) {
         dd.items().reset([L.lbl_no_folder]);
         dd.setDisabled(true);
