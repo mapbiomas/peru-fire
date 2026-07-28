@@ -234,13 +234,22 @@ function loadCollectionContents(){
         }
         contentsBox.add(card);
 
-        // Popula dropdown de periodos
+        // Popula dropdown: todos os periodos possiveis MENOS os que ja estao na colecao
         if(ddPeriod){
-            if(periods.length===0){
-                ddPeriod.items().reset(['(vazio)']);ddPeriod.setDisabled(true);ddPeriod.setValue(null);
+            var today=new Date();var my=today.getFullYear(),mm=today.getMonth();
+            if(mm===0){mm=12;my--}
+            var all=[];
+            for(var y=my;y>=START_YEAR;y--){
+                var me=(y===my)?mm:12;
+                for(var m=me;m>=1;m--){all.push(y+'_'+('0'+m).slice(-2));}
+            }
+            var recent=all.filter(function(p){return periods.indexOf(p)===-1;});
+            if(recent.length===0){
+                ddPeriod.items().reset(['(todos preenchidos)']);ddPeriod.setDisabled(true);
+                ddPeriod.setValue(null);
             } else {
-                ddPeriod.items().reset(periods);ddPeriod.setDisabled(false);
-                if(!cPeriod||periods.indexOf(cPeriod)===-1){ddPeriod.setValue(periods[0]);}
+                ddPeriod.items().reset(recent);ddPeriod.setDisabled(false);
+                if(!cPeriod||recent.indexOf(cPeriod)===-1){ddPeriod.setValue(recent[0]);cPeriod=recent[0];}
             }
         }
     });
