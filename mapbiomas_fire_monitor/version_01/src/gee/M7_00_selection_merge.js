@@ -101,7 +101,7 @@ function loadExisting(cb){
 
 // ─── FORM ───────────────────────────────────────────────────────────────────
 
-var rootBox, regionsBox, confirmBox, contentsBox, ddExisting, txtName;
+var rootBox, regionsBox, confirmBox, contentsBox, ddExisting, ddPeriod, txtName;
 
 function buildForm(){
     rootBox = ui.root;
@@ -159,26 +159,21 @@ function buildForm(){
     var cPrd=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:COLORS.period});
     cPrd.add(ui.Label(L.period,{fontSize:'12px',fontWeight:'bold',color:'#333',margin:'0 0 6px 0'}));
 
-    var today=new Date(); var mY=today.getFullYear(),mM=today.getMonth();
-    if(mM===0){mM=12;mY--}
-    cYear=mY;cMonth=mM;cPeriod=getDK(mY,mM);
-
-    var sldY=ui.Slider({min:START_YEAR,max:mY,value:mY,step:1,style:{stretch:'horizontal'}});
-    var lblY=ui.Label(L.year+': '+mY,S.lbl);
-    sldY.onChange(function(v){lblY.setValue(L.year+': '+v);cYear=v;cPeriod=getDK(cYear,cMonth);if(v===mY)sldM.setMax(mM);else sldM.setMax(12);});
-    var sldM=ui.Slider({min:1,max:mM,value:mM,step:1,style:{stretch:'horizontal'}});
-    var lblM=ui.Label(L.month+': '+('0'+mM).slice(-2),S.lbl);
-    sldM.onChange(function(v){lblM.setValue(L.month+': '+('0'+v).slice(-2));cMonth=v;cPeriod=getDK(cYear,cMonth);});
-
-    cPrd.add(lblY).add(sldY).add(lblM).add(sldM);
-    cPrd.add(ui.Button({label:L.load,style:S.btn_blue,onClick:function(){
-        cPeriod=getDK(cYear,cMonth);loadMosaic(cYear,cMonth);Map.centerObject(REGIONS);
-        buildRegionsPanel();
-    }}));
-
     // Contents panel: mostra periodos ja na colecao
-    contentsBox=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{margin:'6px 0 0 0'}});
+    contentsBox=ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
     cPrd.add(contentsBox);
+
+    // Period select: populado dinamicamente pelos conteudos da ft00
+    ddPeriod=ui.Select({items:['...'],value:null,style:S.inp,disabled:true});
+    ddPeriod.onChange(function(v){
+        if(!v||v==='...'||v.indexOf('(')!==-1)return;
+        cPeriod=v;
+        var y=parseInt(v.substring(0,4),10), m=parseInt(v.substring(5,7),10);
+        cYear=y;cMonth=m;
+        loadMosaic(cYear,cMonth);Map.centerObject(REGIONS);
+        buildRegionsPanel();
+    });
+    cPrd.add(ddPeriod);
     root.add(cPrd);
 
     // ═══ REGIONS ═══
@@ -222,20 +217,30 @@ function loadCollectionContents(){
         var periods=[];
         if(r&&r.assets)periods=r.assets.filter(function(a){return a.type==='IMAGE'}).map(function(a){return a.id.split('/').pop()}).sort().reverse();
 
-        var card=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{margin:'4px 0',padding:'6px',backgroundColor:'#fff',border:'1px solid #c8d6f0',borderRadius:'4px'}});
+        var card=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{margin:'0 0 6px 0',padding:'6px',backgroundColor:'#fff',border:'1px solid #c8d6f0',borderRadius:'4px'}});
         card.add(ui.Label(L.existing+': '+fn,{fontSize:'10px',fontWeight:'bold',color:'#1a73e8',margin:'0 0 4px 0'}));
 
         if(periods.length===0){
             card.add(ui.Label('(vazia)',{fontSize:'10px',color:'#aaa',margin:'2px'}));
         } else {
-            var list=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{maxHeight:'140px'}});
+            var list=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{maxHeight:'100px'}});
             periods.forEach(function(p){
-                list.add(ui.Label(' '+p+'  ✅',{fontSize:'11px',fontFamily:'monospace',color:'#0f9d58',margin:'1px 0'}));
+                list.add(ui.Label(' '+p+'  ✅',{fontSize:'10px',fontFamily:'monospace',color:'#0f9d58',margin:'1px 0'}));
             });
             card.add(list);
-            card.add(ui.Label('Total: '+periods.length+' | Ultimo: '+periods[0],{fontSize:'10px',color:'#888',margin:'4px 0 0 0'}));
+            card.add(ui.Label('Total: '+periods.length,{fontSize:'10px',color:'#888',margin:'2px 0 0 0'}));
         }
         contentsBox.add(card);
+
+        // Popula dropdown de periodos
+        if(ddPeriod){
+            if(periods.length===0){
+                ddPeriod.items().reset(['(vazio)']);ddPeriod.setDisabled(true);ddPeriod.setValue(null);
+            } else {
+                ddPeriod.items().reset(periods);ddPeriod.setDisabled(false);
+                if(!cPeriod||periods.indexOf(cPeriod)===-1){ddPeriod.setValue(periods[0]);}
+            }
+        }
     });
 }
 
