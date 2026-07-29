@@ -75,8 +75,8 @@ var collectionName = 'propose_a';
 
 // ─── UI COMPONENT REFERENCES ───────────────────────────────────────────────
 
-var contentRoot, regionsBox, confirmBox, contentsBox, summaryBox, statusLabel;
-var dropdownExisting, dropdownPeriod, textboxCollectionName;
+var contentRoot, regionsBox, confirmBox, contentsBox, summaryBox, statusLabel, periodLoading, exportStatus;
+var dropdownExisting, dropdownPeriod, dropdownCampaign, textboxCollectionName;
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -89,6 +89,17 @@ function formatPeriod(y,m){return m!==null?y+'_'+('0'+m).slice(-2):''+y;}
 
 function showLoading(){if(statusLabel)statusLabel.style().set('shown',true);}
 function hideLoading(){if(statusLabel)statusLabel.style().set('shown',false);}
+function showPeriodLoading(){if(periodLoading)periodLoading.style().set('shown',true);}
+function hidePeriodLoading(){if(periodLoading)periodLoading.style().set('shown',false);}
+
+function setExportStatus(state, msg){
+    if(!exportStatus)return;
+    var colors={loading:{bg:'#fff8e1',icon:'⏳'},success:{bg:'#e8f5e9',icon:'✅'},error:{bg:'#ffeaea',icon:'❌'},info:{bg:'#f0f4ff',icon:'ℹ️'}};
+    var c=colors[state]||colors.info;
+    exportStatus.style().set('shown',true);
+    exportStatus.clear();
+    exportStatus.add(ui.Label(c.icon+' '+msg,{fontSize:'11px',padding:'4px 8px',backgroundColor:c.bg,borderRadius:'3px',margin:'2px 0',stretch:'horizontal'}));
+}
 
 function fullCollectionName(){return collectionName+'-ft00';}
 
@@ -336,7 +347,7 @@ function buildRegionsLayout(callback){
         regionsBox.add(ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{stretch:'horizontal'}, widgets:[leftColumn,rightColumn]}));
 
         layoutBuilt = true;
-        hideLoading();
+        hideLoading();hidePeriodLoading();
         callback(data);
     });
 }
@@ -362,7 +373,7 @@ function repopulateRegionCheckboxes(data){
 
     updateRegionSummary(data);
     buildConfirmPanel();
-    hideLoading();
+    hideLoading();hidePeriodLoading();
 }
 
 function loadPeriodAndRepopulate(){
@@ -388,7 +399,8 @@ function buildConfigSection(){
     var section = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:SECTION_STYLE.config});
     section.add(ui.Label(L.cfg, STYLE.sectionTitle));
     section.add(ui.Label(L.campaign, STYLE.label));
-    section.add(ui.Select({items:['MONITOR_01','MONITOR_DEV'], value:'MONITOR_01', style:STYLE.input}));
+    dropdownCampaign = ui.Select({items:['MONITOR_01','MONITOR_DEV'], value:'MONITOR_01', style:STYLE.input});
+    section.add(dropdownCampaign);
 
     var sideRow = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{margin:'6px 0',stretch:'horizontal'}});
 
@@ -437,13 +449,18 @@ function buildPeriodSection(){
         if(!v||v==='...'||!/^\d/.test(v))return;
         currentPeriod = v.split(' ')[0];
         resetRegionState();
-        showLoading();
+        showLoading();showPeriodLoading();
         var y = parseInt(currentPeriod.substring(0,4),10), m = parseInt(currentPeriod.substring(5,7),10);
         currentYear = y; currentMonth = m;
         loadMosaic(currentYear, currentMonth);Map.centerObject(REGIONS);
         loadPeriodAndRepopulate();
     });
-    section.add(dropdownPeriod);
+
+    var periodRow = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{stretch:'horizontal'}});
+    periodRow.add(dropdownPeriod);
+    periodLoading = ui.Label({value:'', style:{shown:false,margin:'2px 6px',stretch:'horizontal'}});
+    periodRow.add(periodLoading);
+    section.add(periodRow);
     return section;
 }
 
@@ -508,6 +525,8 @@ function doExport(){
     confirmBox.add(ui.Label(L.loading, {fontSize:'11px',color:'#1a73e8',margin:'4px'}));
     showLoading();
     var fn = fullCollectionName();
+    var camp = dropdownCampaign.getValue();
+    setExportStatus('loading', 'Exportando '+currentPeriod+' para '+fn+'...');
     ensureFolder('FILTERED/'+fn);
 
     var names = Object.keys(regionModelMap).filter(function(r){return!!regionModelMap[r];});
@@ -527,13 +546,13 @@ function doExport(){
         doyImage = doyImage.where(regionMask.eq(1),source.select(1));
     });
 
-    nationalImage = nationalImage.addBands(doyImage).selfMask().set({'region_models':modelList.join(','),'campaign':'MONITOR_01','filter_stage':'ft00','period':currentPeriod});
+    nationalImage = nationalImage.addBands(doyImage).selfMask().set({'region_models':modelList.join(','),'campaign':camp,'filter_stage':'ft00','period':currentPeriod});
     var destination = CLASSIFICATIONS_ROOT+'FILTERED/'+fn+'/'+currentPeriod;
 
     manageMapLayer('national_'+currentPeriod, nationalImage.select('probability').selfMask(), {min:0,max:1000,palette:['#fcc','#f00','#600']}, 'National '+currentPeriod);
 
-    try{ee.data.getAsset(destination);print('Ja existe: '+destination);}
-    catch(e){print('Exportando: '+destination);Export.image.toAsset({image:nationalImage.toInt16(),description:currentPeriod.replace(/_/g,''),assetId:destination,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
+    try{ee.data.getAsset(destination);setExportStatus('info', camp+' / '+fn+'/'+currentPeriod+' ja existe');}
+    catch(e){setExportStatus('success', camp+' / '+fn+'/'+currentPeriod+' enviado');Export.image.toAsset({image:nationalImage.toInt16(),description:(camp+'_'+currentPeriod.replace(/_/g,'')).substring(0,80),assetId:destination,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
 
     confirmBox.clear();
     confirmBox.add(ui.Label(L.done, {fontSize:'12px',color:'#0f9d58',fontWeight:'bold',margin:'4px'}));
@@ -558,6 +577,10 @@ function buildForm(){
     root.add(buildConfigSection());
     root.add(buildPeriodSection());
     root.add(buildRegionsSection());
+
+    exportStatus = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:{margin:'4px',shown:false}});
+    root.add(exportStatus);
+
     root.add(buildConfirmSection());
 
     contentRoot.add(root);
