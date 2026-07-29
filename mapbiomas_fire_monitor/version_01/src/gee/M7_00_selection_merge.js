@@ -263,10 +263,12 @@ function populatePeriodDropdown(existingPeriods){
             currentYear = parseInt(pendingPeriods[defIdx].substring(0,4),10);
             currentMonth = parseInt(pendingPeriods[defIdx].substring(5,7),10);
             loadMosaic(currentYear, currentMonth);Map.centerObject(REGIONS);
-            buildRegionsPanel();
+            loadPeriodAndRepopulate();
         }
     });
 }
+
+var layoutBuilt = false;
 
 // ─── FILTER ─────────────────────────────────────────────────────────────────
 
@@ -289,18 +291,15 @@ function applyFilter(){
 
 // ─── REGIONS ────────────────────────────────────────────────────────────────
 
-function buildRegionsPanel(){
+function buildRegionsLayout(callback){
     regionsBox.clear();
     regionsBox.add(ui.Label(L.loading+' '+currentPeriod, {fontSize:'10px',color:'#888'}));
     summaryBox.clear();
     summaryBox.add(ui.Label('Periodo: '+currentPeriod+' | Colecao: '+fullCollectionName(), {fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
 
     loadClassifications(currentYear, currentMonth, function(data){
-        availableModels = {};
-        availableModels[currentPeriod] = data;
-        lastClassifications = data;
-        regionsBox.clear();
         resetRegionState();
+        regionsBox.clear();
 
         var headerRow = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{stretch:'horizontal',margin:'0 0 4px 0'}});
         var txtFilter = ui.Textbox({placeholder:L.filter_placeholder, style:{stretch:'horizontal',fontSize:'10px'}});
@@ -319,26 +318,49 @@ function buildRegionsPanel(){
         var mid = Math.ceil(regionNames.length/2);
 
         regionNames.forEach(function(rn, idx){
-            var models = (data[rn]||[]).sort(function(a,b){return a.modelId.localeCompare(b.modelId)});
             var regionCard = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:STYLE.card});
             regionCard.add(ui.Label(rn, {fontSize:'11px',fontWeight:'bold',color:'#1a73e8',margin:'1px 0'}));
 
             var checkboxesPanel = ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
             modelPanels[rn] = checkboxesPanel;
-
-            if(models.length===0){
-                checkboxesPanel.add(ui.Label('(sem predicao)', {fontSize:'9px',color:'#aaa',margin:'1px 0'}));
-            } else {
-                if(!regionModelMap[rn])regionModelMap[rn]=models[0].modelId;
-                models.forEach(function(m){createCheckboxForModel(rn, m, checkboxesPanel);});
-            }
             regionCard.add(checkboxesPanel);
             (idx<mid ? leftColumn : rightColumn).add(regionCard);
         });
 
         regionsBox.add(ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{stretch:'horizontal'}, widgets:[leftColumn,rightColumn]}));
-        updateRegionSummary(data);
-        buildConfirmPanel();
+
+        layoutBuilt = true;
+        callback(data);
+    });
+}
+
+function repopulateRegionCheckboxes(data){
+    availableModels = {};
+    availableModels[currentPeriod] = data;
+    lastClassifications = data;
+    resetRegionState();
+
+    regionNames.forEach(function(rn){
+        var models = (data[rn]||[]).sort(function(a,b){return a.modelId.localeCompare(b.modelId)});
+        var panel = modelPanels[rn];
+        if(!panel)return;
+        panel.clear();
+        if(models.length===0){
+            panel.add(ui.Label('(sem predicao)', {fontSize:'9px',color:'#aaa',margin:'1px 0'}));
+        } else {
+            if(!regionModelMap[rn])regionModelMap[rn]=models[0].modelId;
+            models.forEach(function(m){createCheckboxForModel(rn, m, panel);});
+        }
+    });
+
+    updateRegionSummary(data);
+    buildConfirmPanel();
+}
+
+function loadPeriodAndRepopulate(){
+    loadClassifications(currentYear, currentMonth, function(data){
+        if(!layoutBuilt){buildRegionsLayout(function(data2){repopulateRegionCheckboxes(data2);});}
+        else{repopulateRegionCheckboxes(data);}
     });
 }
 
@@ -410,7 +432,7 @@ function buildPeriodSection(){
         var y = parseInt(currentPeriod.substring(0,4),10), m = parseInt(currentPeriod.substring(5,7),10);
         currentYear = y; currentMonth = m;
         loadMosaic(currentYear, currentMonth);Map.centerObject(REGIONS);
-        buildRegionsPanel();
+        loadPeriodAndRepopulate();
     });
     section.add(dropdownPeriod);
     return section;
@@ -510,7 +532,7 @@ function doExport(){
     loadCollectionContents();
 }
 
-function refreshAll(){buildRegionsPanel();buildConfirmPanel();loadCollectionContents();}
+function refreshAll(){loadPeriodAndRepopulate();buildConfirmPanel();loadCollectionContents();}
 
 // ─── FORM ───────────────────────────────────────────────────────────────────
 
