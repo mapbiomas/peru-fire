@@ -168,6 +168,8 @@ function buildForm(){
     ddPeriod.onChange(function(v){
         if(!v||v==='...'||v.indexOf('(')!==-1)return;
         cPeriod=v.split(' ')[0];
+        rMap={};_cbs={};
+        mRemoveClass();
         var y=parseInt(cPeriod.substring(0,4),10), m=parseInt(cPeriod.substring(5,7),10);
         cYear=y;cMonth=m;
         loadMosaic(cYear,cMonth);Map.centerObject(REGIONS);
@@ -304,9 +306,15 @@ function buildRegionsPanel(){
     loadClassifications(cYear,cMonth,function(data){
         avMods={};avMods[cPeriod]=data;regionsBox.clear();
         var hr=ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'0 0 4px 0'}});
-        hr.add(ui.Button({label:L.select_all,style:S.btn_blue,onClick:function(){regionNames.forEach(function(r){if(data[r]&&data[r].length>0){rMap[r]=data[r][0].modelId;if(_cbs[r])Object.keys(_cbs[r]).forEach(function(k){_cbs[r][k].setValue(k===rMap[r])})}});buildConfirmPanel();}}));
-        hr.add(ui.Button({label:L.clear_all,style:S.btn_gray,onClick:function(){Object.keys(_cbs).forEach(function(rn){Object.keys(_cbs[rn]).forEach(function(k){_cbs[rn][k].setValue(false)})});rMap={};buildConfirmPanel();}}));
+        hr.add(ui.Button({label:L.select_all,style:S.btn_blue,onClick:function(){regionNames.forEach(function(r){if(data[r]&&data[r].length>0){rMap[r]=data[r][0].modelId;if(_cbs[r])Object.keys(_cbs[r]).forEach(function(k){_cbs[r][k].setValue(k===rMap[r])})}});buildConfirmPanel();buildRegionsPanel();}}));
+        hr.add(ui.Button({label:L.clear_all,style:S.btn_gray,onClick:function(){Object.keys(_cbs).forEach(function(rn){Object.keys(_cbs[rn]).forEach(function(k){_cbs[rn][k].setValue(false)})});rMap={};buildConfirmPanel();buildRegionsPanel();}}));
         regionsBox.add(hr);
+
+        // Filter textbox
+        var txtFilter=ui.Textbox({placeholder:'filtrar modelos...',style:{stretch:'horizontal',margin:'2px 0',fontSize:'10px'}});
+        var _filter='';
+        txtFilter.onChange(function(v){_filter=v.toLowerCase();buildRegionsPanel();});
+        regionsBox.add(txtFilter);
 
         // Two columns
         var leftCol=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{stretch:'horizontal'}});
@@ -321,9 +329,14 @@ function buildRegionsPanel(){
             if(models.length===0){
                 card.add(ui.Label('(sem predicao)',{fontSize:'10px',color:'#aaa',margin:'2px 0'}));
             } else {
+                // Filter models
+                var shown=models.filter(function(mm){return !_filter||mm.modelId.toLowerCase().indexOf(_filter)!==-1;});
+                if(shown.length===0){
+                    card.add(ui.Label('('+models.length+' oculto'+(models.length>1?'s':'')+')',{fontSize:'9px',color:'#ccc',margin:'1px 0'}));
+                } else {
                 if(!rMap[rn])rMap[rn]=models[0].modelId;
                 if(!_cbs[rn])_cbs[rn]={};
-                models.forEach(function(m){
+                shown.forEach(function(m){
                     var sel=(rMap[rn]===m.modelId);
                     var cb=ui.Checkbox({label:m.modelId,value:sel,style:{fontSize:'10px',margin:'1px 2px'}});
                     cb.onChange(function(v){
@@ -342,6 +355,7 @@ function buildRegionsPanel(){
                     card.add(cb);
                     if(sel){mL('class_'+rn+'_'+m.modelId,ee.Image(m.assetId).select(0).divide(10).toByte().selfMask(),{min:0,max:100,palette:['#fcc','#f66','#c00','#600']},m.modelId+'|'+rn);}
                 });
+                }
             }
             var col=idx<mid?leftCol:rightCol;
             col.add(card);
@@ -355,7 +369,8 @@ function buildRegionsPanel(){
         var fn2=collName+'-ft00';
         summaryBox.add(ui.Label('Periodo: '+cPeriod+' | Colecao: '+fn2,{fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
         var withData=regionNames.filter(function(r){return data[r]&&data[r].length>0;}).length;
-        summaryBox.add(ui.Label('Regioes com dados: '+withData+'/'+regionNames.length,{fontSize:'10px',color:'#333',margin:'1px 0'}));
+        var totalPreds=0;regionNames.forEach(function(r){if(data[r])totalPreds+=data[r].length;});
+        summaryBox.add(ui.Label('Regioes: '+withData+'/'+regionNames.length+' com predicoes | Predicoes totais: '+totalPreds,{fontSize:'10px',color:'#333',margin:'1px 0'}));
         var selected=regionNames.filter(function(r){return!!rMap[r]}).length;
         summaryBox.add(ui.Label('Modelos selecionados: '+selected+'/'+withData+' regioes',{fontSize:'9px',color:selected===withData?'#0f9d58':'#e37400',margin:'1px 0'}));
         buildConfirmPanel();
