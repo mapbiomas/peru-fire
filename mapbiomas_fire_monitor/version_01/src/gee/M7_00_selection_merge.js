@@ -167,8 +167,8 @@ function buildForm(){
     ddPeriod=ui.Select({items:['...'],value:null,style:S.inp,disabled:true});
     ddPeriod.onChange(function(v){
         if(!v||v==='...'||v.indexOf('(')!==-1)return;
-        cPeriod=v;
-        var y=parseInt(v.substring(0,4),10), m=parseInt(v.substring(5,7),10);
+        cPeriod=v.split(' ')[0];
+        var y=parseInt(cPeriod.substring(0,4),10), m=parseInt(cPeriod.substring(5,7),10);
         cYear=y;cMonth=m;
         loadMosaic(cYear,cMonth);Map.centerObject(REGIONS);
         buildRegionsPanel();
@@ -203,9 +203,38 @@ function buildForm(){
     // Carrega dropdown inicial
     loadExisting(function(names){
         if(names.length===0){ddExisting.items().reset(['(nenhuma)']);ddExisting.setDisabled(true);}
-        else {ddExisting.items().reset(names);ddExisting.setDisabled(false);}
+        else {
+            ddExisting.items().reset(names);ddExisting.setDisabled(false);
+            ddExisting.setValue(names[0]);
+            collName=names[0].split('-ft')[0]||names[0];
+            txtName.setValue(collName);
+            refreshAll();
+        }
     });
     loadCollectionContents();
+}
+
+// ─── PERIOD COUNTS ──────────────────────────────────────────────────────────
+
+function loadPeriodCounts(cb){
+    ee.data.listAssets(CLASSIFICATIONS_ROOT+'REGIONAL',{},function(cols){
+        var counts={};
+        if(!cols||!cols.assets){cb(counts);return}
+        var dirs=cols.assets.filter(function(c){return c.type==='IMAGE_COLLECTION'});
+        if(dirs.length===0){cb(counts);return}
+        var p=dirs.length;
+        dirs.forEach(function(c){
+            ee.data.listAssets(c.id,{},function(imgs){
+                if(imgs&&imgs.assets)imgs.assets.forEach(function(img){
+                    if(img.type!=='IMAGE')return;
+                    var name=img.id.split('/').pop(),parts=name.split('_'),period=null;
+                    for(var j=parts.length-1;j>=0;j--){if(/^\d{4}$/.test(parts[j])){period=parts[j]+(j+1<parts.length&&/^\d{2}$/.test(parts[j+1])?'_'+parts[j+1]:'');break}}
+                    if(period)counts[period]=(counts[period]||0)+1;
+                });
+                p--;if(p===0)cb(counts);
+            });
+        });
+    });
 }
 
 // ─── COLLECTION CONTENTS ────────────────────────────────────────────────────
@@ -235,7 +264,7 @@ function loadCollectionContents(){
         }
         contentsBox.add(card);
 
-        // Popula dropdown: todos os periodos possiveis MENOS os que ja estao na colecao
+        // Popula dropdown: periodos NAO na colecao + contagem de predicoes
         if(ddPeriod){
             var today=new Date();var my=today.getFullYear(),mm=today.getMonth();
             if(mm===0){mm=12;my--}
@@ -245,13 +274,21 @@ function loadCollectionContents(){
                 for(var m=me;m>=1;m--){all.push(y+'_'+('0'+m).slice(-2));}
             }
             var recent=all.filter(function(p){return periods.indexOf(p)===-1;});
-            if(recent.length===0){
-                ddPeriod.items().reset(['(todos preenchidos)']);ddPeriod.setDisabled(true);
-                ddPeriod.setValue(null);
-            } else {
-                ddPeriod.items().reset(recent);ddPeriod.setDisabled(false);
-                if(!cPeriod||recent.indexOf(cPeriod)===-1){ddPeriod.setValue(recent[0]);cPeriod=recent[0];cYear=parseInt(recent[0].substring(0,4),10);cMonth=parseInt(recent[0].substring(5,7),10);}
-            }
+            loadPeriodCounts(function(counts){
+                var items;
+                if(recent.length===0){
+                    items=['(todos preenchidos)'];ddPeriod.setDisabled(true);ddPeriod.setValue(null);
+                } else {
+                    items=recent.map(function(p){return p+' ('+(counts[p]||0)+' pred.)';});
+                    ddPeriod.setDisabled(false);
+                    // Default: most recent period WITH data
+                    var defIdx=0;
+                    for(var r=0;r<recent.length;r++){if((counts[recent[r]]||0)>0){defIdx=r;break}}
+                    ddPeriod.setValue(items[defIdx]);cPeriod=recent[defIdx];
+                    cYear=parseInt(recent[defIdx].substring(0,4),10);cMonth=parseInt(recent[defIdx].substring(5,7),10);
+                }
+                ddPeriod.items().reset(items);
+            });
         }
     });
 }
@@ -282,7 +319,7 @@ function buildRegionsPanel(){
             card.add(ui.Label(rn,{fontSize:'11px',fontWeight:'bold',color:'#1a73e8',margin:'1px 0'}));
 
             if(models.length===0){
-                card.add(ui.Label('(sem modelos)',{fontSize:'10px',color:'#aaa',margin:'2px 0'}));
+                card.add(ui.Label('(sem predicao)',{fontSize:'10px',color:'#aaa',margin:'2px 0'}));
             } else {
                 if(!rMap[rn])rMap[rn]=models[0].modelId;
                 if(!_cbs[rn])_cbs[rn]={};
