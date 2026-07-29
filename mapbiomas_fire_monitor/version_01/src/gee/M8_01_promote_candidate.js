@@ -16,12 +16,13 @@ var REGIONS = ee.FeatureCollection('projects/mapbiomas-peru/assets/FIRE/AUXILIAR
 var SCALE = 10;
 
 // ═══ CONFIG ═══
-var COLLECTION_BASE = 'monitor_01-sentinel2_minnbr_monthly_01';
+var COLLECTION_BASE = 'propose_a';
 var STAGE_SRC = '-ft04';
 // ═══════════════
 
-var PATH_FILTERED = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/FILTERED/';
-var PATH_CANDIDATES = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/CANDIDATES/';
+var CLASSIFICATIONS_ROOT = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/';
+var PATH_FILTERED = CLASSIFICATIONS_ROOT + 'FILTERED/';
+var PATH_CANDIDATES = CLASSIFICATIONS_ROOT + 'CANDIDATES/';
 
 var COLL_IN = PATH_FILTERED + COLLECTION_BASE + STAGE_SRC;
 var COLL_OUT = PATH_CANDIDATES + COLLECTION_BASE;
@@ -35,8 +36,8 @@ print('=== M8_01 — Promote Candidate ===');
 print('Source:  ' + COLL_IN);
 print('Target:  ' + COLL_OUT);
 
-createAssetIfNotExists(PATH_CANDIDATES);
-createAssetIfNotExists(COLL_OUT);
+ensureFolder('CANDIDATES');
+ensureFolder('CANDIDATES/'+COLLECTION_BASE);
 
 var images = ee.data.listAssets(COLL_IN).assets.filter(function (a) { return a.type === 'IMAGE'; });
 

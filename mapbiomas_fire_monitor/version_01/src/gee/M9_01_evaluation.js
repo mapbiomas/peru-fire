@@ -17,13 +17,13 @@ var REGIONS = ee.FeatureCollection('projects/mapbiomas-peru/assets/FIRE/AUXILIAR
 var SCALE = 10;
 
 // ═══ CONFIG ═══
-var COLLECTION_BASE = 'monitor_01-sentinel2_minnbr_monthly_01';
+var COLLECTION_BASE = 'propose_a';
 var PERIOD = '2025_08';
 var THRESHOLD_AREA_MIN_HA = 100;
 var THRESHOLD_AREA_MAX_HA = 500000;
 // ═══════════════
 
-var PATH_CANDIDATES = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/CANDIDATES/';
+var PATH_CANDIDATES = CLASSIFICATIONS_ROOT + 'CANDIDATES/';
 var ASSET = PATH_CANDIDATES + COLLECTION_BASE + '/' + PERIOD;
 
 var areaImage = ee.Image.pixelArea().divide(10000);

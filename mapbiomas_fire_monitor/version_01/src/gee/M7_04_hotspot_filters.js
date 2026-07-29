@@ -24,7 +24,7 @@ var landcover = ee.Image('projects/mapbiomas-public/assets/peru/collection3/mapb
 var FOCOS_BASE = 'projects/workspace-ipam/assets/FOGO/monthly-focus-sul-america';
 
 // ═══ CONFIG ═══
-var COLLECTION_BASE = 'monitor_01-sentinel2_minnbr_monthly_01';
+var COLLECTION_BASE = 'example_propose';
 var STAGE_IN = '-ft03';
 var STAGE_OUT = '-ft04';
 var BUFFER_M = 5000;
@@ -32,7 +32,8 @@ var REGIOES_FOCOS = ['region1', 'region2', 'region3', 'region4'];
 var CLASSES_ISENTAS = [66, 12, 13];  // Mosaico agro, Pasto, Formacao natural nao florestal
 // ═══════════════
 
-var PATH_FILTERED = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/FILTERED/';
+var CLASSIFICATIONS_ROOT = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/';
+var PATH_FILTERED = CLASSIFICATIONS_ROOT + 'FILTERED/';
 var COLL_IN = PATH_FILTERED + COLLECTION_BASE + STAGE_IN;
 var COLL_OUT = PATH_FILTERED + COLLECTION_BASE + STAGE_OUT;
 
@@ -70,7 +71,7 @@ print('Collection IN:  ' + COLL_IN);
 print('Collection OUT: ' + COLL_OUT);
 print('Buffer: ' + (BUFFER_M / 1000) + 'km, Regions: ' + REGIOES_FOCOS.join(','));
 
-createAssetIfNotExists(COLL_OUT);
+ensureFolder('FILTERED/'+COLLECTION_BASE+STAGE_OUT);
 
 var images = ee.data.listAssets(COLL_IN).assets.filter(function (a) { return a.type === 'IMAGE'; });
 

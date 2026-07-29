@@ -16,13 +16,13 @@ var SCALE = 10;
 
 // ═══ CONFIG ═══
 var CAMPANHA = 'monitor_01';
-var COLLECTION_BASE = 'monitor_01-sentinel2_minnbr_monthly_01';
+var COLLECTION_BASE = 'propose_a';
 var PERIOD = '2025_08';
 var APROVADOR = '';
 var FASE_FILTROS = '-ft00,-ft01,-ft02,-ft03,-ft04';
 // ═══════════════
 
-var PATH_CANDIDATES = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/CANDIDATES/';
+var PATH_CANDIDATES = CLASSIFICATIONS_ROOT + 'CANDIDATES/';
 var PATH_PRE_PUBLIC = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/PRE_PUBLIC/';
 
 var SRC = PATH_CANDIDATES + COLLECTION_BASE + '/' + PERIOD;
@@ -38,8 +38,8 @@ print('=== M9_02 — Promote to PRE_PUBLIC ===');
 print('Source: ' + SRC);
 print('Target: ' + DEST);
 
-createAssetIfNotExists(PATH_PRE_PUBLIC);
-createAssetIfNotExists(DEST_COLL);
+ensureFolder('PRE_PUBLIC');
+ensureFolder('PRE_PUBLIC/'+CAMPANHA);
 
 try {
     ee.data.getAsset(SRC);

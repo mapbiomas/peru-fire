@@ -14,12 +14,13 @@ var REGIONS = ee.FeatureCollection('projects/mapbiomas-peru/assets/FIRE/AUXILIAR
 var SCALE = 10;
 
 // ═══ CONFIG ═══
-var COLLECTION_BASE = 'monitor_01-sentinel2_minnbr_monthly_01';
+var COLLECTION_BASE = 'propose_a';
 var STAGES = ['-ft00', '-ft01', '-ft02', '-ft03', '-ft04'];
 var PERIOD = '2025_08';
 // ═══════════════
 
-var PATH_FILTERED = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/FILTERED/';
+var CLASSIFICATIONS_ROOT = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/';
+var PATH_FILTERED = CLASSIFICATIONS_ROOT + 'FILTERED/';
 var areaImage = ee.Image.pixelArea().divide(10000);
 
 function calcBurnedArea(assetId) {

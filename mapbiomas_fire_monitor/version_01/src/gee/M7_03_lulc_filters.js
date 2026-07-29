@@ -25,7 +25,7 @@ var SCALE = 10;
 var landcover = ee.Image('projects/mapbiomas-public/assets/peru/collection3/mapbiomas_peru_collection3_integration_v1');
 
 // ═══ CONFIG ═══
-var COLLECTION_BASE = 'monitor_01-sentinel2_minnbr_monthly_01';
+var COLLECTION_BASE = 'example_propose';
 var STAGE_IN = '-ft02';
 var STAGE_OUT = '-ft03';
 
@@ -46,7 +46,8 @@ var masks = {
 };
 // ═══════════════
 
-var PATH_FILTERED = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/FILTERED/';
+var CLASSIFICATIONS_ROOT = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/';
+var PATH_FILTERED = CLASSIFICATIONS_ROOT + 'FILTERED/';
 var COLL_IN = PATH_FILTERED + COLLECTION_BASE + STAGE_IN;
 var COLL_OUT = PATH_FILTERED + COLLECTION_BASE + STAGE_OUT;
 
@@ -72,7 +73,7 @@ print('=== M7_03 — LULC Filters ===');
 print('Collection IN:  ' + COLL_IN);
 print('Collection OUT: ' + COLL_OUT);
 
-createAssetIfNotExists(COLL_OUT);
+ensureFolder('FILTERED/'+COLLECTION_BASE+STAGE_OUT);
 
 var images = ee.data.listAssets(COLL_IN).assets.filter(function (a) { return a.type === 'IMAGE'; });
 
