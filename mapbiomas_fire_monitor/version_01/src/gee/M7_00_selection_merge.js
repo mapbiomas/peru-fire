@@ -85,7 +85,7 @@ function loadClassifications(y,m,cb){
     ee.data.listAssets(CLASSIFICATIONS_ROOT+'REGIONAL',{},function(cols){
         if(!cols||!cols.assets){cb({});return} var dirs=cols.assets.filter(function(c){return c.type==='IMAGE_COLLECTION'}),r={},p=dirs.length;if(dirs.length===0){cb({});return}
         dirs.forEach(function(c,idx){var mid=c.id.split('/').pop();ee.data.listAssets(c.id,{},function(imgs){
-            if(imgs&&imgs.assets)imgs.assets.forEach(function(img){if(img.type!=='IMAGE')return;var name=img.id.split('/').pop();var rp=null;for(var i=0;i<regionNames.length;i++){if(name.indexOf(regionNames[i])!==-1){rp=regionNames[i];break}}if(!rp)return;var ip=null;for(var j=parts.length-1;j>=0;j--){if(/^\d{4}$/.test(parts[j])){ip=parts[j]+(j+1<parts.length&&/^\d{2}$/.test(parts[j+1])?'_'+parts[j+1]:'');break}}if(ip!==dk)return;if(!r[rp])r[rp]=[];if(!r[rp].some(function(x){return x.modelId===mid}))r[rp].push({modelId:mid,assetId:img.id,color:CPAL[idx%15]})});
+            if(imgs&&imgs.assets)imgs.assets.forEach(function(img){if(img.type!=='IMAGE')return;var name=img.id.split('/').pop(),parts=name.split('_');var rp=null;for(var i=0;i<regionNames.length;i++){if(name.indexOf(regionNames[i])!==-1){rp=regionNames[i];break}}if(!rp)return;var ip=null;for(var j=parts.length-1;j>=0;j--){if(/^\d{4}$/.test(parts[j])){ip=parts[j]+(j+1<parts.length&&/^\d{2}$/.test(parts[j+1])?'_'+parts[j+1]:'');break}}if(ip!==dk)return;if(!r[rp])r[rp]=[];if(!r[rp].some(function(x){return x.modelId===mid}))r[rp].push({modelId:mid,assetId:img.id,color:CPAL[idx%15]})});
             p--;if(p===0)cb(r);
         })});
         if(p===0)cb(r);
