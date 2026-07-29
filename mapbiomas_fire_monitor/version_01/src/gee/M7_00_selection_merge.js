@@ -281,13 +281,13 @@ function loadCollectionContents(){
                 } else {
                     items=recent.map(function(p){return p+' ('+(counts[p]||0)+' pred.)';});
                     ddPeriod.setDisabled(false);
+                    ddPeriod.items().reset(items);
                     // Default: most recent period WITH data
                     var defIdx=0;
                     for(var r=0;r<recent.length;r++){if((counts[recent[r]]||0)>0){defIdx=r;break}}
                     ddPeriod.setValue(items[defIdx]);cPeriod=recent[defIdx];
                     cYear=parseInt(recent[defIdx].substring(0,4),10);cMonth=parseInt(recent[defIdx].substring(5,7),10);
                 }
-                ddPeriod.items().reset(items);
             });
         }
     });
@@ -417,4 +417,4 @@ function refreshAll(){buildRegionsPanel();buildConfirmPanel();loadCollectionCont
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
 buildForm();
-print('M7_00 3.1 carregado.');
+print('M7_00 3.7 carregado.');
