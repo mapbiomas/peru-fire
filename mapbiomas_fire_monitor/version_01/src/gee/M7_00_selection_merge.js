@@ -254,6 +254,8 @@ function populatePeriodDropdown(existingPeriods){
             currentPeriod = pendingPeriods[defIdx];
             currentYear = parseInt(pendingPeriods[defIdx].substring(0,4),10);
             currentMonth = parseInt(pendingPeriods[defIdx].substring(5,7),10);
+            loadMosaic(currentYear, currentMonth);Map.centerObject(REGIONS);
+            buildRegionsPanel();
         }
     });
 }
@@ -417,7 +419,6 @@ function buildRegionsSection(){
 
     regionsBox = ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
     section.add(regionsBox);
-    buildRegionsPanel();
     return section;
 }
 
@@ -530,10 +531,9 @@ function buildForm(){
             dropdownExisting.setValue(names[0]);
             collectionName = names[0].split('-ft')[0]||names[0];
             textboxCollectionName.setValue(collectionName);
-            refreshAll();
+            loadCollectionContents();
         }
     });
-    loadCollectionContents();
 }
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
