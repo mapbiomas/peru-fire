@@ -44,7 +44,9 @@ print('Collection OUT: ' + COLL_OUT);
 ensureFolder('FILTERED/'+COLLECTION_BASE+STAGE_IN);
 ensureFolder('FILTERED/'+COLLECTION_BASE+STAGE_OUT);
 
-var images = ee.data.listAssets(COLL_IN).assets.filter(function(a){return a.type==='IMAGE';});
+ee.data.listAssets(COLL_IN,{},function(result){
+var images=[];
+if(result&&result.assets)images=result.assets.filter(function(a){return a.type==='IMAGE';});
 
 if(images.length===0){
     print('Nenhuma imagem encontrada.');
@@ -78,4 +80,5 @@ if(images.length===0){
     });
     print('Total export: '+total);
 }
+});
 print('=== M7_02 done ===');
