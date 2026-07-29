@@ -33,6 +33,7 @@ print('=== M8_01 — Promote Candidate ===');
 print('Source:  ' + COLL_IN);
 print('Target:  ' + COLL_OUT);
 
+ensureFolder('FILTERED/'+COLLECTION_BASE+STAGE_SRC);
 ensureFolder('CANDIDATES');
 ensureFolder('CANDIDATES/'+COLLECTION_BASE);
 

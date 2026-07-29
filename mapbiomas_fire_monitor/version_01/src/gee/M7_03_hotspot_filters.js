@@ -46,6 +46,7 @@ print('Collection IN:  ' + COLL_IN);
 print('Collection OUT: ' + COLL_OUT);
 print('Buffer: '+(BUFFER_M/1000)+'km, Regions: '+REGIOES_FOCOS.join(','));
 
+ensureFolder('FILTERED/'+COLLECTION_BASE+STAGE_IN);
 ensureFolder('FILTERED/'+COLLECTION_BASE+STAGE_OUT);
 
 var images=ee.data.listAssets(COLL_IN).assets.filter(function(a){return a.type==='IMAGE';});
