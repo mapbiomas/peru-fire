@@ -3,7 +3,7 @@ MAPBIOMAS FUEGO - MONITOR_01 - M7_00
 Selection and Export (UI) — Formulario Corrido
 
 📅 DATA: julho 2026
-🏷️ VERSAO: 4.0
+🏷️ VERSAO: 4.4
 
 📌 SEÇÕES COM FUNDO COLORIDO:
   CONFIG — cinza   |   PERIODO — azul claro
@@ -604,4 +604,4 @@ function buildForm(){
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
 buildForm();
-print('M7_00 4.0 carregado.');
+print('M7_00 4.4 carregado.');
