@@ -396,7 +396,7 @@ function buildPeriodSection(){
 
     dropdownPeriod = ui.Select({items:['...'], value:null, style:STYLE.input, disabled:true});
     dropdownPeriod.onChange(function(v){
-        if(!v||v==='...'||v.indexOf('(')!==-1)return;
+        if(!v||v==='...'||!/^\d/.test(v))return;
         currentPeriod = v.split(' ')[0];
         resetRegionState();
         var y = parseInt(currentPeriod.substring(0,4),10), m = parseInt(currentPeriod.substring(5,7),10);
