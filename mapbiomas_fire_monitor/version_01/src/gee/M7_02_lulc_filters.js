@@ -82,13 +82,12 @@ if(images.length===0){
     var total=0;
     images.forEach(function(img){
         var name=img.id.split('/').pop(), eeImg=ee.Image(img.id), year=extractYear(name);
-        var maskedImg=eeImg, removedMask=ee.Image(0);
+        var maskedImg=eeImg;
 
         Object.keys(masks).forEach(function(rn){
             var mc=masks[rn], rg=REGIONS.filter(ee.Filter.eq(REGION_PROPERTY,rn)), rr=ee.Image(0).paint(rg,1);
-            var lm=landcover.select(ee.String('classification_').cat(ee.Number(year).format('%d'))).eq(mc).reduce('sum').gte(1);
-            CLASSES_AGUA.forEach(function(c){var wb=landcover.select(ee.String('classification_').cat(ee.Number(year).format('%d'))).eq(c).selfMask().focalMax({radius:90,units:'meters'}).gte(1);lm=lm.blend(wb);});
-            lm=lm.multiply(rr);var fm=lm.neq(1);maskedImg=maskedImg.updateMask(fm);removedMask=removedMask.where(rr.eq(1),eeImg.updateMask(fm.not()).select('probability'));
+            var lm=landcover.select('classification_'+year).eq(mc).reduce(ee.Reducer.sum()).gte(1);
+            lm=lm.multiply(rr);var fm=lm.neq(1);maskedImg=maskedImg.updateMask(fm);
         });
 
         var conn=maskedImg.select('probability').gt(0).connectedPixelCount({maxSize:100,eightConnected:false});
@@ -97,7 +96,6 @@ if(images.length===0){
 
         var dest=COLL_OUT+'/'+name;
         Map.addLayer(ee.Image(eeImg).select(0).selfMask(),{min:0,max:1000,palette:['888888']},name+' | BEFORE',false);
-        Map.addLayer(ee.Image(removedMask).select(0).selfMask(),{min:0,max:1000,palette:['ff0000']},name+' | REMOVED',false);
         Map.addLayer(ee.Image(maskedImg).select(0).selfMask(),{min:0,max:1000,palette:['00cc00']},name+' | AFTER',false);
 
         try{ee.data.getAsset(dest);print('  OK: '+name);}catch(e){total++;print('  Export: '+name);Export.image.toAsset({image:ee.Image(maskedImg).toInt16(),description:(CAMPAIGN+'_ft02_'+COLLECTION_BASE+'_'+name).substring(0,80).replace(/[^a-zA-Z0-9_]/g,'_'),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
