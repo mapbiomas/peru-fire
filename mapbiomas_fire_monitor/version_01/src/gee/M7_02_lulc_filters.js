@@ -23,13 +23,13 @@ var STAGE_IN = '-ft01';
 var STAGE_OUT = '-ft02';
 var CAMPAIGN = 'MONITOR_01';
 
-var CLASSES_AGUA = [33, 31, 34];
-var CLASSES_SEM_VEG = [23, 24, 32, 61, 68, 25];
+var CLASSES_AGUA = [26, 31, 33];
+var CLASSES_SEM_VEG = [22, 23, 24, 25, 32, 61, 68];
 var masks = {
     'region1':CLASSES_AGUA.concat(CLASSES_SEM_VEG),'region2':CLASSES_AGUA.concat(CLASSES_SEM_VEG),'region3':[24,29],'region4':[24,68,25,29],'region5':[29,24,68],'region6':CLASSES_AGUA.concat(CLASSES_SEM_VEG),'region7':CLASSES_AGUA.concat(CLASSES_SEM_VEG),'region8':CLASSES_AGUA.concat(CLASSES_SEM_VEG),'region9':[25],'region10':[25]
 };
 
-var LULC_PALETTE = ['ffffff','32a65e','1f8d49','7dc975','04381d','026975','000000','000000','7a6c00','ad975a','519799','d6bc74','d89f5c','ffffb2','edde8e','000000','000000','f5b3c8','c27ba0','db7093','ffefc3','db4d4f','ffa07a','d4271e','db4d4f','0000ff','bcbcbc','000000','ffaa5f','9c0027','091077','fc8114','2532e4','93dfe6','9065d0','d082de'];
+var LULC_PALETTE = require('users/mapbiomas/modules:Palettes.js').get('brazil');
 
 var PATH_FILTERED = CLASSIFICATIONS_ROOT + 'FILTERED/';
 var COLL_IN = PATH_FILTERED + COLLECTION_BASE + STAGE_IN;
@@ -59,6 +59,25 @@ if(images.length===0){
     Map.addLayer(REGIONS.style({color:'ffffff',fillColor:'00000000',width:1}),{},'Regions');
     Map.centerObject(REGIONS);
     Map.addLayer(landcover.select('classification_2024').selfMask(),{min:0,max:72,palette:LULC_PALETTE},'LULC Peru',false);
+
+    // Period panel (bottom-left)
+    var periodPanel = ui.Panel({layout:ui.Panel.Layout.flow('vertical'),
+        style:{position:'bottom-left',maxHeight:'60%',width:'200px',padding:'4px',
+               backgroundColor:'rgba(255,255,255,0.92)',border:'1px solid #ccc',borderRadius:'4px'}});
+    periodPanel.add(ui.Label('PERIODOS',{fontWeight:'bold',fontSize:'11px',margin:'2px'}));
+    var activeLayer = null;
+    images.forEach(function(img,idx){
+        var n=img.id.split('/').pop();
+        var cb=ui.Checkbox({label:n,value:idx===0,style:{fontSize:'10px',margin:'1px 2px'}});
+        cb.onChange(function(v){if(!v)return;
+            for(var w=0;w<periodPanel.widgets().length();w++){var ww=periodPanel.widgets().get(w);if(ww!==cb&&ww.setValue)try{ww.setValue(false)}catch(e){}}
+            if(activeLayer)Map.layers().remove(activeLayer);
+            activeLayer=ui.Map.Layer(ee.Image(img.id).select(0).selfMask(),{min:0,max:1000,palette:['#fcc','#f66','#c00','#600']},n+' | BEFORE');
+            Map.layers().add(activeLayer);
+        });
+        periodPanel.add(cb);
+    });
+    Map.add(periodPanel);
 
     var total=0;
     images.forEach(function(img){
