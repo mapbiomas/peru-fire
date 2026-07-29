@@ -312,7 +312,7 @@ function buildRegionsLayout(callback){
         txtFilter.onChange(function(v){filterText=v.toLowerCase();applyFilter();});
         headerRow.add(txtFilter);
         headerRow.add(ui.Button({label:L.select_all, style:STYLE.btnBlue, onClick:function(){
-            regionNames.forEach(function(r){if(data[r]&&data[r].length>0){var f=data[r][0].modelId;regionModelMap[r]=f;if(checkboxStore[r])Object.keys(checkboxStore[r]).forEach(function(k){checkboxStore[r][k].setValue(k===f)});}});buildConfirmPanel();
+            regionNames.forEach(function(r){var d=lastClassifications||{};if(d[r]&&d[r].length>0){var f=d[r][0].modelId;regionModelMap[r]=f;if(checkboxStore[r])Object.keys(checkboxStore[r]).forEach(function(k){checkboxStore[r][k].setValue(k===f)});}});buildConfirmPanel();
         }}));
         headerRow.add(ui.Button({label:L.clear_all, style:STYLE.btnGray, onClick:function(){
             Object.keys(checkboxStore).forEach(function(r){if(checkboxStore[r])Object.keys(checkboxStore[r]).forEach(function(k){checkboxStore[r][k].setValue(false)});});regionModelMap={};buildConfirmPanel();
