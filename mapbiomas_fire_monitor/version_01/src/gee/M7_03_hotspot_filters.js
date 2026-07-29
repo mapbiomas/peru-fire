@@ -72,8 +72,8 @@ if(images.length===0){
         var dest=COLL_OUT+'/'+name;
         Map.addLayer(focosBuf.selfMask(),{min:0,max:1,palette:['ff8800']},'Hotspot buffer '+year,false);
         Map.addLayer(exemption,{min:0,max:1,palette:['00ff00']},name+' | EXEMPT',false);
-        Map.addLayer(eeImg.selfMask(),{min:0,max:1000,palette:['888888']},name+' | BEFORE',false);
-        Map.addLayer(outImg.selfMask(),{min:0,max:1000,palette:['ff00ff']},name+' | AFTER',false);
+        Map.addLayer(ee.Image(eeImg).select(0).selfMask(),{min:0,max:1000,palette:['888888']},name+' | BEFORE',false);
+        Map.addLayer(ee.Image(outImg).select(0).selfMask(),{min:0,max:1000,palette:['ff00ff']},name+' | AFTER',false);
 
         try{ee.data.getAsset(dest);print('  OK: '+name);}catch(e){total++;print('  Export: '+name);Export.image.toAsset({image:outImg.toInt16(),description:(COLLECTION_BASE+STAGE_OUT+'_'+name).substring(0,80).replace(/[^a-zA-Z0-9_]/g,'_'),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
     });

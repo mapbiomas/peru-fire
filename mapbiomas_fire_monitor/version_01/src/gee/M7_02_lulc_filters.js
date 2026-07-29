@@ -68,9 +68,9 @@ if(images.length===0){
         maskedImg=maskedImg.copyProperties(eeImg).set('filter_stage','ft02');
 
         var dest=COLL_OUT+'/'+name;
-        Map.addLayer(eeImg.selfMask(),{min:0,max:1000,palette:['888888']},name+' | BEFORE',false);
-        Map.addLayer(removedMask.selfMask(),{min:0,max:1000,palette:['ff0000']},name+' | REMOVED',false);
-        Map.addLayer(maskedImg.selfMask(),{min:0,max:1000,palette:['00cc00']},name+' | AFTER',false);
+        Map.addLayer(ee.Image(eeImg).select(0).selfMask(),{min:0,max:1000,palette:['888888']},name+' | BEFORE',false);
+        Map.addLayer(ee.Image(removedMask).select(0).selfMask(),{min:0,max:1000,palette:['ff0000']},name+' | REMOVED',false);
+        Map.addLayer(ee.Image(maskedImg).select(0).selfMask(),{min:0,max:1000,palette:['00cc00']},name+' | AFTER',false);
 
         try{ee.data.getAsset(dest);print('  OK: '+name);}catch(e){total++;print('  Export: '+name);Export.image.toAsset({image:maskedImg.toInt16(),description:(COLLECTION_BASE+STAGE_OUT+'_'+name).substring(0,80).replace(/[^a-zA-Z0-9_]/g,'_'),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
     });

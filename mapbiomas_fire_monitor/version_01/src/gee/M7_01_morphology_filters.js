@@ -59,13 +59,13 @@ if (images.length === 0) {
         var closed = opened.focalMax({ radius: RAIO_FECHAMENTO, kernelType: 'circle', units: 'pixels' });
         closed = closed.focalMin({ radius: RAIO_FECHAMENTO, kernelType: 'circle', units: 'pixels' });
 
-        closed = closed.selfMask().copyProperties(eeImg);
+        closed = ee.Image(closed.selfMask().copyProperties(eeImg));
         closed = closed.set('filter_stage', 'ft01');
 
         var destAsset = COLL_OUT + '/' + name;
 
-        Map.addLayer(eeImg.selfMask(), { min: 0, max: 1000, palette: ['888888'] }, name + ' | BEFORE', false);
-        Map.addLayer(closed.selfMask(), { min: 0, max: 1000, palette: ['0044ff'] }, name + ' | AFTER', false);
+        Map.addLayer(ee.Image(eeImg).select(0).selfMask(), { min: 0, max: 1000, palette: ['888888'] }, name + ' | BEFORE', false);
+        Map.addLayer(ee.Image(closed).select(0).selfMask(), { min: 0, max: 1000, palette: ['0044ff'] }, name + ' | AFTER', false);
 
         try {
             ee.data.getAsset(destAsset);
