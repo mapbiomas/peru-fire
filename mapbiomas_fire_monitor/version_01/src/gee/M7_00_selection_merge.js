@@ -50,7 +50,7 @@ var S = {
 };
 
 var CPAL = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#fffac8','#800000'];
-var mLayers={}, avMods={}, rMap={}, eyeSt={}, _cbs={};
+var mLayers={}, avMods={}, rMap={}, eyeSt={}, _cbs={}, regionNames=[];
 var cYear=null,cMonth=null,cPeriod='';
 var collName='propose_a';
 
@@ -85,7 +85,7 @@ function loadClassifications(y,m,cb){
     ee.data.listAssets(CLASSIFICATIONS_ROOT+'REGIONAL',{},function(cols){
         if(!cols||!cols.assets){cb({});return} var dirs=cols.assets.filter(function(c){return c.type==='IMAGE_COLLECTION'}),r={},p=dirs.length;if(dirs.length===0){cb({});return}
         dirs.forEach(function(c,idx){var mid=c.id.split('/').pop();ee.data.listAssets(c.id,{},function(imgs){
-            if(imgs&&imgs.assets)imgs.assets.forEach(function(img){if(img.type!=='IMAGE')return;var name=img.id.split('/').pop(),parts=name.split('_');var rp=null;for(var i=0;i<parts.length;i++){if(parts[i].indexOf('region')===0){rp=parts[i];break}}if(!rp)return;var ip=null;for(var j=parts.length-1;j>=0;j--){if(/^\d{4}$/.test(parts[j])){ip=parts[j]+(j+1<parts.length&&/^\d{2}$/.test(parts[j+1])?'_'+parts[j+1]:'');break}}if(ip!==dk)return;if(!r[rp])r[rp]=[];if(!r[rp].some(function(x){return x.modelId===mid}))r[rp].push({modelId:mid,assetId:img.id,color:CPAL[idx%15]})});
+            if(imgs&&imgs.assets)imgs.assets.forEach(function(img){if(img.type!=='IMAGE')return;var name=img.id.split('/').pop();var rp=null;for(var i=0;i<regionNames.length;i++){if(name.indexOf(regionNames[i])!==-1){rp=regionNames[i];break}}if(!rp)return;var ip=null;for(var j=parts.length-1;j>=0;j--){if(/^\d{4}$/.test(parts[j])){ip=parts[j]+(j+1<parts.length&&/^\d{2}$/.test(parts[j+1])?'_'+parts[j+1]:'');break}}if(ip!==dk)return;if(!r[rp])r[rp]=[];if(!r[rp].some(function(x){return x.modelId===mid}))r[rp].push({modelId:mid,assetId:img.id,color:CPAL[idx%15]})});
             p--;if(p===0)cb(r);
         })});
         if(p===0)cb(r);
@@ -198,6 +198,7 @@ function buildForm(){
     Map.setOptions('SATELLITE');
     Map.centerObject(REGIONS);
     Map.addLayer(REGIONS.style({color:'ffffff',fillColor:'00000000',width:1}),{},'Regions');
+    regionNames=REGIONS.aggregate_array(REGION_PROPERTY).distinct().getInfo().sort();
 
     // Carrega dropdown inicial
     loadExisting(function(names){
@@ -279,7 +280,7 @@ function buildRegionsPanel(){
         names.forEach(function(rn){
             var models=data[rn].sort(function(a,b){return a.modelId.localeCompare(b.modelId)});
             var card=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{margin:'2px 0',padding:'4px',backgroundColor:'#fff',border:'1px solid #e0e0e0',borderRadius:'4px'}});
-            card.add(ui.Label(rn.replace('region','Region '),{fontSize:'12px',fontWeight:'bold',color:'#1a73e8',margin:'1px 0'}));
+            card.add(ui.Label(rn,{fontSize:'12px',fontWeight:'bold',color:'#1a73e8',margin:'1px 0'}));
             if(!rMap[rn]&&models.length>0)rMap[rn]=models[0].modelId;
             if(!_cbs[rn])_cbs[rn]={};
             models.forEach(function(m){
@@ -317,7 +318,7 @@ function buildConfirmPanel(){
     confirmBox.clear();var fn=collName+'-ft00';
     confirmBox.add(ui.Label(L.target+': '+fn+' / '+cPeriod,{fontSize:'11px',fontFamily:'monospace',color:'#1a73e8',margin:'2px',padding:'4px',backgroundColor:'#fff',borderRadius:'3px'}));
     var names=Object.keys(rMap).sort(),hasAll=true;
-    names.forEach(function(r){var m=rMap[r];confirmBox.add(ui.Label('  '+r.replace('region','Region ')+': '+(m?m:L.none),m?S.ok:S.err));if(!m)hasAll=false});
+    names.forEach(function(r){var m=rMap[r];confirmBox.add(ui.Label('  '+r+': '+(m?m:L.none),m?S.ok:S.err));if(!m)hasAll=false});
     if(names.length===0)confirmBox.add(ui.Label('Nenhuma regiao configurada.',S.err));
     confirmBox.add(ui.Button({label:L.export_btn,style:S.btn_green,disabled:!hasAll||names.length===0,onClick:function(){showPrePopup()}}));
 }
