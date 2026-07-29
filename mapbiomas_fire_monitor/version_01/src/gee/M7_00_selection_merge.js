@@ -196,7 +196,11 @@ function loadPeriodCounts(cb){
                     if(img.type!=='IMAGE')return;
                     var name=img.id.split('/').pop(),parts=name.split('_'),period=null;
                     for(var j=parts.length-1;j>=0;j--){if(/^\d{4}$/.test(parts[j])){period=parts[j]+(j+1<parts.length&&/^\d{2}$/.test(parts[j+1])?'_'+parts[j+1]:'');break}}
-                    if(period)counts[period]=(counts[period]||0)+1;
+                    if(!period)return;
+                    if(!counts[period])counts[period]={total:0,regions:{}};
+                    counts[period].total++;
+                    var rp=null;for(var i=0;i<regionNames.length;i++){if(name.indexOf(regionNames[i])!==-1){rp=regionNames[i];break}}
+                    if(rp)counts[period].regions[rp]=true;
                 });
                 p--;if(p===0)cb(counts);
             });
@@ -245,11 +249,15 @@ function populatePeriodDropdown(existingPeriods){
         if(pendingPeriods.length===0){
             items=['(todos preenchidos)'];dropdownPeriod.setDisabled(true);dropdownPeriod.setValue(null);
         } else {
-            items=pendingPeriods.map(function(p){return p+' ('+(counts[p]||0)+' pred.)';});
+            items=pendingPeriods.map(function(p){
+                var c=counts[p]||{total:0,regions:{}};
+                var rCount=Object.keys(c.regions).length;
+                return p+' ('+rCount+' reg. | '+c.total+' pred.)';
+            });
             dropdownPeriod.setDisabled(false);
             dropdownPeriod.items().reset(items);
             var defIdx=0;
-            for(var r=0;r<pendingPeriods.length;r++){if((counts[pendingPeriods[r]]||0)>1){defIdx=r;break}}
+            for(var r=0;r<pendingPeriods.length;r++){if(((counts[pendingPeriods[r]]||{}).total||0)>1){defIdx=r;break}}
             dropdownPeriod.setValue(items[defIdx]);
             currentPeriod = pendingPeriods[defIdx];
             currentYear = parseInt(pendingPeriods[defIdx].substring(0,4),10);
