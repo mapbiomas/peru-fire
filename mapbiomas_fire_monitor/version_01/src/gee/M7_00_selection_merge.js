@@ -50,7 +50,7 @@ var S = {
 };
 
 var CPAL = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#fffac8','#800000'];
-var mLayers={}, avMods={}, rMap={}, eyeSt={}, _cbs={}, regionNames=[];
+var mLayers={}, avMods={}, rMap={}, _cbs={}, regionNames=[];
 var cYear=null,cMonth=null,cPeriod='';
 var collName='propose_a';
 
@@ -286,14 +286,22 @@ function buildRegionsPanel(){
             models.forEach(function(m){
                 var sel=(rMap[rn]===m.modelId);
                 var cb=ui.Checkbox({label:m.modelId,value:sel,style:{fontSize:'10px',margin:'1px 4px'}});
-                cb.onChange(function(v){if(v){rMap[rn]=m.modelId;Object.keys(_cbs[rn]).forEach(function(k){if(k!==m.modelId)_cbs[rn][k].setValue(false)})}else{if(rMap[rn]===m.modelId)rMap[rn]=null}buildConfirmPanel()});
+                cb.onChange(function(v){
+                    var key=rn+'_'+m.modelId;
+                    if(v){
+                        rMap[rn]=m.modelId;
+                        Object.keys(_cbs[rn]).forEach(function(k){if(k!==m.modelId)_cbs[rn][k].setValue(false)});
+                        mL('class_'+key,ee.Image(m.assetId).select(0).divide(10).toByte().selfMask(),{min:0,max:100,palette:['#fcc','#f66','#c00','#600']},m.modelId+'|'+rn);
+                    } else {
+                        if(rMap[rn]===m.modelId)rMap[rn]=null;
+                        if(mLayers['class_'+key]){Map.layers().remove(mLayers['class_'+key]);delete mLayers['class_'+key]}
+                    }
+                    buildConfirmPanel();
+                });
                 _cbs[rn][m.modelId]=cb;
-                var eye=ui.Button({label:'o',style:S.btn_gray,onClick:function(){
-                    var key=rn+'_'+m.modelId;if(!eyeSt[key])eyeSt[key]=false;eyeSt[key]=!eyeSt[key];
-                    if(eyeSt[key]){mL('class_'+key,ee.Image(m.assetId).select(0).divide(10).toByte().selfMask(),{min:0,max:100,palette:['#fcc','#f66','#c00','#600']},m.modelId+'|'+rn);this.style=S.btn_blue}
-                    else{if(mLayers['class_'+key]){Map.layers().remove(mLayers['class_'+key]);delete mLayers['class_'+key]}this.style=S.btn_gray}
-                }});
-                card.add(ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'1px 0',padding:'1px'},widgets:[cb,eye]}));
+                card.add(cb);
+                // Show initial layer for selected model
+                if(sel){mL('class_'+rn+'_'+m.modelId,ee.Image(m.assetId).select(0).divide(10).toByte().selfMask(),{min:0,max:100,palette:['#fcc','#f66','#c00','#600']},m.modelId+'|'+rn);}
             });
             regionsBox.add(card);
         });
