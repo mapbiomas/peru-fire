@@ -20,6 +20,7 @@ var SCALE = 10;
 var COLLECTION_BASE = 'propose_a';
 var STAGE_IN = '-ft00';
 var STAGE_OUT = '-ft01';
+var CAMPAIGN = 'MONITOR_01';
 var RAIO_ABERTURA = 1;
 var RAIO_FECHAMENTO = 2;
 // ═══════════════
@@ -75,7 +76,7 @@ if (images.length === 0) {
             print('  Export: ' + name);
             Export.image.toAsset({
                 image: closed.toInt16(),
-                description: (COLLECTION_BASE + STAGE_OUT + '_' + name).substring(0, 80).replace(/[^a-zA-Z0-9_]/g, '_'),
+                description: (CAMPAIGN + '_' + COLLECTION_BASE + STAGE_OUT + '_' + name).substring(0, 80).replace(/[^a-zA-Z0-9_]/g, '_'),
                 assetId: destAsset,
                 pyramidingPolicy: 'mode',
                 region: REGIONS.geometry().bounds(),

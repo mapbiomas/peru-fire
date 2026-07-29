@@ -17,6 +17,7 @@ var FOCOS_BASE = 'projects/workspace-ipam/assets/FOGO/monthly-focus-sul-america'
 var COLLECTION_BASE = 'propose_a';
 var STAGE_IN = '-ft02';
 var STAGE_OUT = '-ft03';
+var CAMPAIGN = 'MONITOR_01';
 var BUFFER_M = 5000;
 var REGIOES_FOCOS = ['region1','region2','region3','region4'];
 var CLASSES_ISENTAS = [66,12,13];
@@ -75,7 +76,7 @@ if(images.length===0){
         Map.addLayer(ee.Image(eeImg).select(0).selfMask(),{min:0,max:1000,palette:['888888']},name+' | BEFORE',false);
         Map.addLayer(ee.Image(outImg).select(0).selfMask(),{min:0,max:1000,palette:['ff00ff']},name+' | AFTER',false);
 
-        try{ee.data.getAsset(dest);print('  OK: '+name);}catch(e){total++;print('  Export: '+name);Export.image.toAsset({image:outImg.toInt16(),description:(COLLECTION_BASE+STAGE_OUT+'_'+name).substring(0,80).replace(/[^a-zA-Z0-9_]/g,'_'),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
+        try{ee.data.getAsset(dest);print('  OK: '+name);}catch(e){total++;print('  Export: '+name);Export.image.toAsset({image:outImg.toInt16(),description:(CAMPAIGN+'_'+COLLECTION_BASE+STAGE_OUT+'_'+name).substring(0,80).replace(/[^a-zA-Z0-9_]/g,'_'),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
     });
     print('Total export: '+total);
 }

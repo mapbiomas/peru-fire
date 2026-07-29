@@ -16,6 +16,7 @@ var landcover = ee.Image('projects/mapbiomas-public/assets/peru/collection3/mapb
 var COLLECTION_BASE = 'propose_a';
 var STAGE_IN = '-ft01';
 var STAGE_OUT = '-ft02';
+var CAMPAIGN = 'MONITOR_01';
 
 var CLASSES_AGUA = [33, 31, 34];
 var CLASSES_SEM_VEG = [23, 24, 32, 61, 68, 25];
@@ -72,7 +73,7 @@ if(images.length===0){
         Map.addLayer(ee.Image(removedMask).select(0).selfMask(),{min:0,max:1000,palette:['ff0000']},name+' | REMOVED',false);
         Map.addLayer(ee.Image(maskedImg).select(0).selfMask(),{min:0,max:1000,palette:['00cc00']},name+' | AFTER',false);
 
-        try{ee.data.getAsset(dest);print('  OK: '+name);}catch(e){total++;print('  Export: '+name);Export.image.toAsset({image:maskedImg.toInt16(),description:(COLLECTION_BASE+STAGE_OUT+'_'+name).substring(0,80).replace(/[^a-zA-Z0-9_]/g,'_'),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
+        try{ee.data.getAsset(dest);print('  OK: '+name);}catch(e){total++;print('  Export: '+name);Export.image.toAsset({image:maskedImg.toInt16(),description:(CAMPAIGN+'_'+COLLECTION_BASE+STAGE_OUT+'_'+name).substring(0,80).replace(/[^a-zA-Z0-9_]/g,'_'),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
     });
     print('Total export: '+total);
 }
