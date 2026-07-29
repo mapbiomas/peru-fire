@@ -105,7 +105,6 @@ function removeClassificationLayers(){
 function resetRegionState(){
     regionModelMap = {};
     checkboxStore = {};
-    modelPanels = {};
     filterText = '';
     removeClassificationLayers();
 }
@@ -299,6 +298,7 @@ function buildRegionsLayout(callback){
 
     loadClassifications(currentYear, currentMonth, function(data){
         resetRegionState();
+        modelPanels = {};
         regionsBox.clear();
 
         var headerRow = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{stretch:'horizontal',margin:'0 0 4px 0'}});
