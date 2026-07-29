@@ -249,7 +249,7 @@ function loadCollectionContents(){
                 ddPeriod.setValue(null);
             } else {
                 ddPeriod.items().reset(recent);ddPeriod.setDisabled(false);
-                if(!cPeriod||recent.indexOf(cPeriod)===-1){ddPeriod.setValue(recent[0]);cPeriod=recent[0];}
+                if(!cPeriod||recent.indexOf(cPeriod)===-1){ddPeriod.setValue(recent[0]);cPeriod=recent[0];cYear=parseInt(recent[0].substring(0,4),10);cMonth=parseInt(recent[0].substring(5,7),10);}
             }
         }
     });
@@ -260,15 +260,15 @@ function loadCollectionContents(){
 function buildRegionsPanel(){
     regionsBox.clear();
     regionsBox.add(ui.Label(L.loading+' '+cPeriod,{fontSize:'10px',color:'#888'}));
-    var fn=collName+'-ft00';
+    var fnInit=collName+'-ft00';
     summaryBox.clear();
-    summaryBox.add(ui.Label('Periodo: '+cPeriod+' | Colecao: '+fn,{fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
+    summaryBox.add(ui.Label('Periodo: '+cPeriod+' | Colecao: '+fnInit,{fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
     loadClassifications(cYear,cMonth,function(data){
         avMods={};avMods[cPeriod]=data;regionsBox.clear();
         var names=Object.keys(data).sort();if(names.length===0){
             regionsBox.add(ui.Label(L.no_data,{color:'#d32f2f',margin:'6px'}));
             summaryBox.clear();
-            summaryBox.add(ui.Label('Periodo: '+cPeriod+' | Colecao: '+fn,{fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
+            summaryBox.add(ui.Label('Periodo: '+cPeriod+' | Colecao: '+fnInit,{fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
             summaryBox.add(ui.Label('Sem modelos disponiveis para este periodo.',{fontSize:'10px',color:'#d32f2f',margin:'2px 0'}));
             buildConfirmPanel();return
         }
@@ -299,8 +299,8 @@ function buildRegionsPanel(){
 
         // Update summary card
         summaryBox.clear();
-        var fn=collName+'-ft00';
-        summaryBox.add(ui.Label('Periodo: '+cPeriod+' | Colecao: '+fn,{fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
+        var fn2=collName+'-ft00';
+        summaryBox.add(ui.Label('Periodo: '+cPeriod+' | Colecao: '+fn2,{fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
         var totalModels=names.length;
         var totalRegions=names.length;
         summaryBox.add(ui.Label('Regioes com dados: '+totalRegions+' | Modelos disponiveis: '+totalModels,{fontSize:'10px',color:'#333',margin:'1px 0'}));
