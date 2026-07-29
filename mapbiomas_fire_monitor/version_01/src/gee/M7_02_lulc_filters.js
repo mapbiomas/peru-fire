@@ -25,9 +25,9 @@ var SCALE = 10;
 var landcover = ee.Image('projects/mapbiomas-public/assets/peru/collection3/mapbiomas_peru_collection3_integration_v1');
 
 // ═══ CONFIG ═══
-var COLLECTION_BASE = 'example_propose';
-var STAGE_IN = '-ft02';
-var STAGE_OUT = '-ft03';
+var COLLECTION_BASE = 'propose_a';
+var STAGE_IN = '-ft01';
+var STAGE_OUT = '-ft02';
 
 var CLASSES_AGUA = [33, 31, 34];
 var CLASSES_SEM_VEG = [23, 24, 32, 61, 68, 25];

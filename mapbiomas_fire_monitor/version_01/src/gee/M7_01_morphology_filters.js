@@ -1,15 +1,14 @@
 /* ============================================================
-MAPBIOMAS FUEGO - MONITOR_01 - M7_01
-Merge de Classificacoes (pixel-level union)
+MAPBIOMAS FUEGO - MONITOR_01 - M7_02
+Filtros Morfologicos (Abertura/Fechamento)
 
 📅 DATA: julho 2026
 🏷️ VERSAO: 2.0
 
 📌 O QUE FAZ:
-1. Carrega imagens nacionais da collection ft00
-2. Se houver 2+ fontes para mesma regiao, faz merge onde(img.gt(0), img)
-3. Carrega metadata region_models para orientar o merge
-4. Exporta para -ft01 com mesma estrutura de periodos
+1. Carrega imagens nacionais da collection -ft01
+2. Aplica abertura (focalMin) e fechamento (focalMax)
+3. Exporta para -ft02
 ============================================================ */
 
 var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
@@ -17,9 +16,11 @@ var REGIONS = ee.FeatureCollection('projects/mapbiomas-peru/assets/FIRE/AUXILIAR
 var SCALE = 10;
 
 // ═══ CONFIG ═══
-var COLLECTION_BASE = 'example_propose';
+var COLLECTION_BASE = 'propose_a';
 var STAGE_IN = '-ft00';
 var STAGE_OUT = '-ft01';
+var RAIO_ABERTURA = 1;    // pixels (1px = 10m)
+var RAIO_FECHAMENTO = 2;  // pixels (2px = 20m)
 // ═══════════════
 
 var CLASSIFICATIONS_ROOT = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/';
@@ -32,16 +33,17 @@ function createAssetIfNotExists(assetId, type) {
     try { ee.data.getAsset(assetId); } catch (e) { ee.data.createAsset({ type: type }, assetId); }
 }
 
-print('=== M7_01 — Merge ===');
+print('=== M7_02 — Morphology ===');
 print('Collection IN:  ' + COLL_IN);
 print('Collection OUT: ' + COLL_OUT);
+print('Abertura: ' + RAIO_ABERTURA + 'px / Fechamento: ' + RAIO_FECHAMENTO + 'px');
 
 ensureFolder('FILTERED/'+COLLECTION_BASE+STAGE_OUT);
 
 var images = ee.data.listAssets(COLL_IN).assets.filter(function (a) { return a.type === 'IMAGE'; });
 
 if (images.length === 0) {
-    print('Nenhuma imagem encontrada em ' + COLL_IN);
+    print('Nenhuma imagem encontrada.');
 } else {
     Map.addLayer(REGIONS.style({ color: 'ffffff', fillColor: '00000000', width: 1 }), {}, 'Regions');
     Map.centerObject(REGIONS);
@@ -50,28 +52,31 @@ if (images.length === 0) {
     images.forEach(function (img) {
         var name = img.id.split('/').pop();
         var eeImg = ee.Image(img.id);
-        var meta = eeImg.get('region_models');
 
-        print('  Processando: ' + name);
+        // Opening (erode then dilate): remove isolated noise
+        var opened = eeImg.focalMin({ radius: RAIO_ABERTURA, kernelType: 'circle', units: 'pixels' });
+        opened = opened.focalMax({ radius: RAIO_ABERTURA, kernelType: 'circle', units: 'pixels' });
 
-        // Merge: preserva todos pixels queimados de todas as versoes
-        var merged = eeImg.where(eeImg.select('probability').gt(0), eeImg);
-        merged = merged.selfMask().copyProperties(eeImg);
-        merged = merged.set('filter_stage', 'ft01');
+        // Closing (dilate then erode): fill small holes
+        var closed = opened.focalMax({ radius: RAIO_FECHAMENTO, kernelType: 'circle', units: 'pixels' });
+        closed = closed.focalMin({ radius: RAIO_FECHAMENTO, kernelType: 'circle', units: 'pixels' });
+
+        closed = closed.selfMask().copyProperties(eeImg);
+        closed = closed.set('filter_stage', 'ft02');
 
         var destAsset = COLL_OUT + '/' + name;
 
-        Map.addLayer(eeImg.select('probability').selfMask(), { min: 0, max: 1000, palette: ['888888'] }, name + ' | ANTES', false);
-        Map.addLayer(merged.select('probability').selfMask(), { min: 0, max: 1000, palette: ['ff0000'] }, name + ' | MERGE', false);
+        Map.addLayer(eeImg.select('probability').selfMask(), { min: 0, max: 1000, palette: ['888888'] }, name + ' | BEFORE', false);
+        Map.addLayer(closed.select('probability').selfMask(), { min: 0, max: 1000, palette: ['0044ff'] }, name + ' | AFTER', false);
 
         try {
             ee.data.getAsset(destAsset);
-            print('    Ja existe: ' + destAsset);
+            print('  OK: ' + name);
         } catch (e) {
             total++;
-            print('    Exportando: ' + destAsset);
+            print('  Export: ' + name);
             Export.image.toAsset({
-                image: merged.toInt16(),
+                image: closed.toInt16(),
                 description: (COLLECTION_BASE + STAGE_OUT + '_' + name).substring(0, 80).replace(/[^a-zA-Z0-9_]/g, '_'),
                 assetId: destAsset,
                 pyramidingPolicy: 'mode',
@@ -84,4 +89,4 @@ if (images.length === 0) {
 
     print('Total export: ' + total);
 }
-print('=== M7_01 done ===');
+print('=== M7_02 done ===');

@@ -24,9 +24,9 @@ var landcover = ee.Image('projects/mapbiomas-public/assets/peru/collection3/mapb
 var FOCOS_BASE = 'projects/workspace-ipam/assets/FOGO/monthly-focus-sul-america';
 
 // ═══ CONFIG ═══
-var COLLECTION_BASE = 'example_propose';
-var STAGE_IN = '-ft03';
-var STAGE_OUT = '-ft04';
+var COLLECTION_BASE = 'propose_a';
+var STAGE_IN = '-ft02';
+var STAGE_OUT = '-ft03';
 var BUFFER_M = 5000;
 var REGIOES_FOCOS = ['region1', 'region2', 'region3', 'region4'];
 var CLASSES_ISENTAS = [66, 12, 13];  // Mosaico agro, Pasto, Formacao natural nao florestal

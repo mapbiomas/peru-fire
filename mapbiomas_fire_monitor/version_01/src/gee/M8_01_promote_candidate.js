@@ -17,7 +17,7 @@ var SCALE = 10;
 
 // ═══ CONFIG ═══
 var COLLECTION_BASE = 'propose_a';
-var STAGE_SRC = '-ft04';
+var STAGE_SRC = '-ft03';
 // ═══════════════
 
 var CLASSIFICATIONS_ROOT = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/';

@@ -15,7 +15,7 @@ var SCALE = 10;
 
 // ═══ CONFIG ═══
 var COLLECTION_BASE = 'propose_a';
-var STAGES = ['-ft00', '-ft01', '-ft02', '-ft03', '-ft04'];
+var STAGES = ['-ft00', '-ft01', '-ft02', '-ft03'];
 var PERIOD = '2025_08';
 // ═══════════════
 

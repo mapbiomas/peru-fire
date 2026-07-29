@@ -19,7 +19,7 @@ var CAMPANHA = 'monitor_01';
 var COLLECTION_BASE = 'propose_a';
 var PERIOD = '2025_08';
 var APROVADOR = '';
-var FASE_FILTROS = '-ft00,-ft01,-ft02,-ft03,-ft04';
+var FASE_FILTROS = '-ft00,-ft01,-ft02,-ft03';
 // ═══════════════
 
 var PATH_CANDIDATES = CLASSIFICATIONS_ROOT + 'CANDIDATES/';
