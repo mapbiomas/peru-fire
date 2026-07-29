@@ -82,12 +82,13 @@ if(images.length===0){
     var total=0;
     images.forEach(function(img){
         var name=img.id.split('/').pop(), eeImg=ee.Image(img.id), year=extractYear(name);
-        var maskedImg=eeImg;
+        var maskedImg=eeImg, removedMask=ee.Image(0);
 
         Object.keys(masks).forEach(function(rn){
             var mc=masks[rn], rg=REGIONS.filter(ee.Filter.eq(REGION_PROPERTY,rn)), rr=ee.Image(0).paint(rg,1);
             var lm=landcover.select('classification_'+year).eq(mc).reduce(ee.Reducer.sum()).gte(1);
             lm=lm.multiply(rr);var fm=lm.neq(1);maskedImg=maskedImg.updateMask(fm);
+            removedMask=removedMask.where(rr.eq(1),lm);
         });
 
         var conn=maskedImg.select('probability').gt(0).connectedPixelCount({maxSize:100,eightConnected:false});
@@ -95,7 +96,16 @@ if(images.length===0){
         maskedImg=maskedImg.copyProperties(eeImg).set('filter_stage','ft02');
 
         var dest=COLL_OUT+'/'+name;
+
+        // Quality mosaic (Min NBR)
+        try{
+            var mosaicPath=CATALOG_ROOT+'/LIBRARY_IMAGES/SENTINEL2/MONTHLY/MINNBR/swir1';
+            var mosaicImg=ee.ImageCollection(mosaicPath).filter(ee.Filter.eq('system:index','image_peru_fire_sentinel2_minnbr_swir1_'+name)).mosaic();
+            Map.addLayer(mosaicImg,{min:3,max:40},name+' | Min NBR',false);
+        }catch(e){}
+
         Map.addLayer(ee.Image(eeImg).select(0).selfMask(),{min:0,max:1000,palette:['888888']},name+' | BEFORE',false);
+        Map.addLayer(ee.Image(removedMask).selfMask(),{min:0,max:1,palette:['ff0000']},name+' | REMOVED',false);
         Map.addLayer(ee.Image(maskedImg).select(0).selfMask(),{min:0,max:1000,palette:['00cc00']},name+' | AFTER',false);
 
         try{ee.data.getAsset(dest);print('  OK: '+name);}catch(e){total++;print('  Export: '+name);Export.image.toAsset({image:ee.Image(maskedImg).toInt16(),description:(CAMPAIGN+'_ft02_'+COLLECTION_BASE+'_'+name).substring(0,80).replace(/[^a-zA-Z0-9_]/g,'_'),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
