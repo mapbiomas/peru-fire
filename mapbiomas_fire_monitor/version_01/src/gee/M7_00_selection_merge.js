@@ -20,11 +20,11 @@ var APP_LANG = 'pt';
 
 var L = (function(){
     var d={
-        pt:{title:'M7 — Selecao e Export',cfg:'CONFIGURACAO',period:'PERIODO',regions:'REGIOES',confirm:'CONFIRMAR',campaign:'Campanha',existing:'Predicoes existentes',new_title:'Criar nova',select:'Selecionar',create:'Criar e selecionar',placeholder:'ex: propose_a',year:'Ano',month:'Mes',load:'Carregar',loading:'Carregando...',no_data:'Sem dados.',select_all:'Selecionar todos',clear_all:'Limpar',target:'Predicao',export_btn:'Exportar',pre_title:'Pre-Confirmacao',pre_body:'Sera criado/atualizado:',pre_warn:'O GEE solicitara confirmacao.',pre_ok:'OK',cancel:'Cancelar',done:'Concluido!',one:'1 modelo',none:'nenhum'},
-        es:{title:'M7 — Seleccion',cfg:'CONFIG',period:'PERIODO',regions:'REGIONES',confirm:'CONFIRMAR',campaign:'Campana',existing:'Predicciones existentes',new_title:'Crear nueva',select:'Seleccionar',create:'Crear y seleccionar',placeholder:'ej: propose_a',year:'Ano',month:'Mes',load:'Cargar',loading:'Cargando...',no_data:'Sin datos.',select_all:'Todos',clear_all:'Limpiar',target:'Prediccion',export_btn:'Exportar',pre_title:'Pre-Confirmacion',pre_body:'Se creara:',pre_warn:'GEE solicitara confirmacion.',pre_ok:'OK',cancel:'Cancelar',done:'Completado!',one:'1 modelo',none:'ninguno'},
-        en:{title:'M7 — Selection & Export',cfg:'CONFIGURATION',period:'PERIOD',regions:'REGIONS',confirm:'CONFIRM',campaign:'Campaign',existing:'Existing predictions',new_title:'Create new',select:'Select',create:'Create & select',placeholder:'e.g. propose_a',year:'Year',month:'Month',load:'Load',loading:'Loading...',no_data:'No data.',select_all:'Select all',clear_all:'Clear',target:'Prediction',export_btn:'Export',pre_title:'Pre-Confirmation',pre_body:'Will create/update:',pre_warn:'GEE will prompt for confirmation.',pre_ok:'OK',cancel:'Cancel',done:'Done!',one:'1 model',none:'none'},
-        fr:{title:'M7 — Selection',cfg:'CONFIG',period:'PERIODE',regions:'REGIONS',confirm:'CONFIRMER',campaign:'Campagne',existing:'Predictions existantes',new_title:'Creer',select:'Selectionner',create:'Creer',placeholder:'ex: propose_a',year:'Annee',month:'Mois',load:'Charger',loading:'Chargement...',no_data:'Pas de donnees.',select_all:'Tous',clear_all:'Effacer',target:'Prediction',export_btn:'Exporter',pre_title:'Pre-Confirmation',pre_body:'Va creer:',pre_warn:'GEE demandera confirmation.',pre_ok:'OK',cancel:'Annuler',done:'Termine!',one:'1 modele',none:'aucun'},
-        id:{title:'M7 — Seleksi',cfg:'KONFIG',period:'PERIODE',regions:'WILAYAH',confirm:'KONFIRMASI',campaign:'Kampanye',existing:'Prediksi yang ada',new_title:'Buat baru',select:'Pilih',create:'Buat & pilih',placeholder:'cth: propose_a',year:'Tahun',month:'Bulan',load:'Muat',loading:'Memuat...',no_data:'Tidak ada.',select_all:'Semua',clear_all:'Hapus',target:'Prediksi',export_btn:'Ekspor',pre_title:'Pra-Konfirmasi',pre_body:'Akan dibuat:',pre_warn:'GEE akan minta konfirmasi.',pre_ok:'OK',cancel:'Batal',done:'Selesai!',one:'1 model',none:'tidak ada'},
+        pt:{title:'M7 — Selecao e Export',cfg:'CONFIGURACAO',period:'PERIODO',regions:'REGIOES',confirm:'CONFIRMAR',campaign:'Campanha',existing:'Predicoes existentes',new_title:'Criar nova',select:'Selecionar',create:'Criar e selecionar',placeholder:'ex: propose_a',year:'Ano',month:'Mes',load:'Carregar',loading:'Carregando...',no_data:'Sem dados.',select_all:'Selecionar todas',clear_all:'Limpar',filter_placeholder:'filtrar predicoes...',target:'Predicao',export_btn:'Exportar',pre_title:'Pre-Confirmacao',pre_body:'Sera criado/atualizado:',pre_warn:'O GEE solicitara confirmacao.',pre_ok:'OK',cancel:'Cancelar',done:'Concluido!',one:'1 predicao',none:'nenhuma'},
+        es:{title:'M7 — Seleccion',cfg:'CONFIG',period:'PERIODO',regions:'REGIONES',confirm:'CONFIRMAR',campaign:'Campana',existing:'Predicciones existentes',new_title:'Crear nueva',select:'Seleccionar',create:'Crear y seleccionar',placeholder:'ej: propose_a',year:'Ano',month:'Mes',load:'Cargar',loading:'Cargando...',no_data:'Sin datos.',select_all:'Todas',clear_all:'Limpiar',filter_placeholder:'filtrar predicciones...',target:'Prediccion',export_btn:'Exportar',pre_title:'Pre-Confirmacion',pre_body:'Se creara:',pre_warn:'GEE solicitara confirmacion.',pre_ok:'OK',cancel:'Cancelar',done:'Completado!',one:'1 prediccion',none:'ninguna'},
+        en:{title:'M7 — Selection & Export',cfg:'CONFIGURATION',period:'PERIOD',regions:'REGIONS',confirm:'CONFIRM',campaign:'Campaign',existing:'Existing predictions',new_title:'Create new',select:'Select',create:'Create & select',placeholder:'e.g. propose_a',year:'Year',month:'Month',load:'Load',loading:'Loading...',no_data:'No data.',select_all:'Select all',clear_all:'Clear',filter_placeholder:'filter predictions...',target:'Prediction',export_btn:'Export',pre_title:'Pre-Confirmation',pre_body:'Will create/update:',pre_warn:'GEE will prompt for confirmation.',pre_ok:'OK',cancel:'Cancel',done:'Done!',one:'1 prediction',none:'none'},
+        fr:{title:'M7 — Selection',cfg:'CONFIG',period:'PERIODE',regions:'REGIONS',confirm:'CONFIRMER',campaign:'Campagne',existing:'Predictions existantes',new_title:'Creer',select:'Selectionner',create:'Creer',placeholder:'ex: propose_a',year:'Annee',month:'Mois',load:'Charger',loading:'Chargement...',no_data:'Pas de donnees.',select_all:'Toutes',clear_all:'Effacer',filter_placeholder:'filtrer predictions...',target:'Prediction',export_btn:'Exporter',pre_title:'Pre-Confirmation',pre_body:'Va creer:',pre_warn:'GEE demandera confirmation.',pre_ok:'OK',cancel:'Annuler',done:'Termine!',one:'1 prediction',none:'aucune'},
+        id:{title:'M7 — Seleksi',cfg:'KONFIG',period:'PERIODE',regions:'WILAYAH',confirm:'KONFIRMASI',campaign:'Kampanye',existing:'Prediksi yang ada',new_title:'Buat baru',select:'Pilih',create:'Buat & pilih',placeholder:'cth: propose_a',year:'Tahun',month:'Bulan',load:'Muat',loading:'Memuat...',no_data:'Tidak ada.',select_all:'Semua',clear_all:'Hapus',filter_placeholder:'filter prediksi...',target:'Prediksi',export_btn:'Ekspor',pre_title:'Pra-Konfirmasi',pre_body:'Akan dibuat:',pre_warn:'GEE akan minta konfirmasi.',pre_ok:'OK',cancel:'Batal',done:'Selesai!',one:'1 prediksi',none:'tidak ada'},
     };
     return d[APP_LANG]||d.pt;
 })();
@@ -50,7 +50,7 @@ var S = {
 };
 
 var CPAL = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#fffac8','#800000'];
-var mLayers={}, avMods={}, rMap={}, _cbs={}, regionNames=[];
+var mLayers={}, avMods={}, rMap={}, _cbs={}, _modelPanels={}, _lastData={}, _filter='', regionNames=[];
 var cYear=null,cMonth=null,cPeriod='';
 var collName='propose_a';
 
@@ -295,6 +295,39 @@ function loadCollectionContents(){
     });
 }
 
+// ─── FILTER ─────────────────────────────────────────────────────────────────
+
+function applyFilter(){
+    _modelPanels={};
+    var d=_lastData||{};
+    regionNames.forEach(function(rn){
+        var models=(d[rn]||[]).sort(function(a,b){return a.modelId.localeCompare(b.modelId)});
+        var panel=_modelPanels[rn];
+        if(!panel)return;
+        panel.clear();
+        var shown=models.filter(function(mm){return !_filter||mm.modelId.toLowerCase().indexOf(_filter)!==-1;});
+        if(shown.length===0){
+            panel.add(ui.Label(models.length===0?'(sem predicao)':'('+models.length+' oculto'+(models.length>1?'s':'')+')',{fontSize:'9px',color:'#aaa',margin:'1px 0'}));
+        } else {
+            if(!_cbs[rn])_cbs[rn]={};
+            shown.forEach(function(m){
+                var sel=(rMap[rn]===m.modelId);
+                var cb=ui.Checkbox({label:m.modelId,value:sel,style:{fontSize:'10px',margin:'1px 2px'}});
+                cb.onChange(function(v){
+                    var key=rn+'_'+m.modelId;
+                    if(v){rMap[rn]=m.modelId;Object.keys(_cbs[rn]).forEach(function(k){if(k!==m.modelId)_cbs[rn][k].setValue(false)});mL('class_'+key,ee.Image(m.assetId).select(0).divide(10).toByte().selfMask(),{min:0,max:100,palette:['#fcc','#f66','#c00','#600']},m.modelId+'|'+rn);}
+                    else{if(rMap[rn]===m.modelId)rMap[rn]=null;if(mLayers['class_'+key]){Map.layers().remove(mLayers['class_'+key]);delete mLayers['class_'+key]}}
+                    buildConfirmPanel();
+                });
+                _cbs[rn][m.modelId]=cb;
+                panel.add(cb);
+                if(sel){mL('class_'+rn+'_'+m.modelId,ee.Image(m.assetId).select(0).divide(10).toByte().selfMask(),{min:0,max:100,palette:['#fcc','#f66','#c00','#600']},m.modelId+'|'+rn);}
+            });
+        }
+    });
+    buildConfirmPanel();
+}
+
 // ─── REGIONS ────────────────────────────────────────────────────────────────
 
 function buildRegionsPanel(){
@@ -304,17 +337,22 @@ function buildRegionsPanel(){
     summaryBox.clear();
     summaryBox.add(ui.Label('Periodo: '+cPeriod+' | Colecao: '+fnInit,{fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
     loadClassifications(cYear,cMonth,function(data){
-        avMods={};avMods[cPeriod]=data;regionsBox.clear();
-        var hr=ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'0 0 4px 0'}});
-        hr.add(ui.Button({label:L.select_all,style:S.btn_blue,onClick:function(){regionNames.forEach(function(r){if(data[r]&&data[r].length>0){rMap[r]=data[r][0].modelId;if(_cbs[r])Object.keys(_cbs[r]).forEach(function(k){_cbs[r][k].setValue(k===rMap[r])})}});buildConfirmPanel();buildRegionsPanel();}}));
-        hr.add(ui.Button({label:L.clear_all,style:S.btn_gray,onClick:function(){Object.keys(_cbs).forEach(function(rn){Object.keys(_cbs[rn]).forEach(function(k){_cbs[rn][k].setValue(false)})});rMap={};buildConfirmPanel();buildRegionsPanel();}}));
-        regionsBox.add(hr);
+        avMods={};avMods[cPeriod]=data;_lastData=data;regionsBox.clear();_modelPanels={};rMap={};_cbs={};_filter='';
+        // Remove old class layers
+        Object.keys(mLayers).forEach(function(k){if(k.indexOf('class_')===0){Map.layers().remove(mLayers[k]);delete mLayers[k]}});
 
-        // Filter textbox
-        var txtFilter=ui.Textbox({placeholder:'filtrar modelos...',style:{stretch:'horizontal',margin:'2px 0',fontSize:'10px'}});
-        var _filter='';
-        txtFilter.onChange(function(v){_filter=v.toLowerCase();buildRegionsPanel();});
-        regionsBox.add(txtFilter);
+        // Header: filter + buttons
+        var hr=ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'0 0 4px 0'}});
+        var txtFilter=ui.Textbox({placeholder:L.filter_placeholder,style:{stretch:'horizontal',fontSize:'10px'}});
+        txtFilter.onChange(function(v){_filter=v.toLowerCase();applyFilter();});
+        hr.add(txtFilter);
+        hr.add(ui.Button({label:L.select_all,style:S.btn_blue,onClick:function(){
+            regionNames.forEach(function(r){if(data[r]&&data[r].length>0){var first=data[r][0].modelId;rMap[r]=first;if(_cbs[r])Object.keys(_cbs[r]).forEach(function(k){_cbs[r][k].setValue(k===first)})}});buildConfirmPanel();
+        }}));
+        hr.add(ui.Button({label:L.clear_all,style:S.btn_gray,onClick:function(){
+            if(_cbs)Object.keys(_cbs).forEach(function(r){if(_cbs[r])Object.keys(_cbs[r]).forEach(function(k){_cbs[r][k].setValue(false)})});rMap={};buildConfirmPanel();
+        }}));
+        regionsBox.add(hr);
 
         // Two columns
         var leftCol=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{stretch:'horizontal'}});
@@ -326,45 +364,36 @@ function buildRegionsPanel(){
             var card=ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:{margin:'2px',padding:'4px',backgroundColor:'#fff',border:'1px solid #e0e0e0',borderRadius:'4px'}});
             card.add(ui.Label(rn,{fontSize:'11px',fontWeight:'bold',color:'#1a73e8',margin:'1px 0'}));
 
+            var mp=ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
+            _modelPanels[rn]=mp;
+
             if(models.length===0){
-                card.add(ui.Label('(sem predicao)',{fontSize:'10px',color:'#aaa',margin:'2px 0'}));
+                mp.add(ui.Label('(sem predicao)',{fontSize:'9px',color:'#aaa',margin:'1px 0'}));
             } else {
-                // Filter models
-                var shown=models.filter(function(mm){return !_filter||mm.modelId.toLowerCase().indexOf(_filter)!==-1;});
-                if(shown.length===0){
-                    card.add(ui.Label('('+models.length+' oculto'+(models.length>1?'s':'')+')',{fontSize:'9px',color:'#ccc',margin:'1px 0'}));
-                } else {
                 if(!rMap[rn])rMap[rn]=models[0].modelId;
                 if(!_cbs[rn])_cbs[rn]={};
-                shown.forEach(function(m){
+                models.forEach(function(m){
                     var sel=(rMap[rn]===m.modelId);
                     var cb=ui.Checkbox({label:m.modelId,value:sel,style:{fontSize:'10px',margin:'1px 2px'}});
                     cb.onChange(function(v){
                         var key=rn+'_'+m.modelId;
-                        if(v){
-                            rMap[rn]=m.modelId;
-                            Object.keys(_cbs[rn]).forEach(function(k){if(k!==m.modelId)_cbs[rn][k].setValue(false)});
-                            mL('class_'+key,ee.Image(m.assetId).select(0).divide(10).toByte().selfMask(),{min:0,max:100,palette:['#fcc','#f66','#c00','#600']},m.modelId+'|'+rn);
-                        } else {
-                            if(rMap[rn]===m.modelId)rMap[rn]=null;
-                            if(mLayers['class_'+key]){Map.layers().remove(mLayers['class_'+key]);delete mLayers['class_'+key]}
-                        }
+                        if(v){rMap[rn]=m.modelId;Object.keys(_cbs[rn]).forEach(function(k){if(k!==m.modelId)_cbs[rn][k].setValue(false)});mL('class_'+key,ee.Image(m.assetId).select(0).divide(10).toByte().selfMask(),{min:0,max:100,palette:['#fcc','#f66','#c00','#600']},m.modelId+'|'+rn);}
+                        else{if(rMap[rn]===m.modelId)rMap[rn]=null;if(mLayers['class_'+key]){Map.layers().remove(mLayers['class_'+key]);delete mLayers['class_'+key]}}
                         buildConfirmPanel();
                     });
                     _cbs[rn][m.modelId]=cb;
-                    card.add(cb);
+                    mp.add(cb);
                     if(sel){mL('class_'+rn+'_'+m.modelId,ee.Image(m.assetId).select(0).divide(10).toByte().selfMask(),{min:0,max:100,palette:['#fcc','#f66','#c00','#600']},m.modelId+'|'+rn);}
                 });
-                }
             }
+            card.add(mp);
             var col=idx<mid?leftCol:rightCol;
             col.add(card);
         });
 
-        var rowCols=ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal'},widgets:[leftCol,rightCol]});
-        regionsBox.add(rowCols);
+        regionsBox.add(ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal'},widgets:[leftCol,rightCol]}));
 
-        // Update summary card
+        // Summary
         summaryBox.clear();
         var fn2=collName+'-ft00';
         summaryBox.add(ui.Label('Periodo: '+cPeriod+' | Colecao: '+fn2,{fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
@@ -372,7 +401,7 @@ function buildRegionsPanel(){
         var totalPreds=0;regionNames.forEach(function(r){if(data[r])totalPreds+=data[r].length;});
         summaryBox.add(ui.Label('Regioes: '+withData+'/'+regionNames.length+' com predicoes | Predicoes totais: '+totalPreds,{fontSize:'10px',color:'#333',margin:'1px 0'}));
         var selected=regionNames.filter(function(r){return!!rMap[r]}).length;
-        summaryBox.add(ui.Label('Modelos selecionados: '+selected+'/'+withData+' regioes',{fontSize:'9px',color:selected===withData?'#0f9d58':'#e37400',margin:'1px 0'}));
+        summaryBox.add(ui.Label('Predicoes selecionadas: '+selected+'/'+withData+' regioes',{fontSize:'9px',color:selected===withData?'#0f9d58':'#e37400',margin:'1px 0'}));
         buildConfirmPanel();
     });
 }
