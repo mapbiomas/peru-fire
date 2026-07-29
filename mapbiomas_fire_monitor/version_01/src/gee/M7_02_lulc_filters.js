@@ -12,6 +12,11 @@ var REGIONS = ee.FeatureCollection('projects/mapbiomas-peru/assets/FIRE/AUXILIAR
 var REGION_PROPERTY = 'region_nam';
 var SCALE = 10;
 var landcover = ee.Image('projects/mapbiomas-public/assets/peru/collection3/mapbiomas_peru_collection3_integration_v1');
+// Add missing year bands (duplicate 2024 for years beyond collection range)
+var crYear = new Date().getFullYear();
+for (var y = 2025; y <= crYear; y++) {
+    landcover = landcover.addBands(landcover.select('classification_2024').rename('classification_' + y));
+}
 
 var COLLECTION_BASE = 'propose_a';
 var STAGE_IN = '-ft01';
@@ -76,7 +81,7 @@ if(images.length===0){
         Map.addLayer(ee.Image(removedMask).select(0).selfMask(),{min:0,max:1000,palette:['ff0000']},name+' | REMOVED',false);
         Map.addLayer(ee.Image(maskedImg).select(0).selfMask(),{min:0,max:1000,palette:['00cc00']},name+' | AFTER',false);
 
-        try{ee.data.getAsset(dest);print('  OK: '+name);}catch(e){total++;print('  Export: '+name);Export.image.toAsset({image:maskedImg.toInt16(),description:(CAMPAIGN+'_ft02_'+COLLECTION_BASE+'_'+name).substring(0,80).replace(/[^a-zA-Z0-9_]/g,'_'),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
+        try{ee.data.getAsset(dest);print('  OK: '+name);}catch(e){total++;print('  Export: '+name);Export.image.toAsset({image:ee.Image(maskedImg).toInt16(),description:(CAMPAIGN+'_ft02_'+COLLECTION_BASE+'_'+name).substring(0,80).replace(/[^a-zA-Z0-9_]/g,'_'),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
     });
     print('Total export: '+total);
 }
