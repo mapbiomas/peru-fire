@@ -10,6 +10,8 @@ Selection and Export (UI) — Formulario Corrido
   REGIOES — cinza  |   CONFIRMAR — verde claro
 ********************************************/
 
+var b64 = require('users/workspaceipam/packages:mapbiomas-toolkit/utils/b64');
+
 var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
 var CLASSIFICATIONS_ROOT = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/';
 var REGIONS = ee.FeatureCollection('projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1');
@@ -73,7 +75,7 @@ var collectionName = 'propose_a';
 
 // ─── UI COMPONENT REFERENCES ───────────────────────────────────────────────
 
-var contentRoot, regionsBox, confirmBox, contentsBox, summaryBox;
+var contentRoot, regionsBox, confirmBox, contentsBox, summaryBox, statusLabel;
 var dropdownExisting, dropdownPeriod, textboxCollectionName;
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -84,6 +86,9 @@ function ensureFolder(name){
 }
 
 function formatPeriod(y,m){return m!==null?y+'_'+('0'+m).slice(-2):''+y;}
+
+function showLoading(){if(statusLabel)statusLabel.style().set('shown',true);}
+function hideLoading(){if(statusLabel)statusLabel.style().set('shown',false);}
 
 function fullCollectionName(){return collectionName+'-ft00';}
 
@@ -212,6 +217,7 @@ function loadPeriodCounts(cb){
 function loadCollectionContents(){
     if(!contentsBox)return;
     contentsBox.clear();
+    showLoading();
     var fn = fullCollectionName();
     var path = CLASSIFICATIONS_ROOT+'FILTERED/'+fn+'/';
 
@@ -231,7 +237,7 @@ function loadCollectionContents(){
             card.add(ui.Label('Total: '+periods.length, {fontSize:'10px',color:'#888',margin:'2px 0 0 0'}));
         }
         contentsBox.add(card);
-
+        hideLoading();
         if(dropdownPeriod){populatePeriodDropdown(periods);}
     });
 }
@@ -330,6 +336,7 @@ function buildRegionsLayout(callback){
         regionsBox.add(ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{stretch:'horizontal'}, widgets:[leftColumn,rightColumn]}));
 
         layoutBuilt = true;
+        hideLoading();
         callback(data);
     });
 }
@@ -355,6 +362,7 @@ function repopulateRegionCheckboxes(data){
 
     updateRegionSummary(data);
     buildConfirmPanel();
+    hideLoading();
 }
 
 function loadPeriodAndRepopulate(){
@@ -429,6 +437,7 @@ function buildPeriodSection(){
         if(!v||v==='...'||!/^\d/.test(v))return;
         currentPeriod = v.split(' ')[0];
         resetRegionState();
+        showLoading();
         var y = parseInt(currentPeriod.substring(0,4),10), m = parseInt(currentPeriod.substring(5,7),10);
         currentYear = y; currentMonth = m;
         loadMosaic(currentYear, currentMonth);Map.centerObject(REGIONS);
@@ -497,7 +506,7 @@ function showPrePopup(){
 function doExport(){
     confirmBox.clear();
     confirmBox.add(ui.Label(L.loading, {fontSize:'11px',color:'#1a73e8',margin:'4px'}));
-
+    showLoading();
     var fn = fullCollectionName();
     ensureFolder('FILTERED/'+fn);
 
@@ -529,6 +538,7 @@ function doExport(){
     confirmBox.clear();
     confirmBox.add(ui.Label(L.done, {fontSize:'12px',color:'#0f9d58',fontWeight:'bold',margin:'4px'}));
     confirmBox.add(ui.Label('FILTERED/'+fn+'/'+currentPeriod, {fontSize:'10px',color:'#555',fontFamily:'monospace',margin:'2px'}));
+    hideLoading();
     loadCollectionContents();
 }
 
@@ -542,6 +552,8 @@ function buildForm(){
 
     var root = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:{width:'580px',margin:'0',padding:'4px',backgroundColor:'#fff'}});
     root.add(ui.Label('MapBiomas-Fuego | '+L.title, {fontSize:'14px',fontWeight:'bold',color:'#d32f2f',margin:'4px'}));
+    statusLabel = ui.Label({value:'', style:{fontSize:'10px',color:'#1a73e8',margin:'2px 4px',shown:false,stretch:'horizontal'}});
+    root.add(statusLabel);
 
     root.add(buildConfigSection());
     root.add(buildPeriodSection());
