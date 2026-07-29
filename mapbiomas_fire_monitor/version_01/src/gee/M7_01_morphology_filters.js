@@ -76,7 +76,7 @@ if (images.length === 0) {
             print('  Export: ' + name);
             Export.image.toAsset({
                 image: closed.toInt16(),
-                description: (CAMPAIGN + '_' + COLLECTION_BASE + STAGE_OUT + '_' + name).substring(0, 80).replace(/[^a-zA-Z0-9_]/g, '_'),
+                description: (CAMPAIGN + '_ft01_' + COLLECTION_BASE + '_' + name).substring(0, 80).replace(/[^a-zA-Z0-9_]/g, '_'),
                 assetId: destAsset,
                 pyramidingPolicy: 'mode',
                 region: REGIONS.geometry().bounds(),

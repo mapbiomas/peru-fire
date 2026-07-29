@@ -76,7 +76,7 @@ if(images.length===0){
         Map.addLayer(ee.Image(eeImg).select(0).selfMask(),{min:0,max:1000,palette:['888888']},name+' | BEFORE',false);
         Map.addLayer(ee.Image(outImg).select(0).selfMask(),{min:0,max:1000,palette:['ff00ff']},name+' | AFTER',false);
 
-        try{ee.data.getAsset(dest);print('  OK: '+name);}catch(e){total++;print('  Export: '+name);Export.image.toAsset({image:outImg.toInt16(),description:(CAMPAIGN+'_'+COLLECTION_BASE+STAGE_OUT+'_'+name).substring(0,80).replace(/[^a-zA-Z0-9_]/g,'_'),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
+        try{ee.data.getAsset(dest);print('  OK: '+name);}catch(e){total++;print('  Export: '+name);Export.image.toAsset({image:outImg.toInt16(),description:(CAMPAIGN+'_ft03_'+COLLECTION_BASE+'_'+name).substring(0,80).replace(/[^a-zA-Z0-9_]/g,'_'),assetId:dest,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
     });
     print('Total export: '+total);
 }

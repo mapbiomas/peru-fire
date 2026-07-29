@@ -60,7 +60,7 @@ if (images.length === 0) {
         } catch (e) {
             total++;
             print('  Promote: ' + name + ' | area: ' + areaHa + ' ha');
-            Export.image.toAsset({image: promoted.toInt16(), description: (CAMPAIGN + '_cand_' + name).substring(0, 80).replace(/[^a-zA-Z0-9_]/g, '_'), assetId: destAsset, pyramidingPolicy: 'mode', region: REGIONS.geometry().bounds(), scale: SCALE, maxPixels: 1e13});
+            Export.image.toAsset({image: promoted.toInt16(), description: (CAMPAIGN + '_candidate_' + COLLECTION_BASE + '_' + name).substring(0, 80).replace(/[^a-zA-Z0-9_]/g, '_'), assetId: destAsset, pyramidingPolicy: 'mode', region: REGIONS.geometry().bounds(), scale: SCALE, maxPixels: 1e13});
         }
     });
     print('Total export: ' + total);
