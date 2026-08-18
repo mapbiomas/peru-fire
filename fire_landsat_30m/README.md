@@ -1,26 +1,22 @@
-# MapBiomas Fire
-Developed by [Amazon Environmental Research Institute - IPAM](https://ipam.org.br/pt/)
+# 🔥 MapBiomas Fire Landsat 30m
 
-## About
-This repository contains the scripts for mapping burned areas in Brazil as part of the MapBiomas Fire Collection 3 project.
+This module contains the workflows, scripts, and methodological configurations used for burned-area classification with **30-meter Landsat imagery** as part of the **MapBiomas Fire** initiative.
 
-For detailed information about the classification and methodology, please refer to the MapBiomas Fire [Appendix of the Algorithm Theoretical Basis Document (ATBD)](https://brasil.mapbiomas.org/metodo-mapbiomas-fogo/).
+The workflow supports the processing and classification of satellite imagery across different ecoregions, with parameters and configurations adapted to each region.
 
-## Repository Objectives
-* Share the methods used for mapping burned areas in Brazil.
-* Facilitate collaboration and adaptation by international partners.
-* Provide resources for adjusting the mapping workflow according to regional needs.
+## 🛰️ Data and Processing
 
-## Repository Structure
-* **Scripts**: Code and algorithms used in the process of mapping burned areas.
-* **Documentation**: Detailed guidelines on how to use and adapt the scripts for other regions.
+The classification workflow is based on Landsat imagery and is implemented primarily in **Google Earth Engine (GEE)** and **Google Colab**
 
-## Contact
-For clarifications or to report issues/bugs, please contact:  
-<vera.arruda@ipam.org.br>  
-<wallace.silva@ipam.org.br>
+## 📂 Repository Structure
 
-## Issues / TODO
-- [ ] Corrigir o texto da seção "About", que atualmente menciona "Brazil" e "Collection 3", para refletir os dados do Peru.
-- [ ] Verificar e atualizar o link da metodologia (ATBD) para a versão do Peru (se aplicável) ou ajustar o idioma.
-- [ ] Detalhar a estrutura de diretórios e scripts específicos para o landsat_30m no Peru.
+The directory is organized according to the processing stages and methodological components of the burned-area classification workflow.
+
+> The exact structure and parameters may vary by collection and ecoregion.
+
+## 🚀 Prerequisites
+
+- A **Google Earth Engine** account ([sign up here](https://earthengine.google.com/)).
+- Basic familiarity with the Google Earth Engine Code Editor.
+- Access to the required MapBiomas Fire input assets and datasets.
+
