@@ -368,7 +368,8 @@ def start_export(ui_obj, mode=None):
     for i, meta in enumerate(selected, 1):
         y, m, p, band, mosaic_m, sensor = meta['year'], meta['month'], meta['period'], meta['band'], meta['mosaic'], meta['sensor']
         
-        name_base = mosaic_name(y, m, p, mosaic=mosaic_m, sensor=sensor, band=None).replace(f"_{y}_{m:02d}", "").replace(f"_{y}", "")
+        date_suffix = f"_{y}_{m:02d}" if m else f"_{y}"
+        name_base = mosaic_name(y, m, p, mosaic=mosaic_m, sensor=sensor, band=None).replace(date_suffix, "").replace(f"_{y}", "")
         name_full = mosaic_name(y, m, p, mosaic=mosaic_m, sensor=sensor, band=band)
         
         try:
