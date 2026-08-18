@@ -13,12 +13,3 @@ An interactive application and data pipeline (M1, M2, etc.) responsible for orch
 ### 2. [Fire Landsat 30m (`fire_landsat_30m/`)](./fire_landsat_30m/README.md)
 
 Workflows, notebooks, and methodological configurations for burned-area classification using 30-meter Landsat imagery. This module contains the procedures and parameters used for `collection_01` across the ecoregions of Peru.
-
-## Institutional Support and Contact
-
-Developed with technological and methodological support from the **Instituto de Pesquisa Ambiental da Amazônia (IPAM)**.
-
-For technical questions, collaboration opportunities, or issue reporting, please contact:
-
-* **Vera Arruda** — [vera.arruda@ipam.org.br](mailto:vera.arruda@ipam.org.br)
-* **Wallace Silva** — [wallace.silva@ipam.org.br](mailto:wallace.silva@ipam.org.br)
