@@ -1,46 +1,60 @@
 # MapBiomas Fire Monitor — M7 / M8 / M9 Scripts
 
 JavaScript (GEE Code Editor) scripts for MONITOR_01 post-classification pipeline.
-Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.7, M8 v1.0, M9 v2.0).
+Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v2.0).
 
 ## Scripts
 
 | Script | Stage | Description |
 |---|---|---|
-| `M7_00_selection_merge.js` | M7 — UI | Form (campaign + collection + period) + model-per-region selection + national image export |
-| `M7_01_morphology_filters.js` | M7 — ft01 | Opening/closing filters |
-| `M7_02_lulc_filters.js` | M7 — ft02 | LULC mask by region (Collection 3) |
-| `M7_03_hotspot_filters.js` | M7 — ft03 | Hotspot buffer exemption (regions 1-4) |
-| `M8_statistics.js` | M8 — Stats | Universal statistics generator (area + LULC) for Looker Studio |
+| `M7_00_selection_merge.js` | M7 — UI | Form (campaign + collection + period) + model-per-region selection + national image export (SplitPanel) |
+| `M7_01_lulc_filters.js` | M7 — ft01 | Water LULC mask by region + solitary pixel cleanup (connectedPixelCount <= 2) |
+| `M7_02_temporal_filter.js` | M7 — ft02 | Monthly memory filter (removes burn if scar in previous months) |
+| `M8_statistics.js` | M8 — Stats | Universal statistics generator (area + LULC) → CSV GCS/Drive |
 | `M9_00_promote_ui.js` | M9 — UI | Promote candidates from CANDIDATES/ to PRE_PUBLIC/ |
 
 ## Naming
 
 - Folders: `FILTERED/`, `CANDIDATES/`, `PRE_PUBLIC/` (UPPER)
-- Collections: `{collection}/ft{NN}` (lower), ex: `propuesta_a/ft00`
+- Collections: `{collection}/ft{NN}` (lower), ex: `propuesta_a/ft01`
 - Images: `{ano}` or `{ano}_{mes}` (lower)
 - Bands: `probability` + `dayOfYear`
+
+## Pipeline M7
+
+```
+M6 REGIONAL/{model_id}/{region}_{period}
+   → M7_00  → FILTERED/{col}/ft00/{period}   (national merge)
+   → M7_01  → FILTERED/{col}/ft01/{period}   (water LULC + solitary pixels)
+   → M7_02  → FILTERED/{col}/ft02/{period}   (temporal memory filter)
+```
 
 ## Multiple collections
 
 `propuesta_a` e apenas o default. Para criar outra colecao:
 
-- `M7_00`: digite o nome em "Criar nova" (ou selecione uma existente)
-- `M7_01/02/03`: edite `COLLECTION_BASE` no topo do script (copie/duplique por colecao)
-- `M8_statistics`: universal — `COLLECTIONS = []` varre todas automaticamente
+- `M7_00`: digite o nome em "Crear nueva colección" (ou selecione uma existente)
+- `M7_01` / `M7_02`: edite `COLLECTION_BASE` no topo do script (copie/duplique por colecao)
+- `M8_statistics`: universal — `COLLECTIONS = []` varre todas automaticamente; `STAGES` define os estagios
 - `M9_00`: dropdown de colecao carrega tudo que existe em `CANDIDATES/`
 
 ## Asset paths
 
 ```
 CATALOG_01/MONITOR_01/LIBRARY_CLASSIFICATIONS/
-├── FILTERED/{collection}/ft{00..03}/{period}
+├── FILTERED/{collection}/ft{00..02}/{period}
 ├── CANDIDATES/{collection}/{period}
 ├── PRE_PUBLIC/{campanha}/{period}
-└── LIBRARY_STATISTICS/m8_{collection}.csv   (GCS)
+└── LIBRARY_STATISTICS/m8_stats_{collection}.csv   (GCS/Drive)
 ```
 
 ## Time properties
 
 Todos os assets exportados por M7/M8 carregam `system:time_start` e
-`system:time_end` (periodo mensal) — usado pelo Looker Studio e ordenacao temporal.
+`system:time_end` (periodo mensal) — usado pelo Looker Studio, ordenacao temporal
+e pelo filtro temporal do ft02.
+
+## Land cover
+
+- M7_01: `projects/mapbiomas-public/assets/peru/collection4/mapbiomas_peru_collection4_coverage_v1` (classes agua [31,33,34])
+- M8: mesma Collection 4 (niveis 0/1/2)

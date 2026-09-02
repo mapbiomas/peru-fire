@@ -1,14 +1,10 @@
-/********************************************
+/*******************************************************************************
 MAPBIOMAS FUEGO - MONITOR_01 - M7_00
-Selection and Export (UI) — Formulario Corrido
+Selección y Exportación de Predicciones Nacionales (ft00)
 
-📅 DATA: julho 2026
-🏷️ VERSAO: 4.7
-
-📌 SEÇÕES COM FUNDO COLORIDO:
-  CONFIG — cinza   |   PERIODO — azul claro
-  REGIOES — cinza  |   CONFIRMAR — verde claro
-********************************************/
+📅 FECHA: 09/2026
+🏷️ VERSIÓN: 4.9 (Fix SplitPanel UI + Fallback de Mapa)
+*******************************************************************************/
 
 var b64 = require('users/workspaceipam/packages:mapbiomas-toolkit/utils/b64');
 
@@ -18,17 +14,17 @@ var REGIONS = ee.FeatureCollection('projects/mapbiomas-peru/assets/FIRE/AUXILIAR
 var REGION_PROPERTY = 'region_nam';
 var SCALE = 10;
 var START_YEAR = 2025;
-var APP_LANG = 'pt';
+var APP_LANG = 'es';
 
 var L = (function(){
     var d={
         pt:{title:'M7 — Selecao e Export',cfg:'CONFIGURACAO',period:'PERIODO',regions:'REGIOES',confirm:'CONFIRMAR',campaign:'Campanha',existing:'Predicoes existentes',new_title:'Criar nova',select:'Selecionar',create:'Criar e selecionar',placeholder:'ex: propuesta_a',year:'Ano',month:'Mes',load:'Carregar',loading:'Carregando...',no_data:'Sem dados.',select_all:'Selecionar todas',clear_all:'Limpar',filter_placeholder:'filtrar predicoes...',target:'Predicao',export_btn:'Exportar',pre_title:'Pre-Confirmacao',pre_body:'Sera criado/atualizado:',pre_warn:'O GEE solicitara confirmacao.',pre_ok:'OK',cancel:'Cancelar',done:'Concluido!',one:'1 predicao',none:'nenhuma'},
-        es:{title:'M7 — Seleccion',cfg:'CONFIG',period:'PERIODO',regions:'REGIONES',confirm:'CONFIRMAR',campaign:'Campana',existing:'Predicciones existentes',new_title:'Crear nueva',select:'Seleccionar',create:'Crear y seleccionar',placeholder:'ej: propuesta_a',year:'Ano',month:'Mes',load:'Cargar',loading:'Cargando...',no_data:'Sin datos.',select_all:'Todas',clear_all:'Limpiar',filter_placeholder:'filtrar predicciones...',target:'Prediccion',export_btn:'Exportar',pre_title:'Pre-Confirmacion',pre_body:'Se creara:',pre_warn:'GEE solicitara confirmacion.',pre_ok:'OK',cancel:'Cancelar',done:'Completado!',one:'1 prediccion',none:'ninguna'},
+        es:{title:'M7 — Selección y Exportación',cfg:'CONFIGURACIÓN',period:'PERÍODO',regions:'REGIONES',confirm:'CONFIRMAR',campaign:'Campaña',existing:'Predicciones existentes',new_title:'Crear nueva colección',select:'Seleccionar',create:'Crear y seleccionar',placeholder:'ej: propuesta_a',year:'Año',month:'Mes',load:'Cargar',loading:'Cargando...',no_data:'Sin datos.',select_all:'Todas',clear_all:'Limpiar',filter_placeholder:'filtrar predicciones...',target:'Predicción',export_btn:'Exportar',pre_title:'Pre-Confirmación',pre_body:'Se creará/actualizará:',pre_warn:'GEE solicitará confirmación de tarea.',pre_ok:'OK',cancel:'Cancelar',done:'¡Completado!',one:'1 predicción',none:'ninguna'},
         en:{title:'M7 — Selection & Export',cfg:'CONFIGURATION',period:'PERIOD',regions:'REGIONS',confirm:'CONFIRM',campaign:'Campaign',existing:'Existing predictions',new_title:'Create new',select:'Select',create:'Create & select',placeholder:'e.g. propuesta_a',year:'Year',month:'Month',load:'Load',loading:'Loading...',no_data:'No data.',select_all:'Select all',clear_all:'Clear',filter_placeholder:'filter predictions...',target:'Prediction',export_btn:'Export',pre_title:'Pre-Confirmation',pre_body:'Will create/update:',pre_warn:'GEE will prompt for confirmation.',pre_ok:'OK',cancel:'Cancel',done:'Done!',one:'1 prediction',none:'none'},
         fr:{title:'M7 — Selection',cfg:'CONFIG',period:'PERIODE',regions:'REGIONS',confirm:'CONFIRMER',campaign:'Campagne',existing:'Predictions existantes',new_title:'Creer',select:'Selectionner',create:'Creer',placeholder:'ex: propuesta_a',year:'Annee',month:'Mois',load:'Charger',loading:'Chargement...',no_data:'Pas de donnees.',select_all:'Toutes',clear_all:'Effacer',filter_placeholder:'filtrer predictions...',target:'Prediction',export_btn:'Exporter',pre_title:'Pre-Confirmation',pre_body:'Va creer:',pre_warn:'GEE demandera confirmation.',pre_ok:'OK',cancel:'Annuler',done:'Termine!',one:'1 prediction',none:'aucune'},
         id:{title:'M7 — Seleksi',cfg:'KONFIG',period:'PERIODE',regions:'WILAYAH',confirm:'KONFIRMASI',campaign:'Kampanye',existing:'Prediksi yang ada',new_title:'Buat baru',select:'Pilih',create:'Buat & pilih',placeholder:'cth: propuesta_a',year:'Tahun',month:'Bulan',load:'Muat',loading:'Memuat...',no_data:'Tidak ada.',select_all:'Semua',clear_all:'Hapus',filter_placeholder:'filter prediksi...',target:'Prediksi',export_btn:'Ekspor',pre_title:'Pra-Konfirmasi',pre_body:'Akan dibuat:',pre_warn:'GEE akan minta konfirmasi.',pre_ok:'OK',cancel:'Batal',done:'Selesai!',one:'1 prediksi',none:'tidak ada'},
     };
-    return d[APP_LANG]||d.pt;
+    return d[APP_LANG]||d.es;
 })();
 
 var SECTION_STYLE = {
@@ -57,7 +53,7 @@ var STYLE = {
 
 var PALETTE = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9A6324','#fffac8','#800000'];
 
-// ─── APPLICATION STATE ──────────────────────────────────────────────────────
+// ─── ESTADO DE LA APLICACIÓN ───────────────────────────────────────────────────
 
 var mapLayers = {};
 var availableModels = {};
@@ -73,12 +69,15 @@ var currentMonth = null;
 var currentPeriod = '';
 var collectionName = 'propuesta_a';
 
-// ─── UI COMPONENT REFERENCES ───────────────────────────────────────────────
+// Instancia explícita del mapa para evitar la pantalla blanca
+var mapWidget = ui.Map();
+
+// ─── REFERENCIAS A COMPONENTES DE LA INTERFAZ ────────────────────────────────
 
 var contentRoot, regionsBox, confirmBox, contentsBox, summaryBox, statusLabel, periodLoading, exportStatus;
 var dropdownExisting, dropdownPeriod, dropdownCampaign, textboxCollectionName;
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
+// ─── FUNCIONES DE APOYO (HELPERS) ───────────────────────────────────────────────
 
 function ensureFolder(name){
     var p=name.split('/'), cur=CLASSIFICATIONS_ROOT;
@@ -103,15 +102,21 @@ function setExportStatus(state, msg){
 
 function ft00Path(){return collectionName+'/ft00';}
 
-// ─── MAP LAYER MANAGEMENT ───────────────────────────────────────────────────
+// ─── GESTIÓN DE CAPAS EN EL MAPA ──────────────────────────────────────────────
 
 function manageMapLayer(id, obj, vis, name){
-    if(mapLayers[id]){mapLayers[id].setEeObject(obj);mapLayers[id].setVisParams(vis);mapLayers[id].setName(name)}
-    else{mapLayers[id]=ui.Map.Layer(obj,vis,name);Map.layers().add(mapLayers[id]);}
+    if(mapLayers[id]){
+        mapLayers[id].setEeObject(obj);
+        mapLayers[id].setVisParams(vis);
+        mapLayers[id].setName(name);
+    } else {
+        mapLayers[id] = ui.Map.Layer(obj, vis, name);
+        mapWidget.layers().add(mapLayers[id]);
+    }
 }
 
 function removeMapLayer(id){
-    if(mapLayers[id]){Map.layers().remove(mapLayers[id]);delete mapLayers[id];}
+    if(mapLayers[id]){mapWidget.layers().remove(mapLayers[id]);delete mapLayers[id];}
 }
 
 function removeClassificationLayers(){
@@ -125,7 +130,7 @@ function resetRegionState(){
     removeClassificationLayers();
 }
 
-// ─── CHECKBOX FACTORY ───────────────────────────────────────────────────────
+// ─── CREADOR DE CASILLAS DE VERIFICACIÓN (CHECKBOXES) ──────────────────────────
 
 function createCheckboxForModel(regionName, model, containerPanel){
     if(!checkboxStore[regionName])checkboxStore[regionName]={};
@@ -136,7 +141,9 @@ function createCheckboxForModel(regionName, model, containerPanel){
         if(v){
             regionModelMap[regionName] = model.modelId;
             Object.keys(checkboxStore[regionName]).forEach(function(k){if(k!==model.modelId)checkboxStore[regionName][k].setValue(false);});
-            manageMapLayer('class_'+key, ee.Image(model.assetId).select(0).divide(10).toByte().selfMask(), {min:0,max:100,palette:['#fcc','#f66','#c00','#600']}, model.modelId+'|'+regionName);
+            
+            var classImg = ee.Image(model.assetId).select(0).gt(0).selfMask();
+            manageMapLayer('class_'+key, classImg, {palette:['#ff0000']}, model.modelId+' | '+regionName);
         } else {
             if(regionModelMap[regionName]===model.modelId)regionModelMap[regionName]=null;
             removeMapLayer('class_'+key);
@@ -145,24 +152,40 @@ function createCheckboxForModel(regionName, model, containerPanel){
     });
     checkboxStore[regionName][model.modelId] = cb;
     containerPanel.add(cb);
-    if(sel){manageMapLayer('class_'+regionName+'_'+model.modelId, ee.Image(model.assetId).select(0).divide(10).toByte().selfMask(), {min:0,max:100,palette:['#fcc','#f66','#c00','#600']}, model.modelId+'|'+regionName);}
+    if(sel){
+        var classImg = ee.Image(model.assetId).select(0).gt(0).selfMask();
+        manageMapLayer('class_'+regionName+'_'+model.modelId, classImg, {palette:['#ff0000']}, model.modelId+' | '+regionName);
+    }
 }
 
-// ─── MOSAIC ──────────────────────────────────────────────────────────────────
+// ─── CARGA DEL MOSAICO SENTINEL-2 MINNBR ──────────────────────────────────────
 
 function loadMosaic(y,m){
-    var dk = formatPeriod(y,m);
-    var bs = CATALOG_ROOT+'/LIBRARY_IMAGES/SENTINEL2/MONTHLY/MINNBR';
-    var img = ee.Image().select();
-    ['blue','green','red','nir','swir1','swir2'].forEach(function(b){
-        try{var bi=ee.ImageCollection(bs+'/'+b.toLowerCase()).filter(ee.Filter.eq('system:index','image_peru_fire_sentinel2_minnbr_'+b.toLowerCase()+'_'+dk)).mosaic();img=img.addBands(ee.Image(ee.Algorithms.If(bi.bandNames().size().gt(0),bi,ee.Image(0).rename(b.toLowerCase()).updateMask(0))).select([0],[b.toLowerCase()]),null,true)}
-        catch(e){img=img.addBands(ee.Image(0).rename(b.toLowerCase()).updateMask(0),null,true)}
-    });
-    img = img.addBands(img.normalizedDifference(['nir','swir2']).rename('nbr'));
-    manageMapLayer('mosaic_minnbr', img, {bands:['swir1','nir','red'],min:3,max:40,gamma:0.85}, 'Min NBR '+dk);
+    try {
+        var dk = formatPeriod(y,m);
+        var bs = CATALOG_ROOT+'/LIBRARY_IMAGES/SENTINEL2/MONTHLY/MINNBR';
+        var img = ee.Image().select();
+        ['blue','green','red','nir','swir1','swir2'].forEach(function(b){
+            try {
+                var bi = ee.ImageCollection(bs+'/'+b.toLowerCase()).filter(ee.Filter.eq('system:index','image_peru_fire_sentinel2_minnbr_'+b.toLowerCase()+'_'+dk)).mosaic();
+                img = img.addBands(ee.Image(ee.Algorithms.If(bi.bandNames().size().gt(0),bi,ee.Image(0).rename(b.toLowerCase()).updateMask(0))).select([0],[b.toLowerCase()]),null,true);
+            } catch(e) {
+                img = img.addBands(ee.Image(0).rename(b.toLowerCase()).updateMask(0),null,true);
+            }
+        });
+
+        manageMapLayer('mosaic_minnbr', img, {
+            bands: ['swir1', 'nir', 'red'],
+            min: 5,
+            max: 48,
+            gamma: 1.1
+        }, 'Mosaico Sentinel-2 MinNBR ' + dk);
+    } catch (e) {
+        print('ℹ️ Mosaico MinNBR no disponible para el período:', y, m);
+    }
 }
 
-// ─── CLASSIFICATIONS ────────────────────────────────────────────────────────
+// ─── CARGA DE CLASIFICACIONES ────────────────────────────────────────────────
 
 function loadClassifications(y,m,cb){
     var dk = formatPeriod(y,m);
@@ -196,7 +219,7 @@ function loadExisting(cb){
     });
 }
 
-// ─── PERIOD COUNTS ──────────────────────────────────────────────────────────
+// ─── CONTEO DE PERÍODOS ──────────────────────────────────────────────────────
 
 function loadPeriodCounts(cb){
     ee.data.listAssets(CLASSIFICATIONS_ROOT+'REGIONAL',{},function(cols){
@@ -223,7 +246,7 @@ function loadPeriodCounts(cb){
     });
 }
 
-// ─── COLLECTION CONTENTS ────────────────────────────────────────────────────
+// ─── CONTENIDO DE LA COLECCIÓN ───────────────────────────────────────────────
 
 function loadCollectionContents(){
     if(!contentsBox)return;
@@ -240,7 +263,7 @@ function loadCollectionContents(){
         card.add(ui.Label(L.existing+': '+fn, {fontSize:'10px',fontWeight:'bold',color:'#1a73e8',margin:'0 0 4px 0'}));
 
         if(periods.length===0){
-            card.add(ui.Label('(vazia)', {fontSize:'10px',color:'#aaa',margin:'2px'}));
+            card.add(ui.Label('(vacía)', {fontSize:'10px',color:'#aaa',margin:'2px'}));
         } else {
             var list = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:{maxHeight:'100px'}});
             periods.forEach(function(p){list.add(ui.Label(' '+p+'  ✅', {fontSize:'10px',fontFamily:'monospace',color:'#0f9d58',margin:'1px 0'}));});
@@ -263,7 +286,7 @@ function populatePeriodDropdown(existingPeriods){
     loadPeriodCounts(function(counts){
         var items;
         if(pendingPeriods.length===0){
-            items=['(todos preenchidos)'];dropdownPeriod.setDisabled(true);dropdownPeriod.setValue(null);
+            items=['(todos completados)'];dropdownPeriod.setDisabled(true);dropdownPeriod.setValue(null);
         } else {
             items=pendingPeriods.map(function(p){
                 var c=counts[p]||{total:0,regions:{}};
@@ -278,7 +301,7 @@ function populatePeriodDropdown(existingPeriods){
             currentPeriod = pendingPeriods[defIdx];
             currentYear = parseInt(pendingPeriods[defIdx].substring(0,4),10);
             currentMonth = parseInt(pendingPeriods[defIdx].substring(5,7),10);
-            loadMosaic(currentYear, currentMonth);Map.centerObject(REGIONS);
+            loadMosaic(currentYear, currentMonth);mapWidget.centerObject(REGIONS);
             loadPeriodAndRepopulate();
         }
     });
@@ -286,7 +309,7 @@ function populatePeriodDropdown(existingPeriods){
 
 var layoutBuilt = false;
 
-// ─── FILTER ─────────────────────────────────────────────────────────────────
+// ─── FILTRO DE BÚSQUEDA ────────────────────────────────────────────────────────
 
 function applyFilter(){
     var data = lastClassifications||{};
@@ -297,7 +320,7 @@ function applyFilter(){
         panel.clear();
         var shown = models.filter(function(mm){return !filterText||mm.modelId.toLowerCase().indexOf(filterText)!==-1;});
         if(shown.length===0){
-            panel.add(ui.Label(models.length===0?'(sem predicao)':'('+models.length+' oculto'+(models.length>1?'s':'')+')', {fontSize:'9px',color:'#aaa',margin:'1px 0'}));
+            panel.add(ui.Label(models.length===0?'(sin predicción)':'('+models.length+' oculto'+(models.length>1?'s':'')+')', {fontSize:'9px',color:'#aaa',margin:'1px 0'}));
         } else {
             shown.forEach(function(m){createCheckboxForModel(rn, m, panel);});
         }
@@ -305,13 +328,13 @@ function applyFilter(){
     buildConfirmPanel();
 }
 
-// ─── REGIONS ────────────────────────────────────────────────────────────────
+// ─── REGIONES ─────────────────────────────────────────────────────────────────
 
 function buildRegionsLayout(callback){
     regionsBox.clear();
     regionsBox.add(ui.Label(L.loading+' '+currentPeriod, {fontSize:'10px',color:'#888'}));
     summaryBox.clear();
-    summaryBox.add(ui.Label('Periodo: '+currentPeriod+' | Colecao: '+ft00Path(), {fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
+    summaryBox.add(ui.Label('Período: '+currentPeriod+' | Colección: '+ft00Path(), {fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
 
     loadClassifications(currentYear, currentMonth, function(data){
         resetRegionState();
@@ -364,7 +387,7 @@ function repopulateRegionCheckboxes(data){
         if(!panel)return;
         panel.clear();
         if(models.length===0){
-            panel.add(ui.Label('(sem predicao)', {fontSize:'9px',color:'#aaa',margin:'1px 0'}));
+            panel.add(ui.Label('(sin predicción)', {fontSize:'9px',color:'#aaa',margin:'1px 0'}));
         } else {
             if(!regionModelMap[rn])regionModelMap[rn]=models[0].modelId;
             models.forEach(function(m){createCheckboxForModel(rn, m, panel);});
@@ -385,15 +408,15 @@ function loadPeriodAndRepopulate(){
 
 function updateRegionSummary(data){
     summaryBox.clear();
-    summaryBox.add(ui.Label('Periodo: '+currentPeriod+' | Colecao: '+ft00Path(), {fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
+    summaryBox.add(ui.Label('Período: '+currentPeriod+' | Colección: '+ft00Path(), {fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
     var withData = regionNames.filter(function(r){return data[r]&&data[r].length>0;}).length;
     var totalPreds = 0; regionNames.forEach(function(r){if(data[r])totalPreds+=data[r].length;});
-    summaryBox.add(ui.Label('Regioes: '+withData+'/'+regionNames.length+' com predicoes | Predicoes totais: '+totalPreds, {fontSize:'10px',color:'#333',margin:'1px 0'}));
+    summaryBox.add(ui.Label('Regiones: '+withData+'/'+regionNames.length+' con predicciones | Predicciones totales: '+totalPreds, {fontSize:'10px',color:'#333',margin:'1px 0'}));
     var selected = regionNames.filter(function(r){return!!regionModelMap[r];}).length;
-    summaryBox.add(ui.Label('Predicoes selecionadas: '+selected+'/'+withData+' regioes', {fontSize:'9px',color:selected===withData?'#0f9d58':'#e37400',margin:'1px 0'}));
+    summaryBox.add(ui.Label('Predicciones seleccionadas: '+selected+'/'+withData+' regiones', {fontSize:'9px',color:selected===withData?'#0f9d58':'#e37400',margin:'1px 0'}));
 }
 
-// ─── CONFIG SECTION ─────────────────────────────────────────────────────────
+// ─── SECCIÓN DE CONFIGURACIÓN ─────────────────────────────────────────────────
 
 function buildConfigSection(){
     var section = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:SECTION_STYLE.config});
@@ -435,7 +458,7 @@ function buildConfigSection(){
     return section;
 }
 
-// ─── PERIOD SECTION ─────────────────────────────────────────────────────────
+// ─── SECCIÓN DE PERÍODO ───────────────────────────────────────────────────────
 
 function buildPeriodSection(){
     var section = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:SECTION_STYLE.period});
@@ -452,7 +475,7 @@ function buildPeriodSection(){
         showLoading();showPeriodLoading();
         var y = parseInt(currentPeriod.substring(0,4),10), m = parseInt(currentPeriod.substring(5,7),10);
         currentYear = y; currentMonth = m;
-        loadMosaic(currentYear, currentMonth);Map.centerObject(REGIONS);
+        loadMosaic(currentYear, currentMonth);mapWidget.centerObject(REGIONS);
         loadPeriodAndRepopulate();
     });
 
@@ -464,7 +487,7 @@ function buildPeriodSection(){
     return section;
 }
 
-// ─── REGIONS SECTION ────────────────────────────────────────────────────────
+// ─── SECCIÓN DE REGIONES ──────────────────────────────────────────────────────
 
 function buildRegionsSection(){
     var section = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:SECTION_STYLE.regions});
@@ -478,7 +501,7 @@ function buildRegionsSection(){
     return section;
 }
 
-// ─── CONFIRM SECTION ────────────────────────────────────────────────────────
+// ─── SECCIÓN DE CONFIRMACIÓN ──────────────────────────────────────────────────
 
 function buildConfirmSection(){
     var section = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:SECTION_STYLE.confirm});
@@ -497,11 +520,11 @@ function buildConfirmPanel(){
     confirmBox.add(ui.Label(L.target+': '+fn+' / '+currentPeriod, {fontSize:'11px',fontFamily:'monospace',color:'#1a73e8',margin:'2px',padding:'4px',backgroundColor:'#fff',borderRadius:'3px'}));
     var names = Object.keys(regionModelMap).sort(), hasAll = true;
     names.forEach(function(r){var m=regionModelMap[r];confirmBox.add(ui.Label('  '+r+': '+(m?m:L.none), m?STYLE.statusOk:STYLE.statusErr));if(!m)hasAll=false;});
-    if(names.length===0)confirmBox.add(ui.Label('Nenhuma regiao configurada.', STYLE.statusErr));
+    if(names.length===0)confirmBox.add(ui.Label('Ninguna región configurada.', STYLE.statusErr));
     confirmBox.add(ui.Button({label:L.export_btn, style:STYLE.btnGreen, disabled:!hasAll||names.length===0, onClick:function(){showPrePopup();}}));
 }
 
-// ─── PRE-POPUP ──────────────────────────────────────────────────────────────
+// ─── VENTANA POPUP PREVIA A EXPORTAR ──────────────────────────────────────────
 
 function showPrePopup(){
     confirmBox.clear();
@@ -518,7 +541,7 @@ function showPrePopup(){
     confirmBox.add(box);
 }
 
-// ─── EXPORT ─────────────────────────────────────────────────────────────────
+// ─── PROCESO DE EXPORTACIÓN ───────────────────────────────────────────────────
 
 function doExport(){
     confirmBox.clear();
@@ -530,7 +553,7 @@ function doExport(){
     ensureFolder('FILTERED/'+fn);
 
     var names = Object.keys(regionModelMap).filter(function(r){return!!regionModelMap[r];});
-    if(names.length===0){confirmBox.add(ui.Label('Erro: nenhuma regiao.', STYLE.statusErr));return}
+    if(names.length===0){confirmBox.add(ui.Label('Error: ninguna región.', STYLE.statusErr));return}
 
     var nationalImage = ee.Image(0).rename('probability');
     var doyImage = ee.Image(0).rename('dayOfYear');
@@ -558,7 +581,7 @@ function doExport(){
 
     manageMapLayer('national_'+currentPeriod, nationalImage.select('probability').selfMask(), {min:0,max:1000,palette:['#fcc','#f00','#600']}, 'National '+currentPeriod);
 
-    try{ee.data.getAsset(destination);setExportStatus('info', camp+' / '+fn+'/'+currentPeriod+' ja existe');}
+    try{ee.data.getAsset(destination);setExportStatus('info', camp+' / '+fn+'/'+currentPeriod+' ya existe');}
     catch(e){setExportStatus('success', camp+' / '+fn+'/'+currentPeriod+' enviado');Export.image.toAsset({image:nationalImage.toInt16(),description:(camp+'_'+currentPeriod.replace(/_/g,'')).substring(0,80),assetId:destination,pyramidingPolicy:'mode',region:REGIONS.geometry().bounds(),scale:SCALE,maxPixels:1e13});}
 
     confirmBox.clear();
@@ -570,34 +593,49 @@ function doExport(){
 
 function refreshAll(){loadPeriodAndRepopulate();buildConfirmPanel();loadCollectionContents();}
 
-// ─── FORM ───────────────────────────────────────────────────────────────────
+// ─── CONSTRUCCIÓN DEL FORMULARIO CON SPLITPANEL ─────────────────────────────
 
 function buildForm(){
-    contentRoot = ui.root;
-    contentRoot.clear();
+    ui.root.clear();
 
-    var root = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:{width:'580px',margin:'0',padding:'4px',backgroundColor:'#fff'}});
-    root.add(ui.Label('MapBiomas-Fuego | '+L.title, {fontSize:'14px',fontWeight:'bold',color:'#d32f2f',margin:'4px'}));
+    var sidePanel = ui.Panel({
+        layout: ui.Panel.Layout.flow('vertical'),
+        style: {width: '440px', margin: '0', padding: '6px', backgroundColor: '#fff'}
+    });
+
+    sidePanel.add(ui.Label('MapBiomas-Fuego | '+L.title, {fontSize:'14px',fontWeight:'bold',color:'#d32f2f',margin:'4px'}));
     statusLabel = ui.Label({value:'', style:{fontSize:'10px',color:'#1a73e8',margin:'2px 4px',shown:false,stretch:'horizontal'}});
-    root.add(statusLabel);
+    sidePanel.add(statusLabel);
 
-    root.add(buildConfigSection());
-    root.add(buildPeriodSection());
-    root.add(buildRegionsSection());
+    sidePanel.add(buildConfigSection());
+    sidePanel.add(buildPeriodSection());
+    sidePanel.add(buildRegionsSection());
 
     exportStatus = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:{margin:'4px',shown:false}});
-    root.add(exportStatus);
+    sidePanel.add(exportStatus);
 
-    root.add(buildConfirmSection());
+    sidePanel.add(buildConfirmSection());
 
-    contentRoot.add(root);
-    Map.setOptions('SATELLITE');
-    Map.centerObject(REGIONS);
-    Map.addLayer(REGIONS.style({color:'ffffff',fillColor:'00000000',width:1}),{},'Regions');
+    mapWidget.setOptions('HYBRID');
+    mapWidget.centerObject(REGIONS);
+    
+    // Adiciona o limite das regiões
+    manageMapLayer('regions_boundary', REGIONS.style({color:'ffffff',fillColor:'00000000',width:1}), {}, 'Regiones');
+
+    // Layout Dividido (Garante que o mapa fique visível na direita)
+    var splitPanel = ui.SplitPanel({
+        firstPanel: sidePanel,
+        secondPanel: mapWidget,
+        orientation: 'horizontal',
+        wipe: false
+    });
+
+    ui.root.add(splitPanel);
+
     regionNames = REGIONS.aggregate_array(REGION_PROPERTY).distinct().getInfo().sort();
 
     loadExisting(function(names){
-        if(names.length===0){dropdownExisting.items().reset(['(nenhuma)']);dropdownExisting.setDisabled(true);}
+        if(names.length===0){dropdownExisting.items().reset(['(ninguna)']);dropdownExisting.setDisabled(true);}
         else {
             dropdownExisting.items().reset(names);dropdownExisting.setDisabled(false);
             dropdownExisting.setValue(names[0]);
@@ -608,7 +646,7 @@ function buildForm(){
     });
 }
 
-// ─── INIT ───────────────────────────────────────────────────────────────────
+// ─── INICIALIZACIÓN ───────────────────────────────────────────────────────────
 
 buildForm();
-print('M7_00 4.7 carregado.');
+print('M7_00 cargado.');
