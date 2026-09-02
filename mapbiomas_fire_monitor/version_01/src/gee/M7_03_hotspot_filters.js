@@ -3,7 +3,7 @@ MAPBIOMAS FUEGO - MONITOR_01 - ft03
 Isencao por Buffer de Focos de Calor
 
 📅 DATA: julho 2026
-🏷️ VERSAO: 4.6
+🏷️ VERSAO: 4.7
 ============================================================ */
 
 var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
@@ -15,18 +15,30 @@ var SCALE = 10;
 var landcover = ee.Image('projects/mapbiomas-public/assets/peru/collection3/mapbiomas_peru_collection3_integration_v1');
 var hotspotsBase = 'projects/workspace-ipam/assets/FOGO/monthly-focus-sul-america';
 
-var COLLECTION_BASE = 'propose_a';
-var inputStage  = '-ft02';
-var outputStage = '-ft03';
+var COLLECTION_BASE = 'propuesta_a';
+var inputStage  = 'ft02';
+var outputStage = 'ft03';
 var CAMPAIGN = 'MONITOR_01';
 var bufferMeters  = 5000;
 var exemptionRegions = ['region1', 'region2', 'region3', 'region4'];
 var exemptClasses   = [66, 12, 13];  // 66 = mosaico agro, 12 = pasto, 13 = formacao natural nao florestal
 
 var filteredPath = CLASSIFICATIONS_ROOT + 'FILTERED/';
-var inputCollection  = filteredPath + COLLECTION_BASE + inputStage;
-var outputCollection = filteredPath + COLLECTION_BASE + outputStage;
+var inputCollection  = filteredPath + COLLECTION_BASE + '/' + inputStage;
+var outputCollection = filteredPath + COLLECTION_BASE + '/' + outputStage;
 var hotspotCache = {};
+
+function setTimeProperties(image, periodName) {
+    var parts = periodName.split('_');
+    var y = parseInt(parts[0], 10);
+    var m = parseInt(parts[1], 10);
+    var start = ee.Date.fromYMD(y, m, 1);
+    var end = start.advance(1, 'month');
+    return image.set({
+        'system:time_start': start.millis(),
+        'system:time_end': end.millis()
+    });
+}
 
 function ensureFolder(pathName) {
     var parts = pathName.split('/');
@@ -35,7 +47,7 @@ function ensureFolder(pathName) {
         current += parts[i];
         try { ee.data.getAsset(current); }
         catch (e) {
-            var isImageCollection = (i === parts.length - 1 && parts[i].indexOf('-ft') !== -1);
+            var isImageCollection = (i === parts.length - 1 && /^ft\d\d$/.test(parts[i]));
             ee.data.createAsset({ type: isImageCollection ? 'IMAGE_COLLECTION' : 'FOLDER' }, current);
         }
         current += '/';
@@ -118,8 +130,8 @@ print('Input:  ' + inputCollection);
 print('Output: ' + outputCollection);
 print('Buffer: ' + (bufferMeters / 1000) + 'km, Regions: ' + exemptionRegions.join(','));
 
-ensureFolder('FILTERED/' + COLLECTION_BASE + inputStage);
-ensureFolder('FILTERED/' + COLLECTION_BASE + outputStage);
+ensureFolder('FILTERED/' + COLLECTION_BASE + '/' + inputStage);
+ensureFolder('FILTERED/' + COLLECTION_BASE + '/' + outputStage);
 
 ee.data.listAssets(inputCollection, {}, function (result) {
     var images = [];
@@ -172,7 +184,7 @@ ee.data.listAssets(inputCollection, {}, function (result) {
             var outputImage = sourceImage.unmask(0);
             outputImage = outputImage.where(exemption.eq(1).and(sourceImage.mask().not()), sourceImage.unmask(0));
             outputImage = outputImage.updateMask(sourceImage.mask().or(exemption.eq(1))).selfMask();
-            outputImage = outputImage.copyProperties(sourceImage).set('filter_stage', 'ft03');
+            outputImage = setTimeProperties(outputImage.copyProperties(sourceImage).set('filter_stage', 'ft03'), periodName);
 
             var destAsset = outputCollection + '/' + periodName;
 

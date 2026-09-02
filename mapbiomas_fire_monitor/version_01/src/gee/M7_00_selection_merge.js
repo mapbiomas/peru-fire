@@ -3,7 +3,7 @@ MAPBIOMAS FUEGO - MONITOR_01 - M7_00
 Selection and Export (UI) — Formulario Corrido
 
 📅 DATA: julho 2026
-🏷️ VERSAO: 4.4
+🏷️ VERSAO: 4.7
 
 📌 SEÇÕES COM FUNDO COLORIDO:
   CONFIG — cinza   |   PERIODO — azul claro
@@ -22,11 +22,11 @@ var APP_LANG = 'pt';
 
 var L = (function(){
     var d={
-        pt:{title:'M7 — Selecao e Export',cfg:'CONFIGURACAO',period:'PERIODO',regions:'REGIOES',confirm:'CONFIRMAR',campaign:'Campanha',existing:'Predicoes existentes',new_title:'Criar nova',select:'Selecionar',create:'Criar e selecionar',placeholder:'ex: propose_a',year:'Ano',month:'Mes',load:'Carregar',loading:'Carregando...',no_data:'Sem dados.',select_all:'Selecionar todas',clear_all:'Limpar',filter_placeholder:'filtrar predicoes...',target:'Predicao',export_btn:'Exportar',pre_title:'Pre-Confirmacao',pre_body:'Sera criado/atualizado:',pre_warn:'O GEE solicitara confirmacao.',pre_ok:'OK',cancel:'Cancelar',done:'Concluido!',one:'1 predicao',none:'nenhuma'},
-        es:{title:'M7 — Seleccion',cfg:'CONFIG',period:'PERIODO',regions:'REGIONES',confirm:'CONFIRMAR',campaign:'Campana',existing:'Predicciones existentes',new_title:'Crear nueva',select:'Seleccionar',create:'Crear y seleccionar',placeholder:'ej: propose_a',year:'Ano',month:'Mes',load:'Cargar',loading:'Cargando...',no_data:'Sin datos.',select_all:'Todas',clear_all:'Limpiar',filter_placeholder:'filtrar predicciones...',target:'Prediccion',export_btn:'Exportar',pre_title:'Pre-Confirmacion',pre_body:'Se creara:',pre_warn:'GEE solicitara confirmacion.',pre_ok:'OK',cancel:'Cancelar',done:'Completado!',one:'1 prediccion',none:'ninguna'},
-        en:{title:'M7 — Selection & Export',cfg:'CONFIGURATION',period:'PERIOD',regions:'REGIONS',confirm:'CONFIRM',campaign:'Campaign',existing:'Existing predictions',new_title:'Create new',select:'Select',create:'Create & select',placeholder:'e.g. propose_a',year:'Year',month:'Month',load:'Load',loading:'Loading...',no_data:'No data.',select_all:'Select all',clear_all:'Clear',filter_placeholder:'filter predictions...',target:'Prediction',export_btn:'Export',pre_title:'Pre-Confirmation',pre_body:'Will create/update:',pre_warn:'GEE will prompt for confirmation.',pre_ok:'OK',cancel:'Cancel',done:'Done!',one:'1 prediction',none:'none'},
-        fr:{title:'M7 — Selection',cfg:'CONFIG',period:'PERIODE',regions:'REGIONS',confirm:'CONFIRMER',campaign:'Campagne',existing:'Predictions existantes',new_title:'Creer',select:'Selectionner',create:'Creer',placeholder:'ex: propose_a',year:'Annee',month:'Mois',load:'Charger',loading:'Chargement...',no_data:'Pas de donnees.',select_all:'Toutes',clear_all:'Effacer',filter_placeholder:'filtrer predictions...',target:'Prediction',export_btn:'Exporter',pre_title:'Pre-Confirmation',pre_body:'Va creer:',pre_warn:'GEE demandera confirmation.',pre_ok:'OK',cancel:'Annuler',done:'Termine!',one:'1 prediction',none:'aucune'},
-        id:{title:'M7 — Seleksi',cfg:'KONFIG',period:'PERIODE',regions:'WILAYAH',confirm:'KONFIRMASI',campaign:'Kampanye',existing:'Prediksi yang ada',new_title:'Buat baru',select:'Pilih',create:'Buat & pilih',placeholder:'cth: propose_a',year:'Tahun',month:'Bulan',load:'Muat',loading:'Memuat...',no_data:'Tidak ada.',select_all:'Semua',clear_all:'Hapus',filter_placeholder:'filter prediksi...',target:'Prediksi',export_btn:'Ekspor',pre_title:'Pra-Konfirmasi',pre_body:'Akan dibuat:',pre_warn:'GEE akan minta konfirmasi.',pre_ok:'OK',cancel:'Batal',done:'Selesai!',one:'1 prediksi',none:'tidak ada'},
+        pt:{title:'M7 — Selecao e Export',cfg:'CONFIGURACAO',period:'PERIODO',regions:'REGIOES',confirm:'CONFIRMAR',campaign:'Campanha',existing:'Predicoes existentes',new_title:'Criar nova',select:'Selecionar',create:'Criar e selecionar',placeholder:'ex: propuesta_a',year:'Ano',month:'Mes',load:'Carregar',loading:'Carregando...',no_data:'Sem dados.',select_all:'Selecionar todas',clear_all:'Limpar',filter_placeholder:'filtrar predicoes...',target:'Predicao',export_btn:'Exportar',pre_title:'Pre-Confirmacao',pre_body:'Sera criado/atualizado:',pre_warn:'O GEE solicitara confirmacao.',pre_ok:'OK',cancel:'Cancelar',done:'Concluido!',one:'1 predicao',none:'nenhuma'},
+        es:{title:'M7 — Seleccion',cfg:'CONFIG',period:'PERIODO',regions:'REGIONES',confirm:'CONFIRMAR',campaign:'Campana',existing:'Predicciones existentes',new_title:'Crear nueva',select:'Seleccionar',create:'Crear y seleccionar',placeholder:'ej: propuesta_a',year:'Ano',month:'Mes',load:'Cargar',loading:'Cargando...',no_data:'Sin datos.',select_all:'Todas',clear_all:'Limpiar',filter_placeholder:'filtrar predicciones...',target:'Prediccion',export_btn:'Exportar',pre_title:'Pre-Confirmacion',pre_body:'Se creara:',pre_warn:'GEE solicitara confirmacion.',pre_ok:'OK',cancel:'Cancelar',done:'Completado!',one:'1 prediccion',none:'ninguna'},
+        en:{title:'M7 — Selection & Export',cfg:'CONFIGURATION',period:'PERIOD',regions:'REGIONS',confirm:'CONFIRM',campaign:'Campaign',existing:'Existing predictions',new_title:'Create new',select:'Select',create:'Create & select',placeholder:'e.g. propuesta_a',year:'Year',month:'Month',load:'Load',loading:'Loading...',no_data:'No data.',select_all:'Select all',clear_all:'Clear',filter_placeholder:'filter predictions...',target:'Prediction',export_btn:'Export',pre_title:'Pre-Confirmation',pre_body:'Will create/update:',pre_warn:'GEE will prompt for confirmation.',pre_ok:'OK',cancel:'Cancel',done:'Done!',one:'1 prediction',none:'none'},
+        fr:{title:'M7 — Selection',cfg:'CONFIG',period:'PERIODE',regions:'REGIONS',confirm:'CONFIRMER',campaign:'Campagne',existing:'Predictions existantes',new_title:'Creer',select:'Selectionner',create:'Creer',placeholder:'ex: propuesta_a',year:'Annee',month:'Mois',load:'Charger',loading:'Chargement...',no_data:'Pas de donnees.',select_all:'Toutes',clear_all:'Effacer',filter_placeholder:'filtrer predictions...',target:'Prediction',export_btn:'Exporter',pre_title:'Pre-Confirmation',pre_body:'Va creer:',pre_warn:'GEE demandera confirmation.',pre_ok:'OK',cancel:'Annuler',done:'Termine!',one:'1 prediction',none:'aucune'},
+        id:{title:'M7 — Seleksi',cfg:'KONFIG',period:'PERIODE',regions:'WILAYAH',confirm:'KONFIRMASI',campaign:'Kampanye',existing:'Prediksi yang ada',new_title:'Buat baru',select:'Pilih',create:'Buat & pilih',placeholder:'cth: propuesta_a',year:'Tahun',month:'Bulan',load:'Muat',loading:'Memuat...',no_data:'Tidak ada.',select_all:'Semua',clear_all:'Hapus',filter_placeholder:'filter prediksi...',target:'Prediksi',export_btn:'Ekspor',pre_title:'Pra-Konfirmasi',pre_body:'Akan dibuat:',pre_warn:'GEE akan minta konfirmasi.',pre_ok:'OK',cancel:'Batal',done:'Selesai!',one:'1 prediksi',none:'tidak ada'},
     };
     return d[APP_LANG]||d.pt;
 })();
@@ -71,7 +71,7 @@ var regionNames = [];
 var currentYear = null;
 var currentMonth = null;
 var currentPeriod = '';
-var collectionName = 'propose_a';
+var collectionName = 'propuesta_a';
 
 // ─── UI COMPONENT REFERENCES ───────────────────────────────────────────────
 
@@ -82,7 +82,7 @@ var dropdownExisting, dropdownPeriod, dropdownCampaign, textboxCollectionName;
 
 function ensureFolder(name){
     var p=name.split('/'), cur=CLASSIFICATIONS_ROOT;
-    for(var i=0;i<p.length;i++){cur+=p[i];try{ee.data.getAsset(cur)}catch(e){ee.data.createAsset({type:(i===p.length-1&&p[i].indexOf('-ft')!==-1)?'IMAGE_COLLECTION':'FOLDER'},cur)}cur+='/';}
+    for(var i=0;i<p.length;i++){cur+=p[i];try{ee.data.getAsset(cur)}catch(e){ee.data.createAsset({type:(i===p.length-1&&/^ft\d\d$/.test(p[i]))?'IMAGE_COLLECTION':'FOLDER'},cur)}cur+='/';}
 }
 
 function formatPeriod(y,m){return m!==null?y+'_'+('0'+m).slice(-2):''+y;}
@@ -101,7 +101,7 @@ function setExportStatus(state, msg){
     exportStatus.add(ui.Label(c.icon+' '+msg,{fontSize:'11px',padding:'4px 8px',backgroundColor:c.bg,borderRadius:'3px',margin:'2px 0',stretch:'horizontal'}));
 }
 
-function fullCollectionName(){return collectionName+'-ft00';}
+function ft00Path(){return collectionName+'/ft00';}
 
 // ─── MAP LAYER MANAGEMENT ───────────────────────────────────────────────────
 
@@ -192,7 +192,7 @@ function loadExisting(cb){
     ensureFolder('FILTERED');
     ee.data.listAssets(CLASSIFICATIONS_ROOT+'FILTERED/',{},function(r){
         if(!r||!r.assets){cb([]);return}
-        cb(r.assets.filter(function(a){return a.type==='IMAGE_COLLECTION'}).map(function(a){return a.id.split('/').pop()}).sort());
+        cb(r.assets.filter(function(a){return a.type==='FOLDER'}).map(function(a){return a.id.split('/').pop()}).sort());
     });
 }
 
@@ -229,7 +229,7 @@ function loadCollectionContents(){
     if(!contentsBox)return;
     contentsBox.clear();
     showLoading();
-    var fn = fullCollectionName();
+    var fn = ft00Path();
     var path = CLASSIFICATIONS_ROOT+'FILTERED/'+fn+'/';
 
     ee.data.listAssets(path,{},function(r){
@@ -311,7 +311,7 @@ function buildRegionsLayout(callback){
     regionsBox.clear();
     regionsBox.add(ui.Label(L.loading+' '+currentPeriod, {fontSize:'10px',color:'#888'}));
     summaryBox.clear();
-    summaryBox.add(ui.Label('Periodo: '+currentPeriod+' | Colecao: '+fullCollectionName(), {fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
+    summaryBox.add(ui.Label('Periodo: '+currentPeriod+' | Colecao: '+ft00Path(), {fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
 
     loadClassifications(currentYear, currentMonth, function(data){
         resetRegionState();
@@ -385,7 +385,7 @@ function loadPeriodAndRepopulate(){
 
 function updateRegionSummary(data){
     summaryBox.clear();
-    summaryBox.add(ui.Label('Periodo: '+currentPeriod+' | Colecao: '+fullCollectionName(), {fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
+    summaryBox.add(ui.Label('Periodo: '+currentPeriod+' | Colecao: '+ft00Path(), {fontSize:'9px',fontFamily:'monospace',color:'#1a73e8',margin:'1px 0'}));
     var withData = regionNames.filter(function(r){return data[r]&&data[r].length>0;}).length;
     var totalPreds = 0; regionNames.forEach(function(r){if(data[r])totalPreds+=data[r].length;});
     summaryBox.add(ui.Label('Regioes: '+withData+'/'+regionNames.length+' com predicoes | Predicoes totais: '+totalPreds, {fontSize:'10px',color:'#333',margin:'1px 0'}));
@@ -410,7 +410,7 @@ function buildConfigSection(){
     existingPanel.add(dropdownExisting);
     existingPanel.add(ui.Button({label:L.select, style:STYLE.btnBlue, onClick:function(){
         var v = dropdownExisting.getValue(); if(!v||v==='...')return;
-        collectionName = v.split('-ft')[0]||v; textboxCollectionName.setValue(collectionName); refreshAll();
+        collectionName = v; textboxCollectionName.setValue(collectionName); refreshAll();
     }}));
 
     var newPanel = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:SECTION_STYLE.sub});
@@ -420,14 +420,14 @@ function buildConfigSection(){
     newPanel.add(textboxCollectionName);
     newPanel.add(ui.Button({label:L.create, style:STYLE.btnGreen, onClick:function(){
         var name = textboxCollectionName.getValue().trim()||collectionName; collectionName = name;
-        ensureFolder('FILTERED/'+name+'-ft00');
+        ensureFolder('FILTERED/'+name+'/ft00');
         loadExisting(function(names){
             dropdownExisting.items().reset(names);dropdownExisting.setDisabled(false);
-            var target = names.filter(function(n){return n.indexOf(name+'-ft')===0;})[0];
+            var target = names.filter(function(n){return n===name;})[0];
             if(target){dropdownExisting.setValue(target);collectionName=name;}else{dropdownExisting.setValue(null);}
             refreshAll();
         });
-        print('OK: FILTERED/'+name+'-ft00');
+        print('OK: FILTERED/'+name+'/ft00');
     }}));
 
     sideRow.add(existingPanel).add(newPanel);
@@ -493,7 +493,7 @@ function buildConfirmSection(){
 function buildConfirmPanel(){
     if(!confirmBox)return;
     confirmBox.clear();
-    var fn = fullCollectionName();
+    var fn = ft00Path();
     confirmBox.add(ui.Label(L.target+': '+fn+' / '+currentPeriod, {fontSize:'11px',fontFamily:'monospace',color:'#1a73e8',margin:'2px',padding:'4px',backgroundColor:'#fff',borderRadius:'3px'}));
     var names = Object.keys(regionModelMap).sort(), hasAll = true;
     names.forEach(function(r){var m=regionModelMap[r];confirmBox.add(ui.Label('  '+r+': '+(m?m:L.none), m?STYLE.statusOk:STYLE.statusErr));if(!m)hasAll=false;});
@@ -505,7 +505,7 @@ function buildConfirmPanel(){
 
 function showPrePopup(){
     confirmBox.clear();
-    var fn = fullCollectionName();
+    var fn = ft00Path();
     var box = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:STYLE.prePopup});
     box.add(ui.Label('⚠ '+L.pre_title, {fontSize:'13px',fontWeight:'bold',color:'#cc8800',margin:'2px'}));
     box.add(ui.Label(L.pre_body, {fontSize:'11px',color:'#333',margin:'2px'}));
@@ -524,7 +524,7 @@ function doExport(){
     confirmBox.clear();
     confirmBox.add(ui.Label(L.loading, {fontSize:'11px',color:'#1a73e8',margin:'4px'}));
     showLoading();
-    var fn = fullCollectionName();
+    var fn = ft00Path();
     var camp = dropdownCampaign.getValue();
     setExportStatus('loading', 'Exportando '+currentPeriod+' para '+fn+'...');
     ensureFolder('FILTERED/'+fn);
@@ -546,7 +546,14 @@ function doExport(){
         doyImage = doyImage.where(regionMask.eq(1),source.select(1));
     });
 
-    nationalImage = nationalImage.addBands(doyImage).selfMask().set({'region_models':modelList.join(','),'campaign':camp,'filter_stage':'ft00','period':currentPeriod});
+    nationalImage = nationalImage.addBands(doyImage).selfMask().set({
+      'region_models': modelList.join(','),
+      'campaign': camp,
+      'filter_stage': 'ft00',
+      'period': currentPeriod,
+      'system:time_start': ee.Date.fromYMD(currentYear, currentMonth, 1).millis(),
+      'system:time_end': ee.Date.fromYMD(currentYear, currentMonth, 1).advance(1, 'month').millis()
+    });
     var destination = CLASSIFICATIONS_ROOT+'FILTERED/'+fn+'/'+currentPeriod;
 
     manageMapLayer('national_'+currentPeriod, nationalImage.select('probability').selfMask(), {min:0,max:1000,palette:['#fcc','#f00','#600']}, 'National '+currentPeriod);
@@ -594,7 +601,7 @@ function buildForm(){
         else {
             dropdownExisting.items().reset(names);dropdownExisting.setDisabled(false);
             dropdownExisting.setValue(names[0]);
-            collectionName = names[0].split('-ft')[0]||names[0];
+            collectionName = names[0];
             textboxCollectionName.setValue(collectionName);
             loadCollectionContents();
         }
@@ -604,4 +611,4 @@ function buildForm(){
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
 buildForm();
-print('M7_00 4.4 carregado.');
+print('M7_00 4.7 carregado.');

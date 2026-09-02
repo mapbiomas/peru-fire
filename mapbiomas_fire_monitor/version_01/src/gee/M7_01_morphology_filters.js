@@ -3,7 +3,7 @@ MAPBIOMAS FUEGO - MONITOR_01 - ft01
 Filtros Morfologicos (Abertura/Fechamento)
 
 📅 DATA: julho 2026
-🏷️ VERSAO: 4.6
+🏷️ VERSAO: 4.7
 ============================================================ */
 
 var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
@@ -11,16 +11,28 @@ var CLASSIFICATIONS_ROOT = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/'
 var REGIONS = ee.FeatureCollection('projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1');
 var SCALE = 10;
 
-var COLLECTION_BASE = 'propose_a';
-var inputStage  = '-ft00';
-var outputStage = '-ft01';
+var COLLECTION_BASE = 'propuesta_a';
+var inputStage  = 'ft00';
+var outputStage = 'ft01';
 var CAMPAIGN = 'MONITOR_01';
 var openingRadius = 1;   // pixels (1px = 10m)
 var closingRadius = 2;   // pixels (2px = 20m)
 
 var filteredPath = CLASSIFICATIONS_ROOT + 'FILTERED/';
-var inputCollection  = filteredPath + COLLECTION_BASE + inputStage;
-var outputCollection = filteredPath + COLLECTION_BASE + outputStage;
+var inputCollection  = filteredPath + COLLECTION_BASE + '/' + inputStage;
+var outputCollection = filteredPath + COLLECTION_BASE + '/' + outputStage;
+
+function setTimeProperties(image, periodName) {
+    var parts = periodName.split('_');
+    var y = parseInt(parts[0], 10);
+    var m = parseInt(parts[1], 10);
+    var start = ee.Date.fromYMD(y, m, 1);
+    var end = start.advance(1, 'month');
+    return image.set({
+        'system:time_start': start.millis(),
+        'system:time_end': end.millis()
+    });
+}
 
 function ensureFolder(pathName) {
     var parts = pathName.split('/');
@@ -29,7 +41,7 @@ function ensureFolder(pathName) {
         current += parts[i];
         try { ee.data.getAsset(current); }
         catch (e) {
-            var isImageCollection = (i === parts.length - 1 && parts[i].indexOf('-ft') !== -1);
+            var isImageCollection = (i === parts.length - 1 && /^ft\d\d$/.test(parts[i]));
             ee.data.createAsset({ type: isImageCollection ? 'IMAGE_COLLECTION' : 'FOLDER' }, current);
         }
         current += '/';
@@ -88,8 +100,8 @@ print('Input:  ' + inputCollection);
 print('Output: ' + outputCollection);
 print('Opening: ' + openingRadius + 'px / Closing: ' + closingRadius + 'px');
 
-ensureFolder('FILTERED/' + COLLECTION_BASE + inputStage);
-ensureFolder('FILTERED/' + COLLECTION_BASE + outputStage);
+ensureFolder('FILTERED/' + COLLECTION_BASE + '/' + inputStage);
+ensureFolder('FILTERED/' + COLLECTION_BASE + '/' + outputStage);
 
 ee.data.listAssets(inputCollection, {}, function (result) {
     var images = [];
@@ -129,7 +141,7 @@ ee.data.listAssets(inputCollection, {}, function (result) {
             closed = closed.focalMin({ radius: closingRadius, kernelType: 'circle', units: 'pixels' });
 
             closed = ee.Image(closed.selfMask().copyProperties(sourceImage));
-            closed = closed.set('filter_stage', 'ft01');
+            closed = setTimeProperties(closed.set('filter_stage', 'ft01'), periodName);
 
             var destAsset = outputCollection + '/' + periodName;
 

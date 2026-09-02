@@ -3,7 +3,7 @@ MAPBIOMAS FUEGO - MONITOR_01 - ft02
 Filtros LULC (MapBiomas Peru Collection 3)
 
 📅 DATA: julho 2026
-🏷️ VERSAO: 4.6
+🏷️ VERSAO: 4.7
 ============================================================ */
 
 var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
@@ -19,9 +19,9 @@ for (var year = 2025; year <= currentYear; year++) {
     landcover = landcover.addBands(landcover.select('classification_2024').rename('classification_' + year));
 }
 
-var COLLECTION_BASE = 'propose_a';
-var inputStage  = '-ft01';
-var outputStage = '-ft02';
+var COLLECTION_BASE = 'propuesta_a';
+var inputStage  = 'ft01';
+var outputStage = 'ft02';
 var CAMPAIGN = 'MONITOR_01';
 
 var waterClasses = [26, 31, 33];
@@ -42,8 +42,20 @@ var lulcMasks = {
 var LULC_PALETTE = require('users/mapbiomas/modules:Palettes.js').get('brazil');
 
 var filteredPath = CLASSIFICATIONS_ROOT + 'FILTERED/';
-var inputCollection  = filteredPath + COLLECTION_BASE + inputStage;
-var outputCollection = filteredPath + COLLECTION_BASE + outputStage;
+var inputCollection  = filteredPath + COLLECTION_BASE + '/' + inputStage;
+var outputCollection = filteredPath + COLLECTION_BASE + '/' + outputStage;
+
+function setTimeProperties(image, periodName) {
+    var parts = periodName.split('_');
+    var y = parseInt(parts[0], 10);
+    var m = parseInt(parts[1], 10);
+    var start = ee.Date.fromYMD(y, m, 1);
+    var end = start.advance(1, 'month');
+    return image.set({
+        'system:time_start': start.millis(),
+        'system:time_end': end.millis()
+    });
+}
 
 function ensureFolder(pathName) {
     var parts = pathName.split('/');
@@ -52,7 +64,7 @@ function ensureFolder(pathName) {
         current += parts[i];
         try { ee.data.getAsset(current); }
         catch (e) {
-            var isImageCollection = (i === parts.length - 1 && parts[i].indexOf('-ft') !== -1);
+            var isImageCollection = (i === parts.length - 1 && /^ft\d\d$/.test(parts[i]));
             ee.data.createAsset({ type: isImageCollection ? 'IMAGE_COLLECTION' : 'FOLDER' }, current);
         }
         current += '/';
@@ -115,8 +127,8 @@ print('=== ft02 — LULC Filters ===');
 print('Input:  ' + inputCollection);
 print('Output: ' + outputCollection);
 
-ensureFolder('FILTERED/' + COLLECTION_BASE + inputStage);
-ensureFolder('FILTERED/' + COLLECTION_BASE + outputStage);
+ensureFolder('FILTERED/' + COLLECTION_BASE + '/' + inputStage);
+ensureFolder('FILTERED/' + COLLECTION_BASE + '/' + outputStage);
 
 ee.data.listAssets(inputCollection, {}, function (result) {
     var images = [];
@@ -174,7 +186,7 @@ ee.data.listAssets(inputCollection, {}, function (result) {
             // Remove solitary pixels (<= 6 connected)
             var connections = maskedImage.select('probability').gt(0).connectedPixelCount({ maxSize: 100, eightConnected: false });
             maskedImage = maskedImage.where(connections.lte(6), 0).selfMask();
-            maskedImage = maskedImage.copyProperties(sourceImage).set('filter_stage', 'ft02');
+            maskedImage = setTimeProperties(maskedImage.copyProperties(sourceImage).set('filter_stage', 'ft02'), periodName);
 
             var destAsset = outputCollection + '/' + periodName;
 
