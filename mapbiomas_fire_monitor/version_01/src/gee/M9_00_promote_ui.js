@@ -1,9 +1,9 @@
 /********************************************
 MAPBIOMAS FUEGO - MONITOR_01 - M9_00
-Pre-Public Promotion (UI) — Redesign v5.3
+Pre-Public Promotion (UI) — Redesign v5.4
 
 📅 DATA: setembro 2026
-🏷️ VERSAO: 5.3
+🏷️ VERSAO: 5.4
 
 📌 SEÇÕES COM FUNDO COLORIDO (ordem vertical):
   CONFIG — cinza       (paises + campanhas + fechas)
@@ -17,10 +17,13 @@ Pre-Public Promotion (UI) — Redesign v5.3
    (root: {CATALOG}/{CAMPAIGN}/LIBRARY_CLASSIFICATIONS/)
 3. Etapas ftXX descobertas automaticamente (IMAGE_COLLECTION)
 4. Grid por etapa: colunas = propuestas, 1 linha = fecha global
-5. Botao dinamico Promover/Despromover (data promovida sem celulas
-   promoviveis vira Despromover, sem protocolo)
-6. Nota sutil na secao PROMOVER (verificacao + link Looker Studio)
-7. Promueve a PRE_PUBLIC via ee.data.copyAsset
+5. ✅ POR CELULA: ao promover, a imagem em PRE_PUBLIC recebe
+   metadados de origem (source_proposal/source_stage/promoted_date
+   via updateAsset apos copyAsset); no load, so a celula promovida
+   fica ✅ e mantem checkbox de visualizacao (nao some)
+6. Sincronizacao errada (origem ausente/divergente) gera aviso
+7. Botao dinamico Promover/Despromover (sem protocolo)
+8. Promueve a PRE_PUBLIC via ee.data.copyAsset
 
 📌 SIN CREACION AUTOMATICA DE ASSETS al inicializar.
    Area quemada NO se calcula aqui (papel del M8).
@@ -47,11 +50,11 @@ var STATS_URL = 'https://datastudio.google.com/reporting/cc275c3b-4a5e-4b4c-97af
 
 var L = (function(){
     var d={
-        pt:{title:'M9 — Promover a PRE_PUBLIC',cfg:'CONFIGURACAO',candidates:'CANDIDATOS',promote:'PROMOVER',promote_note:'Nota: verifique a cicatriz no mapa e as estatisticas antes de promover.',country:'Paises',date:'Datas',campaign:'Campanha',proposal:'Proposta',empty_pre:'(vazio)',loading:'Carregando...',no_data:'Nenhum candidato encontrado.',done:'Promovido!',stats_link:'📊 Ver estatisticas (Looker Studio)',pre_title:'Confirmar Promocao',pre_body:'Serao copiados para PRE_PUBLIC/',pre_warn:'A pasta PRE_PUBLIC/{campanha} sera criada se necessario.',cancel:'Cancelar',ok:'Confirmar',promote_btn:'Promover para PRE_PUBLIC',target:'Destino',none_selected:'Nenhum selecionado.',selected:'Selecionados',unpromote:'Despromover',unpromote_confirm:'Despromover a(s) imagem(ns) desta data?',unpromote_done:'Despromovido!',promoted:'Promovido'},
-        es:{title:'M9 — Promover a PRE_PUBLIC',cfg:'CONFIG',candidates:'CANDIDATOS',promote:'PROMOVER',promote_note:'Nota: verifique la cicatriz en el mapa y las estadisticas antes de promover.',country:'Paises',date:'Fechas',campaign:'Campana',proposal:'Propuesta',empty_pre:'(vacio)',loading:'Cargando...',no_data:'Sin candidatos.',done:'¡Promovido!',stats_link:'📊 Ver estadisticas (Looker Studio)',pre_title:'Confirmar Promocion',pre_body:'Se copiara a PRE_PUBLIC/',pre_warn:'La carpeta PRE_PUBLIC/{campana} se creara si es necesario.',cancel:'Cancelar',ok:'Confirmar',promote_btn:'Promover a PRE_PUBLIC',target:'Destino',none_selected:'Ninguno seleccionado.',selected:'Seleccionados',unpromote:'Despromover',unpromote_confirm:'¿Despromover la(s) imagen(es) de esta fecha?',unpromote_done:'¡Despromovido!',promoted:'Promovido'},
-        en:{title:'M9 — Promote to PRE_PUBLIC',cfg:'CONFIGURATION',candidates:'CANDIDATES',promote:'PROMOTE',promote_note:'Note: verify the scar on the map and statistics before promoting.',country:'Countries',date:'Dates',campaign:'Campaign',proposal:'Proposal',empty_pre:'(empty)',loading:'Loading...',no_data:'No candidates found.',done:'Promoted!',stats_link:'📊 View statistics (Looker Studio)',pre_title:'Confirm Promotion',pre_body:'Will copy to PRE_PUBLIC/',pre_warn:'The PRE_PUBLIC/{campaign} folder will be created if needed.',cancel:'Cancel',ok:'Confirm',promote_btn:'Promote to PRE_PUBLIC',target:'Destination',none_selected:'None selected.',selected:'Selected',unpromote:'Unpromote',unpromote_confirm:'Unpromote the image(s) for this date?',unpromote_done:'Unpromoted!',promoted:'Promoted'},
-        fr:{title:'M9 — Promouvoir vers PRE_PUBLIC',cfg:'CONFIG',candidates:'CANDIDATS',promote:'PROMOUVOIR',promote_note:'Remarque : verifiez la cicatrice sur la carte et les statistiques avant de promouvoir.',country:'Pays',date:'Dates',campaign:'Campagne',proposal:'Proposition',empty_pre:'(vide)',loading:'Chargement...',no_data:'Aucun candidat.',done:'Promu!',stats_link:'📊 Voir les statistiques (Looker Studio)',pre_title:'Confirmer la Promotion',pre_body:'Va copier vers PRE_PUBLIC/',pre_warn:'Le dossier PRE_PUBLIC/{campagne} sera cree si necessaire.',cancel:'Annuler',ok:'Confirmer',promote_btn:'Promouvoir vers PRE_PUBLIC',target:'Destination',none_selected:'Aucun selectionne.',selected:'Selectionnes',unpromote:'Depromouvoir',unpromote_confirm:'Depromouvoir la/les image(s) de cette date ?',unpromote_done:'Depromu !',promoted:'Promu'},
-        id:{title:'M9 — Promosikan ke PRE_PUBLIC',cfg:'KONFIG',candidates:'KANDIDAT',promote:'PROMOSI',promote_note:'Catatan: periksa bekas luka di peta dan statistik sebelum mempromosikan.',country:'Negara',date:'Tanggal',campaign:'Kampanye',proposal:'Proposal',empty_pre:'(kosong)',loading:'Memuat...',no_data:'Tidak ada kandidat.',done:'Terpromosi!',stats_link:'📊 Lihat statistik (Looker Studio)',pre_title:'Konfirmasi Promosi',pre_body:'Akan disalin ke PRE_PUBLIC/',pre_warn:'Folder PRE_PUBLIC/{kampanye} akan dibuat jika perlu.',cancel:'Batal',ok:'Konfirmasi',promote_btn:'Promosikan ke PRE_PUBLIC',target:'Tujuan',none_selected:'Tidak ada yang dipilih.',selected:'Terpilih',unpromote:'Batalkan promosi',unpromote_confirm:'Batalkan promosi gambar untuk tanggal ini?',unpromote_done:'Promosi dibatalkan!',promoted:'Dipromosikan'},
+        pt:{title:'M9 — Promover a PRE_PUBLIC',cfg:'CONFIGURACAO',candidates:'CANDIDATOS',promote:'PROMOVER',promote_note:'Nota: verifique a cicatriz no mapa e as estatisticas antes de promover.',country:'Paises',date:'Datas',campaign:'Campanha',proposal:'Proposta',empty_pre:'(vazio)',loading:'Carregando...',no_data:'Nenhum candidato encontrado.',done:'Promovido!',stats_link:'📊 Ver estatisticas (Looker Studio)',pre_title:'Confirmar Promocao',pre_body:'Serao copiados para PRE_PUBLIC/',pre_warn:'A pasta PRE_PUBLIC/{campanha} sera criada se necessario.',cancel:'Cancelar',ok:'Confirmar',promote_btn:'Promover para PRE_PUBLIC',target:'Destino',none_selected:'Nenhum selecionado.',selected:'Selecionados',unpromote:'Despromover',unpromote_confirm:'Despromover a(s) imagem(ns) desta data?',unpromote_done:'Despromovido!',promoted:'Promovido',sync_warn:'Atencao: imagem promovida sem origem identificada ou origem divergente das propostas/etapas atuais.'},
+        es:{title:'M9 — Promover a PRE_PUBLIC',cfg:'CONFIG',candidates:'CANDIDATOS',promote:'PROMOVER',promote_note:'Nota: verifique la cicatriz en el mapa y las estadisticas antes de promover.',country:'Paises',date:'Fechas',campaign:'Campana',proposal:'Propuesta',empty_pre:'(vacio)',loading:'Cargando...',no_data:'Sin candidatos.',done:'¡Promovido!',stats_link:'📊 Ver estadisticas (Looker Studio)',pre_title:'Confirmar Promocion',pre_body:'Se copiara a PRE_PUBLIC/',pre_warn:'La carpeta PRE_PUBLIC/{campana} se creara si es necesario.',cancel:'Cancelar',ok:'Confirmar',promote_btn:'Promover a PRE_PUBLIC',target:'Destino',none_selected:'Ninguno seleccionado.',selected:'Seleccionados',unpromote:'Despromover',unpromote_confirm:'¿Despromover la(s) imagen(es) de esta fecha?',unpromote_done:'¡Despromovido!',promoted:'Promovido',sync_warn:'Atencion: imagen promovida sin origen identificado u origen divergente de las propuestas/etapas actuales.'},
+        en:{title:'M9 — Promote to PRE_PUBLIC',cfg:'CONFIGURATION',candidates:'CANDIDATES',promote:'PROMOTE',promote_note:'Note: verify the scar on the map and statistics before promoting.',country:'Countries',date:'Dates',campaign:'Campaign',proposal:'Proposal',empty_pre:'(empty)',loading:'Loading...',no_data:'No candidates found.',done:'Promoted!',stats_link:'📊 View statistics (Looker Studio)',pre_title:'Confirm Promotion',pre_body:'Will copy to PRE_PUBLIC/',pre_warn:'The PRE_PUBLIC/{campaign} folder will be created if needed.',cancel:'Cancel',ok:'Confirm',promote_btn:'Promote to PRE_PUBLIC',target:'Destination',none_selected:'None selected.',selected:'Selected',unpromote:'Unpromote',unpromote_confirm:'Unpromote the image(s) for this date?',unpromote_done:'Unpromoted!',promoted:'Promoted',sync_warn:'Warning: promoted image without identified origin or origin divergent from current proposals/stages.'},
+        fr:{title:'M9 — Promouvoir vers PRE_PUBLIC',cfg:'CONFIG',candidates:'CANDIDATS',promote:'PROMOUVOIR',promote_note:'Remarque : verifiez la cicatrice sur la carte et les statistiques avant de promouvoir.',country:'Pays',date:'Dates',campaign:'Campagne',proposal:'Proposition',empty_pre:'(vide)',loading:'Chargement...',no_data:'Aucun candidat.',done:'Promu!',stats_link:'📊 Voir les statistiques (Looker Studio)',pre_title:'Confirmer la Promotion',pre_body:'Va copier vers PRE_PUBLIC/',pre_warn:'Le dossier PRE_PUBLIC/{campagne} sera cree si necessaire.',cancel:'Annuler',ok:'Confirmer',promote_btn:'Promouvoir vers PRE_PUBLIC',target:'Destination',none_selected:'Aucun selectionne.',selected:'Selectionnes',unpromote:'Depromouvoir',unpromote_confirm:'Depromouvoir la/les image(s) de cette date ?',unpromote_done:'Depromu !',promoted:'Promu',sync_warn:'Attention : image promue sans origine identifiee ou origine divergente des propositions/etapes actuelles.'},
+        id:{title:'M9 — Promosikan ke PRE_PUBLIC',cfg:'KONFIG',candidates:'KANDIDAT',promote:'PROMOSI',promote_note:'Catatan: periksa bekas luka di peta dan statistik sebelum mempromosikan.',country:'Negara',date:'Tanggal',campaign:'Kampanye',proposal:'Proposal',empty_pre:'(kosong)',loading:'Memuat...',no_data:'Tidak ada kandidat.',done:'Terpromosi!',stats_link:'📊 Lihat statistik (Looker Studio)',pre_title:'Konfirmasi Promosi',pre_body:'Akan disalin ke PRE_PUBLIC/',pre_warn:'Folder PRE_PUBLIC/{kampanye} akan dibuat jika perlu.',cancel:'Batal',ok:'Konfirmasi',promote_btn:'Promosikan ke PRE_PUBLIC',target:'Tujuan',none_selected:'Tidak ada yang dipilih.',selected:'Terpilih',unpromote:'Batalkan promosi',unpromote_confirm:'Batalkan promosi gambar untuk tanggal ini?',unpromote_done:'Promosi dibatalkan!',promoted:'Dipromosikan',sync_warn:'Perhatian: gambar dipromosikan tanpa asal teridentifikasi atau asal berbeda dari proposal/tahap saat ini.'},
     };
     return d[APP_LANG]||d.es;
 })();
@@ -85,6 +88,8 @@ var STYLE = {
 
 var selectedCells = {};          // key: pais__campanha__etapa__propuesta__fecha
 var countryData = {};            // { pais: { CAMPAIGN: { proposals, stages, stageData, promoted } } }
+var promotedOrigin = {};         // { pais: { CAMPAIGN: { period: {proposal, stage} } } } — origem das promovidas (metadados)
+var viewChecks = {};             // cellKey -> bool — visualizacao de celulas promovidas
 var enabledCountries = {};       // { pais: bool }
 var enabledCampaigns = {};       // { CAMPAIGN: bool }
 var allDates = [];
@@ -126,9 +131,15 @@ function isDatePromotedGlobal(date){
 function hasPromotableCells(date){
     return activePairs().some(function(pair){
         var d = countryData[pair.country] && countryData[pair.country][pair.camp];
-        if(!d || d.promoted[date])return false;
+        if(!d)return false;
+        var origin = (promotedOrigin[pair.country] && promotedOrigin[pair.country][pair.camp]) ? promotedOrigin[pair.country][pair.camp][date] : null;
+        // existe alguma celula disponivel que NAO e a origem ja promovida?
         return d.stages.some(function(s){
-            return d.proposals.some(function(p){return (d.stageData[s][p]||[]).indexOf(date)!==-1;});
+            return d.proposals.some(function(p){
+                if((d.stageData[s][p]||[]).indexOf(date)===-1)return false;
+                if(origin && origin.proposal===p && origin.stage===s)return false;
+                return true;
+            });
         });
     });
 }
@@ -247,6 +258,8 @@ function loadAll(){
     clearCandidateLayers();
     selectedCells = {};
     cellCheckboxes = {};
+    viewChecks = {};
+    promotedOrigin = {};
     candidatesBox.clear();
     candidatesBox.add(ui.Label(L.loading,{fontSize:'10px',color:'#888'}));
 
@@ -313,10 +326,26 @@ function loadPair(pair, cb){
 
 function loadPromoted(country, camp, cb){
     ee.data.listAssets(prePublicPath(country, camp),{},function(r,err){
-        if(!err&&r&&r.assets)r.assets.forEach(function(a){
-            if(a.type==='IMAGE')countryData[country][camp].promoted[a.id.split('/').pop()]=true;
+        var props = [];
+        if(!err&&r&&r.assets)props = r.assets.filter(function(a){return a.type==='IMAGE';});
+        if(!promotedOrigin[country])promotedOrigin[country] = {};
+        if(!promotedOrigin[country][camp])promotedOrigin[country][camp] = {};
+        if(props.length===0){cb();return;}
+        var pending = props.length;
+        props.forEach(function(a){
+            var period = a.id.split('/').pop();
+            countryData[country][camp].promoted[period] = true;
+            var info = null;
+            try{info = ee.data.getAsset(a.id);}catch(e){}
+            var p = info && info.properties ? info.properties : {};
+            if(p['source_proposal'] && p['source_stage']){
+                promotedOrigin[country][camp][period] = {proposal:p['source_proposal'], stage:p['source_stage']};
+            } else {
+                promotedOrigin[country][camp][period] = null;
+            }
+            pending--;
+            if(pending===0)cb();
         });
-        cb();
     });
 }
 
@@ -335,10 +364,31 @@ function finishLoad(){
     if(!selectedDate || allDates.indexOf(selectedDate)===-1){
         selectedDate = allDates[0]||null;
     }
+    checkPromotedSync();
     renderDateGrid();
     renderCandidates();
     updatePromoteSummary();
     hideLoading();
+}
+
+function checkPromotedSync(){
+    // Metadados de origem divergentes ou ausentes: avisa mas nao bloqueia
+    activePairs().forEach(function(pair){
+        var c = pair.country, camp = pair.camp;
+        var d = countryData[c] && countryData[c][camp];
+        if(!d)return;
+        var origins = promotedOrigin[c] && promotedOrigin[c][camp] ? promotedOrigin[c][camp] : {};
+        Object.keys(origins).forEach(function(period){
+            var o = origins[period];
+            if(!o)return;
+            var okStage = d.stages.indexOf(o.stage)!==-1;
+            var okProposal = d.proposals.indexOf(o.proposal)!==-1;
+            if(!okStage || !okProposal){
+                setExportStatus('error', L.sync_warn+' ('+c+' | '+camp+' | '+period+' | '+o.proposal+'/'+o.stage+')');
+                print('⚠️ '+L.sync_warn+' '+c+' | '+camp+' | '+period+' | '+o.proposal+'/'+o.stage);
+            }
+        });
+    });
 }
 
 // ─── DATE GRID ──────────────────────────────────────────────────────────────
@@ -427,12 +477,19 @@ function buildStageGrid(country, camp, stage, d){
     row.add(ui.Label(selectedDate, STYLE.gridDate));
     d.proposals.forEach(function(prop){
         var available = (d.stageData[stage][prop]||[]).indexOf(selectedDate)!==-1;
-        var promoted = d.promoted[selectedDate];
-        if(!available || promoted){
-            row.add(ui.Label(promoted?'✅':'·', {fontSize:'9px',color:promoted?'#0f9d58':'#ccc',margin:'2px 6px'}));
+        if(!available){
+            row.add(ui.Label('·', {fontSize:'9px',color:'#ccc',margin:'2px 6px'}));
             return;
         }
+        var origin = (promotedOrigin[country] && promotedOrigin[country][camp]) ? promotedOrigin[country][camp][selectedDate] : null;
+        var cellPromoted = origin && origin.proposal===prop && origin.stage===stage;
         var key = cellKey(country, camp, stage, prop, selectedDate);
+        if(cellPromoted){
+            var viewCb = ui.Checkbox({label:'✅', value:!!viewChecks[key], style:STYLE.gridCell});
+            viewCb.onChange(function(v){toggleViewPromoted(country, camp, stage, prop, selectedDate, key, v);});
+            row.add(viewCb);
+            return;
+        }
         var cb = ui.Checkbox({label:'', value:!!selectedCells[key], style:STYLE.gridCell});
         cellCheckboxes[key] = cb;
         cb.onChange(function(v){setCellSelected(country, camp, stage, prop, selectedDate, v);});
@@ -440,6 +497,17 @@ function buildStageGrid(country, camp, stage, d){
     });
     grid.add(row);
     return grid;
+}
+
+function toggleViewPromoted(country, camp, stage, proposal, period, key, v){
+    viewChecks[key] = v;
+    if(v){
+        loadMosaic(country, period);
+        var img = ee.Image(prePublicPath(country, camp)+period).select('probability').selfMask();
+        manageMapLayer('promoted_'+key, img, {min:0,max:1000,palette:['#fcc','#f00','#600']}, 'Promovido '+period+' | '+proposal+' | '+stage+' | '+camp+' | '+country);
+    } else {
+        removeMapLayer('promoted_'+key);
+    }
 }
 
 function computeActionMode(){
@@ -598,6 +666,18 @@ function doPromote(cells){
             total++;
             print('Copiando: '+src+' -> '+dest);
             ee.data.copyAsset(src,dest);
+            // Grava metadados de origem na imagem promovida (sem perder a instantaneidade do copy)
+            try{
+                ee.data.updateAsset(dest, {properties:{
+                    'source_proposal': prop,
+                    'source_stage': stage,
+                    'source_country': c,
+                    'source_campaign': camp,
+                    'promoted_date': new Date().toISOString().split('T')[0]
+                }});
+            }catch(ue){
+                print('Aviso: nao foi possivel gravar metadados de origem em '+dest+': '+ue);
+            }
         }
     });
 
@@ -716,4 +796,4 @@ function buildForm(){
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
 buildForm();
-print('M9_00 5.3 carregado.');
+print('M9_00 5.4 carregado.');
