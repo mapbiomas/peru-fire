@@ -3,7 +3,7 @@ MAPBIOMAS FUEGO - MONITOR_01 - M9_00
 Pre-Public Promotion (UI) — Redesign v5.4
 
 📅 DATA: setembro 2026
-🏷️ VERSAO: 5.4.2
+🏷️ VERSAO: 5.4.3
 
 📌 SEÇÕES COM FUNDO COLORIDO (ordem vertical):
   CONFIG — cinza       (paises + campanhas + fechas)
@@ -125,22 +125,6 @@ function activePairs(){
 function isDatePromotedGlobal(date){
     return activePairs().some(function(pair){
         return countryData[pair.country] && countryData[pair.country][pair.camp] && countryData[pair.country][pair.camp].promoted[date];
-    });
-}
-
-function hasPromotableCells(date){
-    return activePairs().some(function(pair){
-        var d = countryData[pair.country] && countryData[pair.country][pair.camp];
-        if(!d)return false;
-        var origin = (promotedOrigin[pair.country] && promotedOrigin[pair.country][pair.camp]) ? promotedOrigin[pair.country][pair.camp][date] : null;
-        // existe alguma celula disponivel que NAO e a origem ja promovida?
-        return d.stages.some(function(s){
-            return d.proposals.some(function(p){
-                if((d.stageData[s][p]||[]).indexOf(date)===-1)return false;
-                if(origin && origin.proposal===p && origin.stage===s)return false;
-                return true;
-            });
-        });
     });
 }
 
@@ -537,8 +521,8 @@ function toggleViewPromoted(country, camp, stage, proposal, period, key, v){
 
 function computeActionMode(){
     if(!selectedDate)return 'promote';
-    var hasProm = promotedKeysForDate(selectedDate).length>0;
-    return (hasProm && !hasPromotableCells(selectedDate)) ? 'unpromote' : 'promote';
+    // Data selecionada ja promovida => sempre Despromover (para poder trocar/reverter)
+    return promotedKeysForDate(selectedDate).length>0 ? 'unpromote' : 'promote';
 }
 
 function updatePromoteSummary(){
@@ -842,4 +826,4 @@ function buildForm(){
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
 buildForm();
-print('M9_00 5.4.2 carregado.');
+print('M9_00 5.4.3 carregado.');
