@@ -547,10 +547,14 @@ function ensurePrePublicStructure(country, camp){
     var root = classificationsRoot(country, camp);
     var base = root+'PRE_PUBLIC';
     var info = getAssetInfo(base);
+    var t = (info && info.type) ? String(info.type).toLowerCase() : '';
 
     if(info===null){
         ee.data.createAsset({type:'FOLDER'}, base);
-    } else if(info.type!=='FOLDER'){
+    } else if(t !== 'folder'){
+        // Legado da v2.0: raiz criada como IMAGE_COLLECTION (nao permite aninhar
+        // sub-colecoes). Recria como FOLDER somente se estiver vazia. Se contiver
+        // assets (dados reais), aborta pedindo reestruturacao manual.
         var listing = ee.data.listAssets(base, {});
         if(!listing || typeof listing.assets === 'undefined'){
             setExportStatus('error','Nao foi possivel inspecionar PRE_PUBLIC. Recrie como FOLDER manualmente no GEE.');
