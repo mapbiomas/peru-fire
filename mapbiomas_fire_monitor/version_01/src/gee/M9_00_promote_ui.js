@@ -3,7 +3,7 @@ MAPBIOMAS FUEGO - MONITOR_01 - M9_00
 Pre-Public Promotion (UI) — Redesign v5.4
 
 📅 DATA: setembro 2026
-🏷️ VERSAO: 5.4.1
+🏷️ VERSAO: 5.4.2
 
 📌 SEÇÕES COM FUNDO COLORIDO (ordem vertical):
   CONFIG — cinza       (paises + campanhas + fechas)
@@ -334,12 +334,20 @@ function loadPromoted(country, camp, cb){
         props.forEach(function(a){
             var period = a.id.split('/').pop();
             countryData[country][camp].promoted[period] = true;
+            // Le properties de ambas as fontes (metadata do asset e properties da imagem)
             var p = {};
             try{
-                var g = ee.Image(a.id).getInfo();
-                if(g && g.properties)p = g.properties;
-            }catch(e1){
-                try{var info = ee.data.getAsset(a.id);if(info&&info.properties)p = info.properties;}catch(e2){}
+                var info = ee.data.getAsset(a.id);
+                if(info && info.properties)p = info.properties;
+            }catch(e1){}
+            if(!(p['source_proposal'] && p['source_stage'])){
+                try{
+                    var g = ee.Image(a.id).getInfo();
+                    if(g && g.properties){
+                        p['source_proposal'] = g.properties['source_proposal'];
+                        p['source_stage'] = g.properties['source_stage'];
+                    }
+                }catch(e2){}
             }
             var prev = promotedOrigin[country][camp][period];
             if(p['source_proposal'] && p['source_stage']){
@@ -686,24 +694,35 @@ function doPromote(cells){
             total++;
             print('Copiando: '+src+' -> '+dest);
             ee.data.copyAsset(src,dest);
-            // Fonte de verdade em memoria: garante o ✅ na sessao, independente do updateAsset
+            // Fonte de verdade em memoria: garante o ✅ na sessao, independente da persistencia
             if(!promotedOrigin[c])promotedOrigin[c] = {};
             if(!promotedOrigin[c][camp])promotedOrigin[c][camp] = {};
             promotedOrigin[c][camp][period] = {proposal:prop, stage:stage};
             // Grava metadados de origem na imagem promovida (persistencia entre execucoes)
-            try{
-                ee.data.updateAsset(dest, {
-                    description: 'Promoted '+period+' | '+prop+' | '+stage+' | '+camp+' | '+c,
-                    properties:{
-                        'source_proposal': prop,
-                        'source_stage': stage,
-                        'source_country': c,
-                        'source_campaign': camp,
-                        'promoted_date': new Date().toISOString().split('T')[0]
-                    }
-                });
-            }catch(ue){
-                print('Aviso: nao foi possivel gravar metadados de origem em '+dest+': '+ue);
+            var originProps = {
+                'source_proposal': prop,
+                'source_stage': stage,
+                'source_country': c,
+                'source_campaign': camp,
+                'promoted_date': new Date().toISOString().split('T')[0]
+            };
+            var ok = false;
+            if(typeof ee.data.setAssetProperties === 'function'){
+                try{
+                    ee.data.setAssetProperties(dest, originProps);
+                    print('Metadados de origem gravados (setAssetProperties): '+dest+' -> '+prop+'/'+stage);
+                    ok = true;
+                }catch(se){
+                    print('Aviso setAssetProperties: '+dest+' -> '+se);
+                }
+            }
+            if(!ok){
+                try{
+                    ee.data.updateAsset(dest, {properties: originProps}, ['properties']);
+                    print('Metadados de origem gravados (updateAsset): '+dest+' -> '+prop+'/'+stage);
+                }catch(ue){
+                    print('Aviso: nao foi possivel gravar metadados de origem em '+dest+': '+ue);
+                }
             }
         }
     });
@@ -823,4 +842,4 @@ function buildForm(){
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
 buildForm();
-print('M9_00 5.4.1 carregado.');
+print('M9_00 5.4.2 carregado.');

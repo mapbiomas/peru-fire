@@ -1,7 +1,7 @@
 # MapBiomas Fire Monitor — M7 / M8 / M9 Scripts
 
 JavaScript (GEE Code Editor) scripts for MONITOR_01 post-classification pipeline.
-Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v5.4).
+Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v5.4.2).
 
 ## Scripts
 
@@ -11,7 +11,7 @@ Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v5.4).
 | `M7_01_lulc_filters.js` | M7 — ft01 | Water LULC mask by region + solitary pixel cleanup (connectedPixelCount <= 2) |
 | `M7_02_temporal_filter.js` | M7 — ft02 | Monthly memory filter (removes burn if scar in previous months) |
 | `M8_statistics.js` | M8 — Stats | Universal statistics generator (area + LULC) → CSV GCS/Drive |
-| `M9_00_promote_ui.js` | M9 — UI | Redesign v5.4: paises checkboxes multi + campanhas multi (root por pais+campanha) + grid de datas; etapas ftXX auto-descobertas; grid por etapa (propuestas x data global); **✅ por celula** com metadados de origem (source_proposal/source_stage via updateAsset apos copyAsset) e checkbox de visualizacao que nao some; aviso de sincronizacao; botao dinamico Promover/Despromover; mosaico MINNBR por pais; mapa |
+| `M9_00_promote_ui.js` | M9 — UI | Redesign v5.4.2: paises checkboxes multi + campanhas multi (root por pais+campanha) + grid de datas; etapas ftXX auto-descobertas; grid por etapa (propuestas x data global); **✅ por celula** com origem persistida via setAssetProperties (fallback updateAsset) + checkbox de visualizacao que nao some; aviso de sincronizacao; botao dinamico Promover/Despromover; mosaico MINNBR por pais; mapa |
 
 ## Naming
 
