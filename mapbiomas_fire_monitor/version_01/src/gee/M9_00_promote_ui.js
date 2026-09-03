@@ -3,7 +3,7 @@ MAPBIOMAS FUEGO - MONITOR_01 - M9_00
 Pre-Public Promotion (UI) — Redesign v5.4
 
 📅 DATA: setembro 2026
-🏷️ VERSAO: 5.4
+🏷️ VERSAO: 5.4.1
 
 📌 SEÇÕES COM FUNDO COLORIDO (ordem vertical):
   CONFIG — cinza       (paises + campanhas + fechas)
@@ -17,10 +17,10 @@ Pre-Public Promotion (UI) — Redesign v5.4
    (root: {CATALOG}/{CAMPAIGN}/LIBRARY_CLASSIFICATIONS/)
 3. Etapas ftXX descobertas automaticamente (IMAGE_COLLECTION)
 4. Grid por etapa: colunas = propuestas, 1 linha = fecha global
-5. ✅ POR CELULA: ao promover, a imagem em PRE_PUBLIC recebe
-   metadados de origem (source_proposal/source_stage/promoted_date
-   via updateAsset apos copyAsset); no load, so a celula promovida
-   fica ✅ e mantem checkbox de visualizacao (nao some)
+5. ✅ POR CELULA: ao promover, a origem (proposta+etapa) e gravada
+   em memoria (fonte de verdade da sessao) e tambem em metadados na
+   imagem via updateAsset; no load, so a celula promovida fica ✅ e
+   mantem checkbox de visualizacao (nao some)
 6. Sincronizacao errada (origem ausente/divergente) gera aviso
 7. Botao dinamico Promover/Despromover (sem protocolo)
 8. Promueve a PRE_PUBLIC via ee.data.copyAsset
@@ -259,7 +259,6 @@ function loadAll(){
     selectedCells = {};
     cellCheckboxes = {};
     viewChecks = {};
-    promotedOrigin = {};
     candidatesBox.clear();
     candidatesBox.add(ui.Label(L.loading,{fontSize:'10px',color:'#888'}));
 
@@ -335,11 +334,19 @@ function loadPromoted(country, camp, cb){
         props.forEach(function(a){
             var period = a.id.split('/').pop();
             countryData[country][camp].promoted[period] = true;
-            var info = null;
-            try{info = ee.data.getAsset(a.id);}catch(e){}
-            var p = info && info.properties ? info.properties : {};
+            var p = {};
+            try{
+                var g = ee.Image(a.id).getInfo();
+                if(g && g.properties)p = g.properties;
+            }catch(e1){
+                try{var info = ee.data.getAsset(a.id);if(info&&info.properties)p = info.properties;}catch(e2){}
+            }
+            var prev = promotedOrigin[country][camp][period];
             if(p['source_proposal'] && p['source_stage']){
                 promotedOrigin[country][camp][period] = {proposal:p['source_proposal'], stage:p['source_stage']};
+            } else if(prev){
+                // Preserva origem conhecida em memoria (promovida nesta sessao)
+                promotedOrigin[country][camp][period] = prev;
             } else {
                 promotedOrigin[country][camp][period] = null;
             }
@@ -350,6 +357,15 @@ function loadPromoted(country, camp, cb){
 }
 
 function finishLoad(){
+    // Limpa origens de pares nao ativos (evita dados orfaos ao desmarcar campanha)
+    Object.keys(promotedOrigin).forEach(function(c){
+        Object.keys(promotedOrigin[c]).forEach(function(camp){
+            var active = enabledCountries[c] && enabledCampaigns[camp];
+            if(!active)delete promotedOrigin[c][camp];
+        });
+        if(Object.keys(promotedOrigin[c]).length===0)delete promotedOrigin[c];
+    });
+
     var dateSet = {};
     activePairs().forEach(function(pair){
         var d = countryData[pair.country][pair.camp];
@@ -466,10 +482,12 @@ function renderCandidates(){
 
 function buildStageGrid(country, camp, stage, d){
     var grid = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:{margin:'2px 0'}});
+    var origin = (promotedOrigin[country] && promotedOrigin[country][camp]) ? promotedOrigin[country][camp][selectedDate] : null;
     var head = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{backgroundColor:'#eef2fa',margin:'0 0 2px 0'}});
     head.add(ui.Label(stage, STYLE.gridHeader));
     d.proposals.forEach(function(prop){
-        head.add(ui.Label(prop, STYLE.gridHead));
+        var headPromoted = origin && origin.proposal===prop && origin.stage===stage;
+        head.add(ui.Label(prop + (headPromoted?'  ✅':''), {fontSize:'10px',fontWeight:'bold',color:headPromoted?'#0f9d58':'#1a73e8',margin:'2px 4px'}));
     });
     grid.add(head);
 
@@ -481,7 +499,6 @@ function buildStageGrid(country, camp, stage, d){
             row.add(ui.Label('·', {fontSize:'9px',color:'#ccc',margin:'2px 6px'}));
             return;
         }
-        var origin = (promotedOrigin[country] && promotedOrigin[country][camp]) ? promotedOrigin[country][camp][selectedDate] : null;
         var cellPromoted = origin && origin.proposal===prop && origin.stage===stage;
         var key = cellKey(country, camp, stage, prop, selectedDate);
         if(cellPromoted){
@@ -574,6 +591,9 @@ function doUnpromote(checked){
             ee.data.deleteAsset(dest);
             print('Despromovido: '+dest);
             total++;
+            if(promotedOrigin[parts[0]] && promotedOrigin[parts[0]][parts[1]]){
+                delete promotedOrigin[parts[0]][parts[1]][parts[2]];
+            }
         }catch(e){
             print('Error: '+dest+' -> '+e);
         }
@@ -666,15 +686,22 @@ function doPromote(cells){
             total++;
             print('Copiando: '+src+' -> '+dest);
             ee.data.copyAsset(src,dest);
-            // Grava metadados de origem na imagem promovida (sem perder a instantaneidade do copy)
+            // Fonte de verdade em memoria: garante o ✅ na sessao, independente do updateAsset
+            if(!promotedOrigin[c])promotedOrigin[c] = {};
+            if(!promotedOrigin[c][camp])promotedOrigin[c][camp] = {};
+            promotedOrigin[c][camp][period] = {proposal:prop, stage:stage};
+            // Grava metadados de origem na imagem promovida (persistencia entre execucoes)
             try{
-                ee.data.updateAsset(dest, {properties:{
-                    'source_proposal': prop,
-                    'source_stage': stage,
-                    'source_country': c,
-                    'source_campaign': camp,
-                    'promoted_date': new Date().toISOString().split('T')[0]
-                }});
+                ee.data.updateAsset(dest, {
+                    description: 'Promoted '+period+' | '+prop+' | '+stage+' | '+camp+' | '+c,
+                    properties:{
+                        'source_proposal': prop,
+                        'source_stage': stage,
+                        'source_country': c,
+                        'source_campaign': camp,
+                        'promoted_date': new Date().toISOString().split('T')[0]
+                    }
+                });
             }catch(ue){
                 print('Aviso: nao foi possivel gravar metadados de origem em '+dest+': '+ue);
             }
@@ -796,4 +823,4 @@ function buildForm(){
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
 buildForm();
-print('M9_00 5.4 carregado.');
+print('M9_00 5.4.1 carregado.');
