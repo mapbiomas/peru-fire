@@ -1,27 +1,26 @@
 /********************************************
 MAPBIOMAS FUEGO - MONITOR_01 - M9_00
-Pre-Public Promotion (UI) — Redesign v5.1
+Pre-Public Promotion (UI) — Redesign v5.3
 
 📅 DATA: setembro 2026
-🏷️ VERSAO: 5.1
+🏷️ VERSAO: 5.3
 
 📌 SEÇÕES COM FUNDO COLORIDO (ordem vertical):
   CONFIG — cinza       (paises + campanhas + fechas)
   CANDIDATOS — azul    (grids por etapa x propuesta)
-  PROTOCOLO — cinza    (checklist + link Looker)
-  PROMOVER — verde     (resumo + botao)
-  DESPROMOVER — vermelho (painel isolado, por ultimo)
+  PROMOVER — verde     (nota sutil + resumo + botao)
 
 📌 O QUE FAZ:
 1. CONFIG: paises (checkboxes multi), campanhas (checkbox multi),
-   fechas (grid de datas, selecao unica, promovidas bloqueadas)
+   fechas (grid de datas, selecao unica, promovidas marcadas)
 2. Cada par pais+campanha ligado adiciona um grupo de grids
    (root: {CATALOG}/{CAMPAIGN}/LIBRARY_CLASSIFICATIONS/)
 3. Etapas ftXX descobertas automaticamente (IMAGE_COLLECTION)
 4. Grid por etapa: colunas = propuestas, 1 linha = fecha global
-5. Protocolo: checklist obligatorio + link Looker Studio
-6. Promueve a PRE_PUBLIC via ee.data.copyAsset
-7. DESPROMOVER: painel isolado "Ya promovidos" + botao Despromover
+5. Botao dinamico Promover/Despromover (data promovida sem celulas
+   promoviveis vira Despromover, sem protocolo)
+6. Nota sutil na secao PROMOVER (verificacao + link Looker Studio)
+7. Promueve a PRE_PUBLIC via ee.data.copyAsset
 
 📌 SIN CREACION AUTOMATICA DE ASSETS al inicializar.
    Area quemada NO se calcula aqui (papel del M8).
@@ -48,11 +47,11 @@ var STATS_URL = 'https://datastudio.google.com/reporting/cc275c3b-4a5e-4b4c-97af
 
 var L = (function(){
     var d={
-        pt:{title:'M9 — Promover a PRE_PUBLIC',cfg:'CONFIGURACAO',candidates:'CANDIDATOS',protocol:'PROTOCOLO',promote:'PROMOVER',unpromote_hint:'Despromover nao requer protocolo — confirme abaixo.',country:'Paises',date:'Datas',campaign:'Campanha',proposal:'Proposta',empty_pre:'(vazio)',loading:'Carregando...',no_data:'Nenhum candidato encontrado.',done:'Promovido!',check_visual:'📍 Verificar a cicatriz no mapa',check_mosaic:'🛰️ Comparar com o mosaico Sentinel-2',check_area:'📊 Area conferida (estatisticas M8)',stats_link:'📊 Ver estatisticas (Looker Studio)',protocol_hint:'Marque os 3 itens para liberar a promocao.',pre_title:'Confirmar Promocao',pre_body:'Serao copiados para PRE_PUBLIC/',pre_warn:'A pasta PRE_PUBLIC/{campanha} sera criada se necessario.',cancel:'Cancelar',ok:'Confirmar',promote_btn:'Promover para PRE_PUBLIC',target:'Destino',none_selected:'Nenhum selecionado.',selected:'Selecionados',unpromote:'Despromover',unpromote_confirm:'Despromover a(s) imagem(ns) desta data?',unpromote_done:'Despromovido!',promoted:'Promovido'},
-        es:{title:'M9 — Promover a PRE_PUBLIC',cfg:'CONFIG',candidates:'CANDIDATOS',protocol:'PROTOCOLO',promote:'PROMOVER',unpromote_hint:'Despromover no requiere protocolo — solo confirme abajo.',country:'Paises',date:'Fechas',campaign:'Campana',proposal:'Propuesta',empty_pre:'(vacio)',loading:'Cargando...',no_data:'Sin candidatos.',done:'¡Promovido!',check_visual:'📍 Verificar la cicatriz en el mapa',check_mosaic:'🛰️ Comparar con el mosaico Sentinel-2',check_area:'📊 Area verificada (estadisticas M8)',stats_link:'📊 Ver estadisticas (Looker Studio)',protocol_hint:'Marque los 3 items para habilitar la promocion.',pre_title:'Confirmar Promocion',pre_body:'Se copiara a PRE_PUBLIC/',pre_warn:'La carpeta PRE_PUBLIC/{campana} se creara si es necesario.',cancel:'Cancelar',ok:'Confirmar',promote_btn:'Promover a PRE_PUBLIC',target:'Destino',none_selected:'Ninguno seleccionado.',selected:'Seleccionados',unpromote:'Despromover',unpromote_confirm:'¿Despromover la(s) imagen(es) de esta fecha?',unpromote_done:'¡Despromovido!',promoted:'Promovido'},
-        en:{title:'M9 — Promote to PRE_PUBLIC',cfg:'CONFIGURATION',candidates:'CANDIDATES',protocol:'PROTOCOL',promote:'PROMOTE',unpromote_hint:'Unpromote requires no protocol — just confirm below.',country:'Countries',date:'Dates',campaign:'Campaign',proposal:'Proposal',empty_pre:'(empty)',loading:'Loading...',no_data:'No candidates found.',done:'Promoted!',check_visual:'📍 Verify the scar on the map',check_mosaic:'🛰️ Compare with Sentinel-2 mosaic',check_area:'📊 Area verified (M8 stats)',stats_link:'📊 View statistics (Looker Studio)',protocol_hint:'Check the 3 items to enable promotion.',pre_title:'Confirm Promotion',pre_body:'Will copy to PRE_PUBLIC/',pre_warn:'The PRE_PUBLIC/{campaign} folder will be created if needed.',cancel:'Cancel',ok:'Confirm',promote_btn:'Promote to PRE_PUBLIC',target:'Destination',none_selected:'None selected.',selected:'Selected',unpromote:'Unpromote',unpromote_confirm:'Unpromote the image(s) for this date?',unpromote_done:'Unpromoted!',promoted:'Promoted'},
-        fr:{title:'M9 — Promouvoir vers PRE_PUBLIC',cfg:'CONFIG',candidates:'CANDIDATS',protocol:'PROTOCOLE',promote:'PROMOUVOIR',unpromote_hint:'Depromouvoir ne necessite pas de protocole — confirmez ci-dessous.',country:'Pays',date:'Dates',campaign:'Campagne',proposal:'Proposition',empty_pre:'(vide)',loading:'Chargement...',no_data:'Aucun candidat.',done:'Promu!',check_visual:'📍 Verifier la cicatrice sur la carte',check_mosaic:'🛰️ Comparer avec le mosaique Sentinel-2',check_area:'📊 Zone verifiee (stats M8)',stats_link:'📊 Voir les statistiques (Looker Studio)',protocol_hint:'Cochez les 3 items pour activer la promotion.',pre_title:'Confirmer la Promotion',pre_body:'Va copier vers PRE_PUBLIC/',pre_warn:'Le dossier PRE_PUBLIC/{campagne} sera cree si necessaire.',cancel:'Annuler',ok:'Confirmer',promote_btn:'Promouvoir vers PRE_PUBLIC',target:'Destination',none_selected:'Aucun selectionne.',selected:'Selectionnes',unpromote:'Depromouvoir',unpromote_confirm:'Depromouvoir la/les image(s) de cette date ?',unpromote_done:'Depromu !',promoted:'Promu'},
-        id:{title:'M9 — Promosikan ke PRE_PUBLIC',cfg:'KONFIG',candidates:'KANDIDAT',protocol:'PROTOKOL',promote:'PROMOSI',unpromote_hint:'Membatalkan promosi tidak memerlukan protokol — konfirmasi di bawah.',country:'Negara',date:'Tanggal',campaign:'Kampanye',proposal:'Proposal',empty_pre:'(kosong)',loading:'Memuat...',no_data:'Tidak ada kandidat.',done:'Terpromosi!',check_visual:'📍 Periksa bekas luka di peta',check_mosaic:'🛰️ Bandingkan dengan mosaik Sentinel-2',check_area:'📊 Luas diverifikasi (statistik M8)',stats_link:'📊 Lihat statistik (Looker Studio)',protocol_hint:'Centang 3 item untuk mengaktifkan promosi.',pre_title:'Konfirmasi Promosi',pre_body:'Akan disalin ke PRE_PUBLIC/',pre_warn:'Folder PRE_PUBLIC/{kampanye} akan dibuat jika perlu.',cancel:'Batal',ok:'Konfirmasi',promote_btn:'Promosikan ke PRE_PUBLIC',target:'Tujuan',none_selected:'Tidak ada yang dipilih.',selected:'Terpilih',unpromote:'Batalkan promosi',unpromote_confirm:'Batalkan promosi gambar untuk tanggal ini?',unpromote_done:'Promosi dibatalkan!',promoted:'Dipromosikan'},
+        pt:{title:'M9 — Promover a PRE_PUBLIC',cfg:'CONFIGURACAO',candidates:'CANDIDATOS',promote:'PROMOVER',promote_note:'Nota: verifique a cicatriz no mapa e as estatisticas antes de promover.',country:'Paises',date:'Datas',campaign:'Campanha',proposal:'Proposta',empty_pre:'(vazio)',loading:'Carregando...',no_data:'Nenhum candidato encontrado.',done:'Promovido!',stats_link:'📊 Ver estatisticas (Looker Studio)',pre_title:'Confirmar Promocao',pre_body:'Serao copiados para PRE_PUBLIC/',pre_warn:'A pasta PRE_PUBLIC/{campanha} sera criada se necessario.',cancel:'Cancelar',ok:'Confirmar',promote_btn:'Promover para PRE_PUBLIC',target:'Destino',none_selected:'Nenhum selecionado.',selected:'Selecionados',unpromote:'Despromover',unpromote_confirm:'Despromover a(s) imagem(ns) desta data?',unpromote_done:'Despromovido!',promoted:'Promovido'},
+        es:{title:'M9 — Promover a PRE_PUBLIC',cfg:'CONFIG',candidates:'CANDIDATOS',promote:'PROMOVER',promote_note:'Nota: verifique la cicatriz en el mapa y las estadisticas antes de promover.',country:'Paises',date:'Fechas',campaign:'Campana',proposal:'Propuesta',empty_pre:'(vacio)',loading:'Cargando...',no_data:'Sin candidatos.',done:'¡Promovido!',stats_link:'📊 Ver estadisticas (Looker Studio)',pre_title:'Confirmar Promocion',pre_body:'Se copiara a PRE_PUBLIC/',pre_warn:'La carpeta PRE_PUBLIC/{campana} se creara si es necesario.',cancel:'Cancelar',ok:'Confirmar',promote_btn:'Promover a PRE_PUBLIC',target:'Destino',none_selected:'Ninguno seleccionado.',selected:'Seleccionados',unpromote:'Despromover',unpromote_confirm:'¿Despromover la(s) imagen(es) de esta fecha?',unpromote_done:'¡Despromovido!',promoted:'Promovido'},
+        en:{title:'M9 — Promote to PRE_PUBLIC',cfg:'CONFIGURATION',candidates:'CANDIDATES',promote:'PROMOTE',promote_note:'Note: verify the scar on the map and statistics before promoting.',country:'Countries',date:'Dates',campaign:'Campaign',proposal:'Proposal',empty_pre:'(empty)',loading:'Loading...',no_data:'No candidates found.',done:'Promoted!',stats_link:'📊 View statistics (Looker Studio)',pre_title:'Confirm Promotion',pre_body:'Will copy to PRE_PUBLIC/',pre_warn:'The PRE_PUBLIC/{campaign} folder will be created if needed.',cancel:'Cancel',ok:'Confirm',promote_btn:'Promote to PRE_PUBLIC',target:'Destination',none_selected:'None selected.',selected:'Selected',unpromote:'Unpromote',unpromote_confirm:'Unpromote the image(s) for this date?',unpromote_done:'Unpromoted!',promoted:'Promoted'},
+        fr:{title:'M9 — Promouvoir vers PRE_PUBLIC',cfg:'CONFIG',candidates:'CANDIDATS',promote:'PROMOUVOIR',promote_note:'Remarque : verifiez la cicatrice sur la carte et les statistiques avant de promouvoir.',country:'Pays',date:'Dates',campaign:'Campagne',proposal:'Proposition',empty_pre:'(vide)',loading:'Chargement...',no_data:'Aucun candidat.',done:'Promu!',stats_link:'📊 Voir les statistiques (Looker Studio)',pre_title:'Confirmer la Promotion',pre_body:'Va copier vers PRE_PUBLIC/',pre_warn:'Le dossier PRE_PUBLIC/{campagne} sera cree si necessaire.',cancel:'Annuler',ok:'Confirmer',promote_btn:'Promouvoir vers PRE_PUBLIC',target:'Destination',none_selected:'Aucun selectionne.',selected:'Selectionnes',unpromote:'Depromouvoir',unpromote_confirm:'Depromouvoir la/les image(s) de cette date ?',unpromote_done:'Depromu !',promoted:'Promu'},
+        id:{title:'M9 — Promosikan ke PRE_PUBLIC',cfg:'KONFIG',candidates:'KANDIDAT',promote:'PROMOSI',promote_note:'Catatan: periksa bekas luka di peta dan statistik sebelum mempromosikan.',country:'Negara',date:'Tanggal',campaign:'Kampanye',proposal:'Proposal',empty_pre:'(kosong)',loading:'Memuat...',no_data:'Tidak ada kandidat.',done:'Terpromosi!',stats_link:'📊 Lihat statistik (Looker Studio)',pre_title:'Konfirmasi Promosi',pre_body:'Akan disalin ke PRE_PUBLIC/',pre_warn:'Folder PRE_PUBLIC/{kampanye} akan dibuat jika perlu.',cancel:'Batal',ok:'Konfirmasi',promote_btn:'Promosikan ke PRE_PUBLIC',target:'Tujuan',none_selected:'Tidak ada yang dipilih.',selected:'Terpilih',unpromote:'Batalkan promosi',unpromote_confirm:'Batalkan promosi gambar untuk tanggal ini?',unpromote_done:'Promosi dibatalkan!',promoted:'Dipromosikan'},
     };
     return d[APP_LANG]||d.es;
 })();
@@ -60,7 +59,6 @@ var L = (function(){
 var SECTION_STYLE = {
     config:     { margin:'4px', padding:'8px', backgroundColor:'#f8f9fa', border:'1px solid #e0e0e0', borderRadius:'6px' },
     candidates: { margin:'4px', padding:'8px', backgroundColor:'#f0f4ff', border:'1px solid #c8d6f0', borderRadius:'6px' },
-    protocol:   { margin:'4px', padding:'8px', backgroundColor:'#f8f9fa', border:'1px solid #e0e0e0', borderRadius:'6px' },
     promote:    { margin:'4px', padding:'8px', backgroundColor:'#e8f5e9', border:'1px solid #b8d8ba', borderRadius:'6px' },
 };
 
@@ -92,12 +90,11 @@ var enabledCampaigns = {};       // { CAMPAIGN: bool }
 var allDates = [];
 var selectedDate = null;
 var actionMode = 'promote';   // 'promote' | 'unpromote' (botao principal)
-var protocolChecked = {visual:false, mosaic:false, area:false};
-var cellCheckboxes = {};
-var dateCheckboxes = {};
+var cellCheckboxes = {};         // key -> ui.Checkbox (radio por linea)
+var dateCheckboxes = {};         // fecha -> ui.Checkbox
 var mapLayers = {};
 var mapWidget = ui.Map();
-var countryBox, campaignBox, dateBox, candidatesBox, protocolBox, promoteBox, statusLabel, exportStatus, promoteButton;
+var countryBox, campaignBox, dateBox, candidatesBox, promoteBox, statusLabel, exportStatus, promoteButton;
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -250,7 +247,6 @@ function loadAll(){
     clearCandidateLayers();
     selectedCells = {};
     cellCheckboxes = {};
-    protocolChecked = {visual:false, mosaic:false, area:false};
     candidatesBox.clear();
     candidatesBox.add(ui.Label(L.loading,{fontSize:'10px',color:'#888'}));
 
@@ -389,12 +385,10 @@ function renderCandidates(){
     var pairs = activePairs();
     if(pairs.length===0){
         candidatesBox.add(ui.Label(L.no_data,{fontSize:'11px',color:'#d32f2f',margin:'4px'}));
-        buildProtocolChecklist();
         return;
     }
     if(!selectedDate){
         candidatesBox.add(ui.Label(L.empty_pre,{fontSize:'11px',color:'#888',margin:'4px'}));
-        buildProtocolChecklist();
         return;
     }
 
@@ -418,8 +412,6 @@ function renderCandidates(){
         }
         candidatesBox.add(group);
     });
-
-    buildProtocolChecklist();
 }
 
 function buildStageGrid(country, camp, stage, d){
@@ -476,44 +468,18 @@ function updatePromoteSummary(){
         if(actionMode==='unpromote'){
             promoteButton.setDisabled(promotedKeysForDate(selectedDate).length===0);
         } else {
-            var ready = sel.length>0 && protocolChecked.visual && protocolChecked.mosaic && protocolChecked.area;
-            promoteButton.setDisabled(!ready);
+            promoteButton.setDisabled(sel.length===0);
         }
     }
-}
-
-// ─── PROTOCOL ───────────────────────────────────────────────────────────────
-
-function buildProtocolChecklist(){
-    if(!protocolBox)return;
-    protocolBox.clear();
-    if(actionMode==='unpromote'){
-        protocolBox.add(ui.Label(L.unpromote_hint, {fontSize:'10px',color:'#888',margin:'0 0 4px 0'}));
-        return;
-    }
-    protocolBox.add(ui.Label(L.protocol_hint, {fontSize:'10px',color:'#888',margin:'0 0 4px 0'}));
-    var items = [
-        {key:'visual', label:L.check_visual},
-        {key:'mosaic', label:L.check_mosaic},
-        {key:'area',   label:L.check_area}
-    ];
-    items.forEach(function(it){
-        var cb = ui.Checkbox({label:it.label, value:protocolChecked[it.key]||false, style:STYLE.checkbox});
-        cb.onChange(function(v){protocolChecked[it.key]=v;updatePromoteSummary();});
-        protocolBox.add(cb);
-    });
-    var link = ui.Label(L.stats_link, {fontSize:'10px',color:'#1a73e8',margin:'2px 0 0 18px',textDecoration:'underline'});
-    link.setUrl(STATS_URL);
-    protocolBox.add(link);
 }
 
 // ─── UNPROMOTE (via botao principal, data selecionada) ──────────────────────
 
 function showUnpromoteForDate(){
-    protocolBox.clear();
+    promoteBox.clear();
     var keys = promotedKeysForDate(selectedDate);
     if(keys.length===0){
-        protocolBox.add(ui.Label(L.none_selected,STYLE.statusErr));
+        promoteBox.add(ui.Label(L.none_selected,STYLE.statusErr));
         return;
     }
     var box = ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:STYLE.prePopup});
@@ -524,10 +490,10 @@ function showUnpromoteForDate(){
         box.add(ui.Label('  '+parts[0]+' | '+parts[1], {fontSize:'11px',fontFamily:'monospace',color:'#d32f2f',margin:'1px'}));
     });
     var br = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'4px 0 0 0'}});
-    br.add(ui.Button({label:L.cancel,style:STYLE.btnGray,onClick:function(){buildProtocolChecklist();}}));
+    br.add(ui.Button({label:L.cancel,style:STYLE.btnGray,onClick:function(){updatePromoteSummary();}}));
     br.add(ui.Button({label:L.ok,style:STYLE.btnRed,onClick:function(){doUnpromote(keys);}}));
     box.add(br);
-    protocolBox.add(box);
+    promoteBox.add(box);
 }
 
 function doUnpromote(checked){
@@ -552,9 +518,9 @@ function doUnpromote(checked){
 // ─── PRE-POPUP ──────────────────────────────────────────────────────────────
 
 function showPrePopup(){
-    protocolBox.clear();
+    promoteBox.clear();
     var sel = Object.keys(selectedCells).filter(function(k){return selectedCells[k];});
-    if(sel.length===0){protocolBox.add(ui.Label(L.none_selected,STYLE.statusErr));return;}
+    if(sel.length===0){promoteBox.add(ui.Label(L.none_selected,STYLE.statusErr));return;}
 
     var box = ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:STYLE.prePopup});
     box.add(ui.Label('⚠ '+L.pre_title,{fontSize:'13px',fontWeight:'bold',color:'#cc8800',margin:'2px'}));
@@ -565,10 +531,10 @@ function showPrePopup(){
     });
     box.add(ui.Label(L.pre_warn,{fontSize:'10px',color:'#888',margin:'4px 2px'}));
     var br = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'4px 0 0 0'}});
-    br.add(ui.Button({label:L.cancel,style:STYLE.btnGray,onClick:function(){buildProtocolChecklist();}}));
+    br.add(ui.Button({label:L.cancel,style:STYLE.btnGray,onClick:function(){updatePromoteSummary();}}));
     br.add(ui.Button({label:L.ok,style:STYLE.btnGreen,onClick:function(){doPromote(sel);}}));
     box.add(br);
-    protocolBox.add(box);
+    promoteBox.add(box);
 }
 
 // ─── CREATE PRE_PUBLIC STRUCTURE (only here, inside a button) ───────────────
@@ -611,8 +577,8 @@ function ensurePrePublicStructure(country, camp){
 // ─── PROMOTE ────────────────────────────────────────────────────────────────
 
 function doPromote(cells){
-    protocolBox.clear();
-    protocolBox.add(ui.Label(L.loading,{fontSize:'11px',color:'#1a73e8',margin:'4px'}));
+    promoteBox.clear();
+    promoteBox.add(ui.Label(L.loading,{fontSize:'11px',color:'#1a73e8',margin:'4px'}));
     setExportStatus('loading','Promovendo '+cells.length+' imagen'+(cells.length===1?'':'es')+'...');
     showLoading();
 
@@ -631,8 +597,8 @@ function doPromote(cells){
         }
     });
 
-    protocolBox.clear();
-    protocolBox.add(ui.Label(L.done+' ('+total+' imagen'+(total===1?'':'es')+')',{fontSize:'12px',color:'#0f9d58',fontWeight:'bold',margin:'4px'}));
+    promoteBox.clear();
+    promoteBox.add(ui.Label(L.done+' ('+total+' imagen'+(total===1?'':'es')+')',{fontSize:'12px',color:'#0f9d58',fontWeight:'bold',margin:'4px'}));
     hideLoading();
     loadAll();
 }
@@ -682,18 +648,15 @@ function buildCandidatesSection(){
     return section;
 }
 
-function buildProtocolSection(){
-    var section = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:SECTION_STYLE.protocol});
-    section.add(ui.Label(L.protocol, STYLE.sectionTitle));
-    protocolBox = ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
-    section.add(protocolBox);
-    buildProtocolChecklist();
-    return section;
-}
-
 function buildPromoteSection(){
     var section = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:SECTION_STYLE.promote});
     section.add(ui.Label(L.promote, STYLE.sectionTitle));
+
+    var note = ui.Label('ℹ️ '+L.promote_note, {fontSize:'10px',color:'#888',margin:'0 0 4px 0'});
+    section.add(note);
+    var link = ui.Label(L.stats_link, {fontSize:'10px',color:'#1a73e8',margin:'0 0 4px 18px',textDecoration:'underline'});
+    link.setUrl(STATS_URL);
+    section.add(link);
 
     promoteBox = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:STYLE.summaryCard});
     section.add(promoteBox);
@@ -725,7 +688,6 @@ function buildForm(){
 
     sidePanel.add(buildConfigSection());
     sidePanel.add(buildCandidatesSection());
-    sidePanel.add(buildProtocolSection());
 
     exportStatus = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:{margin:'4px',shown:false}});
     sidePanel.add(exportStatus);
@@ -750,4 +712,4 @@ function buildForm(){
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
 buildForm();
-print('M9_00 5.1 carregado.');
+print('M9_00 5.3 carregado.');

@@ -1,7 +1,7 @@
 # MapBiomas Fire Monitor — M7 / M8 / M9 Scripts
 
 JavaScript (GEE Code Editor) scripts for MONITOR_01 post-classification pipeline.
-Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v5.2).
+Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v5.3).
 
 ## Scripts
 
@@ -11,7 +11,7 @@ Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v5.2).
 | `M7_01_lulc_filters.js` | M7 — ft01 | Water LULC mask by region + solitary pixel cleanup (connectedPixelCount <= 2) |
 | `M7_02_temporal_filter.js` | M7 — ft02 | Monthly memory filter (removes burn if scar in previous months) |
 | `M8_statistics.js` | M8 — Stats | Universal statistics generator (area + LULC) → CSV GCS/Drive |
-| `M9_00_promote_ui.js` | M9 — UI | Redesign v5.2: paises checkboxes multi + campanhas multi (root por pais+campanha) + grid de datas; etapas ftXX auto-descobertas; grid por etapa (propuestas x data global); bloqueio por pais+campanha; **botao dinamico Promover/Despromover** (sem painel isolado, despromover via data selecionada); mosaico MINNBR por pais; protocolo + mapa |
+| `M9_00_promote_ui.js` | M9 — UI | Redesign v5.3: paises checkboxes multi + campanhas multi (root por pais+campanha) + grid de datas; etapas ftXX auto-descobertas; grid por etapa (propuestas x data global); bloqueio por pais+campanha; **botao dinamico Promover/Despromover** (sem protocolo, nota sutil na secao PROMOVER); mosaico MINNBR por pais; mapa |
 
 ## Naming
 
