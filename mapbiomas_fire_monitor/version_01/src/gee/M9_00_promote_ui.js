@@ -1,33 +1,36 @@
 /********************************************
 MAPBIOMAS FUEGO - MONITOR_01 - M9_00
-Pre-Public Promotion (UI) — Matriz de Candidatos
+Pre-Public Promotion (UI) — Redesign v5.0
 
 📅 DATA: setembro 2026
-🏷️ VERSAO: 4.2
+🏷️ VERSAO: 5.0
 
 📌 SEÇÕES COM FUNDO COLORIDO:
   CONFIG — cinza   |   CANDIDATOS — azul claro
   PROTOCOLO — cinza  |   PROMOVER — verde claro
 
 📌 O QUE FAZ:
-1. Seleciona campanha de FILTERED/
-2. Matriz de candidatos: 1 grid por etapa (ft00/ft01/ft02),
-   colunas = propuestas, linhas = fechas, celula = checkbox
-   (selecao unica por linha dentro de cada grid)
-3. Fechas ya promovidas quedan bloqueadas (sin checkbox) e aparecen
-   en la linea de estado con acciones Ver / Despromover
-4. Protocolo: checklist obligatorio que libera la promocion
-5. Promueve a PRE_PUBLIC via ee.data.copyAsset
+1. CONFIG: pais (dropdown) + grid de datas (selecao unica,
+   promovidas bloqueadas) + campanhas (checkbox multi)
+2. Cada campanha ligada adiciona um grupo de grids com o seu
+   proprio CLASSIFICATIONS_ROOT (CATALOG_01/{CAMPAIGN}/...)
+3. Etapas ftXX descobertas automaticamente (subpastas FOLDER
+   de FILTERED/{propuesta}/ que casam /^ft\d\d$/)
+4. Cada grid: colunas = propuestas, 1 linha = data selecionada
+   (global). Celula = checkbox de promocao (selecao unica por linha)
+5. Datas ja promovidas por campanha: linha de status com checkbox
+   (Ver no mapa) + botao Despromover (age nas marcadas)
+6. Protocolo: checklist obligatorio que libera la promocion
+7. Promueve a PRE_PUBLIC via ee.data.copyAsset
 
 📌 SIN CREACION AUTOMATICA DE ASSETS:
   Ningun ee.data.createAsset se dispara al inicializar.
-  La estructura PRE_PUBLIC/{campana} solo se crea al confirmar.
   Area quemada NO se calcula aqui (papel del M8).
 ********************************************/
 
 // ⚙️ CONFIGURACION DEL USUARIO
 var COUNTRY = 'peru';    // peru | chile | bolivia | colombia | paraguay | guyana
-var STAGES = ['ft00', 'ft01', 'ft02'];   // etapas mostradas como grids
+var CAMPAIGNS = ['MONITOR_01', 'MONITOR_DEV'];   // campanhas disponiveis
 
 var COUNTRIES = {
     chile:    { catalog: 'projects/mapbiomas-chile/assets/FIRE/CATALOG_01',    regions: 'projects/mapbiomas-chile/assets/FIRE/AUXILIARY_DATA/regiones_fuego_chile_v1' },
@@ -41,7 +44,6 @@ var COUNTRIES = {
 var COUNTRY_CFG = COUNTRIES[COUNTRY] || COUNTRIES.peru;
 var CATALOG_ROOT = COUNTRY_CFG.catalog;
 var REGIONS = ee.FeatureCollection(COUNTRY_CFG.regions);
-var CLASSIFICATIONS_ROOT = CATALOG_ROOT + '/MONITOR_01/LIBRARY_CLASSIFICATIONS/';
 var SCALE = 10;
 var APP_LANG = 'es';
 
@@ -50,11 +52,11 @@ var STATS_URL = 'https://datastudio.google.com/reporting/cc275c3b-4a5e-4b4c-97af
 
 var L = (function(){
     var d={
-        pt:{title:'M9 — Promover a PRE_PUBLIC',cfg:'CONFIGURACAO',candidates:'CANDIDATOS',protocol:'PROTOCOLO',promote:'PROMOVER',campaign:'Campanha',proposal:'Proposta',existing_pre:'Ja promovidos',empty_pre:'(vazio)',loading:'Carregando...',no_data:'Nenhum candidato encontrado.',done:'Promovido!',check_visual:'📍 Verificar a cicatriz no mapa',check_mosaic:'🛰️ Comparar com o mosaico Sentinel-2',check_area:'📊 Area conferida (estatisticas M8)',stats_link:'📊 Ver estatisticas (Looker Studio)',protocol_hint:'Marque os 3 itens para liberar a promocao.',pre_title:'Confirmar Promocao',pre_body:'Serao copiados para PRE_PUBLIC/',pre_warn:'A pasta PRE_PUBLIC/{campanha} sera criada se necessario.',cancel:'Cancelar',ok:'Confirmar',promote_btn:'Promover para PRE_PUBLIC',target:'Destino',none_selected:'Nenhum selecionado.',selected:'Selecionados',view:'Ver',unpromote:'Despromover',unpromote_confirm:'Despromover esta imagem?',unpromote_done:'Despromovido!',promoted:'Promovido'},
-        es:{title:'M9 — Promover a PRE_PUBLIC',cfg:'CONFIG',candidates:'CANDIDATOS',protocol:'PROTOCOLO',promote:'PROMOVER',campaign:'Campana',proposal:'Propuesta',existing_pre:'Ya promovidos',empty_pre:'(vacio)',loading:'Cargando...',no_data:'Sin candidatos.',done:'¡Promovido!',check_visual:'📍 Verificar la cicatriz en el mapa',check_mosaic:'🛰️ Comparar con el mosaico Sentinel-2',check_area:'📊 Area verificada (estadisticas M8)',stats_link:'📊 Ver estadisticas (Looker Studio)',protocol_hint:'Marque los 3 items para habilitar la promocion.',pre_title:'Confirmar Promocion',pre_body:'Se copiara a PRE_PUBLIC/',pre_warn:'La carpeta PRE_PUBLIC/{campana} se creara si es necesario.',cancel:'Cancelar',ok:'Confirmar',promote_btn:'Promover a PRE_PUBLIC',target:'Destino',none_selected:'Ninguno seleccionado.',selected:'Seleccionados',view:'Ver',unpromote:'Despromover',unpromote_confirm:'¿Despromover esta imagen?',unpromote_done:'¡Despromovido!',promoted:'Promovido'},
-        en:{title:'M9 — Promote to PRE_PUBLIC',cfg:'CONFIGURATION',candidates:'CANDIDATES',protocol:'PROTOCOL',promote:'PROMOTE',campaign:'Campaign',proposal:'Proposal',existing_pre:'Already promoted',empty_pre:'(empty)',loading:'Loading...',no_data:'No candidates found.',done:'Promoted!',check_visual:'📍 Verify the scar on the map',check_mosaic:'🛰️ Compare with Sentinel-2 mosaic',check_area:'📊 Area verified (M8 stats)',stats_link:'📊 View statistics (Looker Studio)',protocol_hint:'Check the 3 items to enable promotion.',pre_title:'Confirm Promotion',pre_body:'Will copy to PRE_PUBLIC/',pre_warn:'The PRE_PUBLIC/{campaign} folder will be created if needed.',cancel:'Cancel',ok:'Confirm',promote_btn:'Promote to PRE_PUBLIC',target:'Destination',none_selected:'None selected.',selected:'Selected',view:'View',unpromote:'Unpromote',unpromote_confirm:'Unpromote this image?',unpromote_done:'Unpromoted!',promoted:'Promoted'},
-        fr:{title:'M9 — Promouvoir vers PRE_PUBLIC',cfg:'CONFIG',candidates:'CANDIDATS',protocol:'PROTOCOLE',promote:'PROMOUVOIR',campaign:'Campagne',proposal:'Proposition',existing_pre:'Deja promus',empty_pre:'(vide)',loading:'Chargement...',no_data:'Aucun candidat.',done:'Promu!',check_visual:'📍 Verifier la cicatrice sur la carte',check_mosaic:'🛰️ Comparer avec le mosaique Sentinel-2',check_area:'📊 Zone verifiee (stats M8)',stats_link:'📊 Voir les statistiques (Looker Studio)',protocol_hint:'Cochez les 3 items pour activer la promotion.',pre_title:'Confirmer la Promotion',pre_body:'Va copier vers PRE_PUBLIC/',pre_warn:'Le dossier PRE_PUBLIC/{campagne} sera cree si necessaire.',cancel:'Annuler',ok:'Confirmer',promote_btn:'Promouvoir vers PRE_PUBLIC',target:'Destination',none_selected:'Aucun selectionne.',selected:'Selectionnes',view:'Voir',unpromote:'Depromouvoir',unpromote_confirm:'Depromouvoir cette image ?',unpromote_done:'Depromu !',promoted:'Promu'},
-        id:{title:'M9 — Promosikan ke PRE_PUBLIC',cfg:'KONFIG',candidates:'KANDIDAT',protocol:'PROTOKOL',promote:'PROMOSI',campaign:'Kampanye',proposal:'Proposal',existing_pre:'Sudah dipromosikan',empty_pre:'(kosong)',loading:'Memuat...',no_data:'Tidak ada kandidat.',done:'Terpromosi!',check_visual:'📍 Periksa bekas luka di peta',check_mosaic:'🛰️ Bandingkan dengan mosaik Sentinel-2',check_area:'📊 Luas diverifikasi (statistik M8)',stats_link:'📊 Lihat statistik (Looker Studio)',protocol_hint:'Centang 3 item untuk mengaktifkan promosi.',pre_title:'Konfirmasi Promosi',pre_body:'Akan disalin ke PRE_PUBLIC/',pre_warn:'Folder PRE_PUBLIC/{kampanye} akan dibuat jika perlu.',cancel:'Batal',ok:'Konfirmasi',promote_btn:'Promosikan ke PRE_PUBLIC',target:'Tujuan',none_selected:'Tidak ada yang dipilih.',selected:'Terpilih',view:'Lihat',unpromote:'Batalkan promosi',unpromote_confirm:'Batalkan promosi gambar ini?',unpromote_done:'Promosi dibatalkan!',promoted:'Dipromosikan'},
+        pt:{title:'M9 — Promover a PRE_PUBLIC',cfg:'CONFIGURACAO',candidates:'CANDIDATOS',protocol:'PROTOCOLO',promote:'PROMOVER',country:'Pais',date:'Datas',campaign:'Campanha',proposal:'Proposta',existing_pre:'Ja promovidos',empty_pre:'(vazio)',loading:'Carregando...',no_data:'Nenhum candidato encontrado.',done:'Promovido!',check_visual:'📍 Verificar a cicatriz no mapa',check_mosaic:'🛰️ Comparar com o mosaico Sentinel-2',check_area:'📊 Area conferida (estatisticas M8)',stats_link:'📊 Ver estatisticas (Looker Studio)',protocol_hint:'Marque os 3 itens para liberar a promocao.',pre_title:'Confirmar Promocao',pre_body:'Serao copiados para PRE_PUBLIC/',pre_warn:'A pasta PRE_PUBLIC/{campanha} sera criada se necessario.',cancel:'Cancelar',ok:'Confirmar',promote_btn:'Promover para PRE_PUBLIC',target:'Destino',none_selected:'Nenhum selecionado.',selected:'Selecionados',view:'Ver',unpromote:'Despromover',unpromote_confirm:'Despromover as imagens marcadas?',unpromote_done:'Despromovido!',promoted:'Promovido'},
+        es:{title:'M9 — Promover a PRE_PUBLIC',cfg:'CONFIG',candidates:'CANDIDATOS',protocol:'PROTOCOLO',promote:'PROMOVER',country:'Pais',date:'Fechas',campaign:'Campana',proposal:'Propuesta',existing_pre:'Ya promovidos',empty_pre:'(vacio)',loading:'Cargando...',no_data:'Sin candidatos.',done:'¡Promovido!',check_visual:'📍 Verificar la cicatriz en el mapa',check_mosaic:'🛰️ Comparar con el mosaico Sentinel-2',check_area:'📊 Area verificada (estadisticas M8)',stats_link:'📊 Ver estadisticas (Looker Studio)',protocol_hint:'Marque los 3 items para habilitar la promocion.',pre_title:'Confirmar Promocion',pre_body:'Se copiara a PRE_PUBLIC/',pre_warn:'La carpeta PRE_PUBLIC/{campana} se creara si es necesario.',cancel:'Cancelar',ok:'Confirmar',promote_btn:'Promover a PRE_PUBLIC',target:'Destino',none_selected:'Ninguno seleccionado.',selected:'Seleccionados',view:'Ver',unpromote:'Despromover',unpromote_confirm:'¿Despromover las imagenes marcadas?',unpromote_done:'¡Despromovido!',promoted:'Promovido'},
+        en:{title:'M9 — Promote to PRE_PUBLIC',cfg:'CONFIGURATION',candidates:'CANDIDATES',protocol:'PROTOCOL',promote:'PROMOTE',country:'Country',date:'Dates',campaign:'Campaign',proposal:'Proposal',existing_pre:'Already promoted',empty_pre:'(empty)',loading:'Loading...',no_data:'No candidates found.',done:'Promoted!',check_visual:'📍 Verify the scar on the map',check_mosaic:'🛰️ Compare with Sentinel-2 mosaic',check_area:'📊 Area verified (M8 stats)',stats_link:'📊 View statistics (Looker Studio)',protocol_hint:'Check the 3 items to enable promotion.',pre_title:'Confirm Promotion',pre_body:'Will copy to PRE_PUBLIC/',pre_warn:'The PRE_PUBLIC/{campaign} folder will be created if needed.',cancel:'Cancel',ok:'Confirm',promote_btn:'Promote to PRE_PUBLIC',target:'Destination',none_selected:'None selected.',selected:'Selected',view:'View',unpromote:'Unpromote',unpromote_confirm:'Unpromote the checked images?',unpromote_done:'Unpromoted!',promoted:'Promoted'},
+        fr:{title:'M9 — Promouvoir vers PRE_PUBLIC',cfg:'CONFIG',candidates:'CANDIDATS',protocol:'PROTOCOLE',promote:'PROMOUVOIR',country:'Pays',date:'Dates',campaign:'Campagne',proposal:'Proposition',existing_pre:'Deja promus',empty_pre:'(vide)',loading:'Chargement...',no_data:'Aucun candidat.',done:'Promu!',check_visual:'📍 Verifier la cicatrice sur la carte',check_mosaic:'🛰️ Comparer avec le mosaique Sentinel-2',check_area:'📊 Zone verifiee (stats M8)',stats_link:'📊 Voir les statistiques (Looker Studio)',protocol_hint:'Cochez les 3 items pour activer la promotion.',pre_title:'Confirmer la Promotion',pre_body:'Va copier vers PRE_PUBLIC/',pre_warn:'Le dossier PRE_PUBLIC/{campagne} sera cree si necessaire.',cancel:'Annuler',ok:'Confirmer',promote_btn:'Promouvoir vers PRE_PUBLIC',target:'Destination',none_selected:'Aucun selectionne.',selected:'Selectionnes',view:'Voir',unpromote:'Depromouvoir',unpromote_confirm:'Depromouvoir les images cochees ?',unpromote_done:'Depromu !',promoted:'Promu'},
+        id:{title:'M9 — Promosikan ke PRE_PUBLIC',cfg:'KONFIG',candidates:'KANDIDAT',protocol:'PROTOKOL',promote:'PROMOSI',country:'Negara',date:'Tanggal',campaign:'Kampanye',proposal:'Proposal',existing_pre:'Sudah dipromosikan',empty_pre:'(kosong)',loading:'Memuat...',no_data:'Tidak ada kandidat.',done:'Terpromosi!',check_visual:'📍 Periksa bekas luka di peta',check_mosaic:'🛰️ Bandingkan dengan mosaik Sentinel-2',check_area:'📊 Luas diverifikasi (statistik M8)',stats_link:'📊 Lihat statistik (Looker Studio)',protocol_hint:'Centang 3 item untuk mengaktifkan promosi.',pre_title:'Konfirmasi Promosi',pre_body:'Akan disalin ke PRE_PUBLIC/',pre_warn:'Folder PRE_PUBLIC/{kampanye} akan dibuat jika perlu.',cancel:'Batal',ok:'Konfirmasi',promote_btn:'Promosikan ke PRE_PUBLIC',target:'Tujuan',none_selected:'Tidak ada yang dipilih.',selected:'Terpilih',view:'Lihat',unpromote:'Batalkan promosi',unpromote_confirm:'Batalkan promosi gambar yang dicentang?',unpromote_done:'Promosi dibatalkan!',promoted:'Dipromosikan'},
     };
     return d[APP_LANG]||d.es;
 })();
@@ -88,21 +90,34 @@ var STYLE = {
 
 // ─── APPLICATION STATE ──────────────────────────────────────────────────────
 
-var selectedCells = {};          // key: etapa__propuesta__fecha
-var proposals = [];              // nombres de propuestas (FOLDERs en FILTERED/)
-var stageData = {};              // { ft00: { propuesta: [fechas] }, ... }
-var promotedPeriods = {};        // { fecha: true } en PRE_PUBLIC/{campana}
+var selectedCells = {};          // key: campanha__etapa__propuesta__fecha
+var promotedChecks = {};         // key: campanha__fecha -> bool (marcadas para Ver/Despromover)
+var campaignData = {};           // { CAMPAIGN: { proposals, stages, stageData, promoted } }
+var enabledCampaigns = {};       // { CAMPAIGN: bool }
+var allDates = [];               // uniao de datas (disponiveis + promovidas)
+var selectedDate = null;         // data global selecionada no grid de datas
 var protocolChecked = {visual:false, mosaic:false, area:false};
-var cellCheckboxes = {};         // key -> ui.Checkbox (para radio por linea)
+var cellCheckboxes = {};         // key -> ui.Checkbox (radio por linea)
+var dateCheckboxes = {};         // fecha -> ui.Checkbox
 var mapLayers = {};
 var mapWidget = ui.Map();
-var dropdownCampaign, candidatesBox, protocolBox, promoteBox, contentsBox, statusLabel, exportStatus, promoteButton;
+var dropdownCountry, dateBox, campaignBox, candidatesBox, protocolBox, promoteBox, contentsBox, statusLabel, exportStatus, promoteButton;
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-function campaignSlug(){var v=dropdownCampaign?dropdownCampaign.getValue():'MONITOR_01';return (v||'MONITOR_01').toLowerCase();}
+function classificationsRoot(camp){return CATALOG_ROOT+'/'+camp+'/LIBRARY_CLASSIFICATIONS/';}
 
-function prePublicPath(){return CLASSIFICATIONS_ROOT+'PRE_PUBLIC/'+campaignSlug()+'/';}
+function prePublicPath(camp){return classificationsRoot(camp)+'PRE_PUBLIC/'+camp.toLowerCase()+'/';}
+
+function cellKey(camp, stage, proposal, period){return camp+'__'+stage+'__'+proposal+'__'+period;}
+
+function promotedKey(camp, period){return camp+'__'+period;}
+
+function isDatePromotedGlobal(date){
+    return Object.keys(enabledCampaigns).some(function(c){
+        return enabledCampaigns[c] && campaignData[c] && campaignData[c].promoted[date];
+    });
+}
 
 function showLoading(){if(statusLabel)statusLabel.style().set('shown',true);}
 function hideLoading(){if(statusLabel)statusLabel.style().set('shown',false);}
@@ -116,7 +131,19 @@ function setExportStatus(state, msg){
     exportStatus.add(ui.Label(c.icon+' '+msg,{fontSize:'11px',padding:'4px 8px',backgroundColor:c.bg,borderRadius:'3px',margin:'2px 0',stretch:'horizontal'}));
 }
 
-function cellKey(stage, proposal, period){return stage+'__'+proposal+'__'+period;}
+// ─── COUNTRY ────────────────────────────────────────────────────────────────
+
+function setCountry(c){
+    COUNTRY = c;
+    COUNTRY_CFG = COUNTRIES[c]||COUNTRIES.peru;
+    CATALOG_ROOT = COUNTRY_CFG.catalog;
+    REGIONS = ee.FeatureCollection(COUNTRY_CFG.regions);
+    removeMapLayer('regions_boundary');
+    manageMapLayer('regions_boundary', REGIONS.style({color:'ffffff',fillColor:'00000000',width:1}), {}, 'Regiones');
+    mapWidget.centerObject(REGIONS);
+    selectedDate = null;
+    loadAll();
+}
 
 // ─── MAP LAYERS ─────────────────────────────────────────────────────────────
 
@@ -162,17 +189,17 @@ function loadMosaic(period){
 
 // ─── SELECT / DESELECT CELL ─────────────────────────────────────────────────
 
-function setCellSelected(stage, proposal, period, v){
-    var key = cellKey(stage, proposal, period);
+function setCellSelected(camp, stage, proposal, period, v){
+    var key = cellKey(camp, stage, proposal, period);
     selectedCells[key] = v;
     if(v){
         loadMosaic(period);
-        var img = ee.Image(CLASSIFICATIONS_ROOT+'FILTERED/'+proposal+'/'+stage+'/'+period).select('probability').selfMask();
-        manageMapLayer('cand_'+key, img, {min:0,max:1000,palette:['#fcc','#f00','#600']}, 'Cand '+period+' | '+proposal+' | '+stage);
-        // radio por linea: desmarcar otras propuestas de la misma fecha en este grid
-        proposals.forEach(function(p2){
+        var img = ee.Image(classificationsRoot(camp)+'FILTERED/'+proposal+'/'+stage+'/'+period).select('probability').selfMask();
+        manageMapLayer('cand_'+key, img, {min:0,max:1000,palette:['#fcc','#f00','#600']}, 'Cand '+period+' | '+proposal+' | '+stage+' | '+camp);
+        // radio por linea: desmarcar otras propuestas de la misma fecha en este grid (mismo camp+stage)
+        campaignData[camp].proposals.forEach(function(p2){
             if(p2!==proposal){
-                var k2 = cellKey(stage, p2, period);
+                var k2 = cellKey(camp, stage, p2, period);
                 if(selectedCells[k2]){
                     selectedCells[k2] = false;
                     if(cellCheckboxes[k2])cellCheckboxes[k2].setValue(false);
@@ -183,175 +210,227 @@ function setCellSelected(stage, proposal, period, v){
     } else {
         removeMapLayer('cand_'+key);
         var any = Object.keys(selectedCells).some(function(k){
-            return selectedCells[k] && k.split('__')[2]===period;
+            return selectedCells[k] && k.split('__')[3]===period;
         });
         if(!any)removeMapLayer('mosaic_'+period);
     }
     updatePromoteSummary();
 }
 
-// ─── LOAD ALL (proposals + stages + promoted) ───────────────────────────────
+// ─── LOAD ALL ───────────────────────────────────────────────────────────────
+
+function activeCampaigns(){return Object.keys(enabledCampaigns).filter(function(c){return enabledCampaigns[c];});}
 
 function loadAll(){
     clearCandidateLayers();
     selectedCells = {};
     cellCheckboxes = {};
+    promotedChecks = {};
     protocolChecked = {visual:false, mosaic:false, area:false};
     candidatesBox.clear();
     candidatesBox.add(ui.Label(L.loading,{fontSize:'10px',color:'#888'}));
 
-    var path = CLASSIFICATIONS_ROOT+'FILTERED/';
-    ee.data.listAssets(path,{},function(r,err){
-        proposals = [];
-        if(!err&&r&&r.assets)proposals=r.assets.filter(function(a){return a.type==='FOLDER'}).map(function(a){return a.id.split('/').pop()}).sort();
-        if(proposals.length===0){
-            renderStatusLine();
-            renderCandidates();
-            updatePromoteSummary();
-            hideLoading();
-            return;
-        }
-        var pending = STAGES.length * proposals.length;
-        stageData = {};
-        STAGES.forEach(function(stg){stageData[stg]={};});
-        proposals.forEach(function(prop){
-            STAGES.forEach(function(stg){
-                stageData[stg][prop] = [];
-                ee.data.listAssets(CLASSIFICATIONS_ROOT+'FILTERED/'+prop+'/'+stg+'/',{},function(r2,err2){
-                    if(!err2&&r2&&r2.assets)r2.assets.forEach(function(a){
-                        if(a.type==='IMAGE')stageData[stg][prop].push(a.id.split('/').pop());
-                    });
-                    pending--;
-                    if(pending===0)loadPromotedAndRender();
-                });
-            });
-        });
-    });
-}
-
-function loadPromotedAndRender(){
-    ee.data.listAssets(prePublicPath(),{},function(r,err){
-        promotedPeriods = {};
-        if(!err&&r&&r.assets)r.assets.forEach(function(a){
-            if(a.type==='IMAGE')promotedPeriods[a.id.split('/').pop()] = true;
-        });
-        renderStatusLine();
+    var camps = activeCampaigns();
+    if(camps.length===0){
+        campaignData = {};
+        allDates = [];
+        renderDateGrid();
         renderCandidates();
         updatePromoteSummary();
         hideLoading();
+        return;
+    }
+
+    campaignData = {};
+    var pending = camps.length;
+    camps.forEach(function(camp){loadCampaign(camp, function(){pending--;if(pending===0)finishLoad();});});
+}
+
+function loadCampaign(camp, cb){
+    campaignData[camp] = {proposals:[], stages:[], stageData:{}, promoted:{}};
+    var root = classificationsRoot(camp);
+    ee.data.listAssets(root+'FILTERED/',{},function(r,err){
+        var props=[];
+        if(!err&&r&&r.assets)props=r.assets.filter(function(a){return a.type==='FOLDER'}).map(function(a){return a.id.split('/').pop()}).sort();
+        campaignData[camp].proposals = props;
+        if(props.length===0){loadPromoted(camp, cb);return;}
+
+        var pendingStages = props.length;
+        var stageUnion = {};
+        props.forEach(function(prop){
+            ee.data.listAssets(root+'FILTERED/'+prop+'/',{},function(r2,err2){
+                if(!err2&&r2&&r2.assets)r2.assets.forEach(function(a){
+                    var name = a.id.split('/').pop();
+                    if(a.type==='FOLDER'&&/^ft\d\d$/.test(name))stageUnion[name]=true;
+                });
+                pendingStages--;
+                if(pendingStages===0){
+                    campaignData[camp].stages = Object.keys(stageUnion).sort();
+                    var stg = campaignData[camp].stages;
+                    if(stg.length===0){loadPromoted(camp, cb);return;}
+                    stg.forEach(function(s){campaignData[camp].stageData[s]={};props.forEach(function(p){campaignData[camp].stageData[s][p]=[];});});
+                    var pendingImgs = stg.length*props.length;
+                    stg.forEach(function(s){
+                        props.forEach(function(p){
+                            ee.data.listAssets(root+'FILTERED/'+p+'/'+s+'/',{},function(r3,err3){
+                                if(!err3&&r3&&r3.assets)r3.assets.forEach(function(a){
+                                    if(a.type==='IMAGE')campaignData[camp].stageData[s][p].push(a.id.split('/').pop());
+                                });
+                                pendingImgs--;
+                                if(pendingImgs===0)loadPromoted(camp, cb);
+                            });
+                        });
+                    });
+                }
+            });
+        });
     });
 }
 
-// ─── STATUS LINE (promoted) ─────────────────────────────────────────────────
+function loadPromoted(camp, cb){
+    ee.data.listAssets(prePublicPath(camp),{},function(r,err){
+        if(!err&&r&&r.assets)r.assets.forEach(function(a){
+            if(a.type==='IMAGE')campaignData[camp].promoted[a.id.split('/').pop()]=true;
+        });
+        cb();
+    });
+}
 
-function renderStatusLine(){
-    if(!contentsBox)return;
-    contentsBox.clear();
-    var card = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:STYLE.contentsCard});
-    card.add(ui.Label(L.existing_pre+': PRE_PUBLIC/'+campaignSlug(), {fontSize:'10px',fontWeight:'bold',color:'#1a73e8',margin:'0 0 4px 0'}));
-    var periods = Object.keys(promotedPeriods).sort().reverse();
-    if(periods.length===0){
-        card.add(ui.Label(L.empty_pre, {fontSize:'10px',color:'#aaa',margin:'2px'}));
+function finishLoad(){
+    var dateSet = {};
+    Object.keys(campaignData).forEach(function(camp){
+        var d = campaignData[camp];
+        d.stages.forEach(function(s){
+            d.proposals.forEach(function(p){
+                (d.stageData[s][p]||[]).forEach(function(dt){dateSet[dt]=true;});
+            });
+        });
+        Object.keys(d.promoted).forEach(function(dt){dateSet[dt]=true;});
+    });
+    allDates = Object.keys(dateSet).sort().reverse();
+    if(!selectedDate || allDates.indexOf(selectedDate)===-1){
+        var pick = null;
+        for(var i=0;i<allDates.length;i++){if(!isDatePromotedGlobal(allDates[i])){pick=allDates[i];break;}}
+        selectedDate = pick || (allDates[0]||null);
+    }
+    renderDateGrid();
+    renderPromotedLine();
+    renderCandidates();
+    updatePromoteSummary();
+    hideLoading();
+}
+
+// ─── DATE GRID ──────────────────────────────────────────────────────────────
+
+function renderDateGrid(){
+    if(!dateBox)return;
+    dateBox.clear();
+    dateBox.add(ui.Label(L.date, STYLE.label));
+    var row = ui.Panel({layout:ui.Panel.Layout.flow('horizontal')});
+    if(allDates.length===0){
+        row.add(ui.Label(L.empty_pre, {fontSize:'10px',color:'#aaa',margin:'2px'}));
     } else {
-        periods.forEach(function(p){
-            var row = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{margin:'1px 0'}});
-            row.add(ui.Label(' '+p+'  ✅', {fontSize:'10px',fontFamily:'monospace',color:'#0f9d58',margin:'1px 2px'}));
-            row.add(ui.Button({label:L.view, style:STYLE.btnBlue, onClick:function(){
-                var img = ee.Image(prePublicPath()+p).select('probability').selfMask();
-                loadMosaic(p);
-                manageMapLayer('promoted_'+p, img, {min:0,max:1000,palette:['#fcc','#f00','#600']}, 'Promovido '+p);
-            }}));
-            row.add(ui.Button({label:L.unpromote, style:STYLE.btnRed, onClick:function(){showUnpromoteConfirm(p);}}));
-            card.add(row);
+        allDates.forEach(function(d){
+            var blocked = isDatePromotedGlobal(d);
+            var cb = ui.Checkbox({
+                label: d + (blocked?'  ✅':''),
+                value: selectedDate===d,
+                disabled: blocked,
+                style: STYLE.gridCell
+            });
+            dateCheckboxes[d] = cb;
+            cb.onChange(function(v){
+                if(!v)return;
+                selectedDate = d;
+                // seleccion unica
+                Object.keys(dateCheckboxes).forEach(function(d2){
+                    if(d2!==d&&dateCheckboxes[d2].getValue())dateCheckboxes[d2].setValue(false);
+                });
+                selectedCells = {};
+                cellCheckboxes = {};
+                clearCandidateLayers();
+                renderCandidates();
+                updatePromoteSummary();
+            });
+            row.add(cb);
         });
     }
-    contentsBox.add(card);
+    dateBox.add(row);
 }
 
-function showUnpromoteConfirm(period){
-    contentsBox.clear();
-    var card = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:STYLE.prePopup});
-    card.add(ui.Label('⚠ '+L.unpromote_confirm,{fontSize:'12px',fontWeight:'bold',color:'#cc8800',margin:'2px'}));
-    card.add(ui.Label(prePublicPath()+period, {fontSize:'11px',fontWeight:'bold',fontFamily:'monospace',color:'#1a73e8',margin:'2px',padding:'4px',backgroundColor:'#fff'}));
-    var br = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'4px 0 0 0'}});
-    br.add(ui.Button({label:L.cancel,style:STYLE.btnGray,onClick:function(){renderStatusLine();}}));
-    br.add(ui.Button({label:L.ok,style:STYLE.btnRed,onClick:function(){doUnpromote(period);}}));
-    card.add(br);
-    contentsBox.add(card);
-}
-
-function doUnpromote(period){
-    setExportStatus('loading','Despromovendo '+period+'...');
-    try{
-        ee.data.deleteAsset(prePublicPath()+period);
-        print('Despromovido: '+prePublicPath()+period);
-        setExportStatus('success',L.unpromote_done+' '+period);
-    }catch(e){
-        print('Error al despromover '+period+': '+e);
-        setExportStatus('error','Error: '+e);
-    }
-    clearCandidateLayers();
-    loadAll();
-}
-
-// ─── RENDER CANDIDATES (grids) ──────────────────────────────────────────────
+// ─── RENDER CANDIDATES (groups per campaign) ────────────────────────────────
 
 function renderCandidates(){
     candidatesBox.clear();
-    var anyData = false;
-    STAGES.forEach(function(stg){
-        var stageDates = {};
-        proposals.forEach(function(prop){
-            (stageData[stg][prop]||[]).forEach(function(d){stageDates[d]=true;});
-        });
-        var dates = Object.keys(stageDates).filter(function(d){return !promotedPeriods[d];}).sort().reverse();
-        if(dates.length>0)anyData = true;
+    var camps = activeCampaigns();
+    if(camps.length===0){
+        candidatesBox.add(ui.Label(L.no_data,{fontSize:'11px',color:'#d32f2f',margin:'4px'}));
+        buildProtocolChecklist();
+        return;
+    }
+    if(!selectedDate){
+        candidatesBox.add(ui.Label(L.empty_pre,{fontSize:'11px',color:'#888',margin:'4px'}));
+        buildProtocolChecklist();
+        return;
+    }
 
-        var grid = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:STYLE.card});
-        var head = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{backgroundColor:'#eef2fa',margin:'0 0 2px 0'}});
-        head.add(ui.Label(stg, STYLE.gridHeader));
-        proposals.forEach(function(prop){
-            head.add(ui.Label(prop, STYLE.gridHead));
-        });
-        grid.add(head);
+    camps.forEach(function(camp){
+        var d = campaignData[camp];
+        if(!d)return;
+        var group = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:STYLE.card});
+        group.add(ui.Label(camp+' | '+classificationsRoot(camp), {fontSize:'10px',fontWeight:'bold',color:'#1a73e8',margin:'2px'}));
 
-        if(dates.length===0){
-            grid.add(ui.Label('('+L.empty_pre+')', {fontSize:'9px',color:'#aaa',margin:'1px 3px'}));
+        var stages = d.stages.filter(function(s){
+            return d.proposals.some(function(p){return (d.stageData[s][p]||[]).indexOf(selectedDate)!==-1;});
+        });
+
+        if(stages.length===0){
+            group.add(ui.Label('('+L.empty_pre+')', {fontSize:'9px',color:'#aaa',margin:'1px 3px'}));
         } else {
-            dates.forEach(function(d){
-                var row = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{margin:'1px 0'}});
-                row.add(ui.Label(d, STYLE.gridDate));
-                proposals.forEach(function(prop){
-                    var available = (stageData[stg][prop]||[]).indexOf(d)!==-1;
-                    if(!available){
-                        row.add(ui.Label('·', {fontSize:'9px',color:'#ccc',margin:'2px 6px'}));
-                        return;
-                    }
-                    var key = cellKey(stg, prop, d);
-                    var cb = ui.Checkbox({label:'', value:!!selectedCells[key], style:STYLE.gridCell});
-                    cellCheckboxes[key] = cb;
-                    cb.onChange(function(v){setCellSelected(stg, prop, d, v);});
-                    row.add(cb);
-                });
-                grid.add(row);
+            stages.forEach(function(stg){
+                group.add(buildStageGrid(camp, stg, d));
             });
         }
-        candidatesBox.add(grid);
+        candidatesBox.add(group);
     });
 
-    if(!anyData && proposals.length>0){
-        candidatesBox.add(ui.Label(L.no_data,{fontSize:'11px',color:'#d32f2f',margin:'4px'}));
-    } else if(proposals.length===0){
-        candidatesBox.add(ui.Label(L.no_data,{fontSize:'11px',color:'#d32f2f',margin:'4px'}));
-    }
+    candidatesBox.add(ui.Button({label:L.unpromote, style:STYLE.btnRed, onClick:function(){showUnpromoteConfirm();}}));
     buildProtocolChecklist();
+}
+
+function buildStageGrid(camp, stage, d){
+    var grid = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:{margin:'2px 0'}});
+    var head = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{backgroundColor:'#eef2fa',margin:'0 0 2px 0'}});
+    head.add(ui.Label(stage, STYLE.gridHeader));
+    d.proposals.forEach(function(prop){
+        head.add(ui.Label(prop, STYLE.gridHead));
+    });
+    grid.add(head);
+
+    var row = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{margin:'1px 0'}});
+    row.add(ui.Label(selectedDate, STYLE.gridDate));
+    d.proposals.forEach(function(prop){
+        var available = (d.stageData[stage][prop]||[]).indexOf(selectedDate)!==-1;
+        var promoted = d.promoted[selectedDate];
+        if(!available || promoted){
+            row.add(ui.Label(promoted?'✅':'·', {fontSize:'9px',color:promoted?'#0f9d58':'#ccc',margin:'2px 6px'}));
+            return;
+        }
+        var key = cellKey(camp, stage, prop, selectedDate);
+        var cb = ui.Checkbox({label:'', value:!!selectedCells[key], style:STYLE.gridCell});
+        cellCheckboxes[key] = cb;
+        cb.onChange(function(v){setCellSelected(camp, stage, prop, selectedDate, v);});
+        row.add(cb);
+    });
+    grid.add(row);
+    return grid;
 }
 
 function updatePromoteSummary(){
     if(!promoteBox)return;
     var sel = Object.keys(selectedCells).filter(function(k){return selectedCells[k];});
     promoteBox.clear();
-    promoteBox.add(ui.Label(L.target+': '+prePublicPath(), {fontSize:'11px',fontFamily:'monospace',color:'#1a73e8',margin:'2px',padding:'4px',backgroundColor:'#fff',borderRadius:'3px'}));
+    promoteBox.add(ui.Label(L.target+': PRE_PUBLIC/{campana}', {fontSize:'11px',fontFamily:'monospace',color:'#1a73e8',margin:'2px',padding:'4px',backgroundColor:'#fff',borderRadius:'3px'}));
     promoteBox.add(ui.Label(L.selected+': '+sel.length+' imagen'+(sel.length===1?'':'es'), sel.length>0?STYLE.statusOk:STYLE.statusErr));
     if(promoteButton){
         var ready = sel.length>0 && protocolChecked.visual && protocolChecked.mosaic && protocolChecked.area;
@@ -380,6 +459,82 @@ function buildProtocolChecklist(){
     protocolBox.add(link);
 }
 
+// ─── PROMOTED (Ver / Despromover) ───────────────────────────────────────────
+
+function showUnpromoteConfirm(){
+    contentsBox.clear();
+    var checked = Object.keys(promotedChecks).filter(function(k){return promotedChecks[k];});
+    if(checked.length===0){
+        contentsBox.clear();
+        renderPromotedLine();
+        return;
+    }
+    var card = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:STYLE.prePopup});
+    card.add(ui.Label('⚠ '+L.unpromote_confirm,{fontSize:'12px',fontWeight:'bold',color:'#cc8800',margin:'2px'}));
+    checked.forEach(function(k){
+        var parts = k.split('__');
+        card.add(ui.Label(parts[0]+' | '+parts[1], {fontSize:'11px',fontFamily:'monospace',color:'#1a73e8',margin:'1px'}));
+    });
+    var br = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'4px 0 0 0'}});
+    br.add(ui.Button({label:L.cancel,style:STYLE.btnGray,onClick:function(){renderPromotedLine();}}));
+    br.add(ui.Button({label:L.ok,style:STYLE.btnRed,onClick:function(){doUnpromote(checked);}}));
+    card.add(br);
+    contentsBox.add(card);
+}
+
+function renderPromotedLine(){
+    if(!contentsBox)return;
+    contentsBox.clear();
+    var card = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:STYLE.contentsCard});
+    card.add(ui.Label(L.existing_pre, {fontSize:'10px',fontWeight:'bold',color:'#1a73e8',margin:'0 0 4px 0'}));
+    var camps = activeCampaigns();
+    var any = false;
+    camps.forEach(function(camp){
+        var d = campaignData[camp];
+        if(!d)return;
+        var periods = Object.keys(d.promoted).sort().reverse();
+        periods.forEach(function(p){
+            any = true;
+            var row = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'), style:{margin:'1px 0'}});
+            var pk = promotedKey(camp, p);
+            var cb = ui.Checkbox({label:camp+' | '+p+' ✅', value:promotedChecks[pk]||false, style:STYLE.gridCell});
+            cb.onChange(function(v){
+                promotedChecks[pk] = v;
+                if(v){
+                    var img = ee.Image(prePublicPath(camp)+p).select('probability').selfMask();
+                    loadMosaic(p);
+                    manageMapLayer('promoted_'+pk, img, {min:0,max:1000,palette:['#fcc','#f00','#600']}, 'Promovido '+p+' | '+camp);
+                } else {
+                    removeMapLayer('promoted_'+pk);
+                }
+            });
+            row.add(cb);
+            card.add(row);
+        });
+    });
+    if(!any)card.add(ui.Label(L.empty_pre, {fontSize:'10px',color:'#aaa',margin:'2px'}));
+    contentsBox.add(card);
+}
+
+function doUnpromote(checked){
+    setExportStatus('loading','Despromovendo...');
+    var total = 0;
+    checked.forEach(function(k){
+        var parts = k.split('__');
+        var dest = prePublicPath(parts[0])+parts[1];
+        try{
+            ee.data.deleteAsset(dest);
+            print('Despromovido: '+dest);
+            total++;
+        }catch(e){
+            print('Error: '+dest+' -> '+e);
+        }
+    });
+    setExportStatus('success',L.unpromote_done+' ('+total+')');
+    clearCandidateLayers();
+    loadAll();
+}
+
 // ─── PRE-POPUP ──────────────────────────────────────────────────────────────
 
 function showPrePopup(){
@@ -390,10 +545,9 @@ function showPrePopup(){
     var box = ui.Panel({layout:ui.Panel.Layout.flow('vertical'),style:STYLE.prePopup});
     box.add(ui.Label('⚠ '+L.pre_title,{fontSize:'13px',fontWeight:'bold',color:'#cc8800',margin:'2px'}));
     box.add(ui.Label(L.pre_body,{fontSize:'11px',color:'#333',margin:'2px'}));
-    box.add(ui.Label(prePublicPath(), {fontSize:'11px',fontWeight:'bold',fontFamily:'monospace',color:'#1a73e8',margin:'2px',padding:'4px',backgroundColor:'#fff'}));
     sel.forEach(function(k){
         var parts = k.split('__');
-        box.add(ui.Label('  '+parts[2]+'  |  '+parts[0]+'  |  '+parts[1],{fontSize:'11px',fontFamily:'monospace',color:'#1a73e8',margin:'1px'}));
+        box.add(ui.Label('  '+parts[3]+'  |  '+parts[0]+'  |  '+parts[1]+'  |  '+parts[2],{fontSize:'11px',fontFamily:'monospace',color:'#1a73e8',margin:'1px'}));
     });
     box.add(ui.Label(L.pre_warn,{fontSize:'10px',color:'#888',margin:'4px 2px'}));
     var br = ui.Panel({layout:ui.Panel.Layout.flow('horizontal'),style:{stretch:'horizontal',margin:'4px 0 0 0'}});
@@ -409,8 +563,9 @@ function getAssetInfo(path){
     try{return ee.data.getAsset(path);}catch(e){return null;}
 }
 
-function ensurePrePublicStructure(){
-    var base = CLASSIFICATIONS_ROOT+'PRE_PUBLIC';
+function ensurePrePublicStructure(camp){
+    var root = classificationsRoot(camp);
+    var base = root+'PRE_PUBLIC';
     var info = getAssetInfo(base);
 
     if(info===null){
@@ -432,9 +587,9 @@ function ensurePrePublicStructure(){
         }
     }
 
-    var camp = base + '/' + campaignSlug();
-    if(getAssetInfo(camp)===null){
-        ee.data.createAsset({type:'IMAGE_COLLECTION'}, camp);
+    var camppath = base + '/' + camp.toLowerCase();
+    if(getAssetInfo(camppath)===null){
+        ee.data.createAsset({type:'IMAGE_COLLECTION'}, camppath);
     }
     return true;
 }
@@ -447,16 +602,14 @@ function doPromote(cells){
     setExportStatus('loading','Promovendo '+cells.length+' imagen'+(cells.length===1?'':'es')+'...');
     showLoading();
 
-    if(!ensurePrePublicStructure()){hideLoading();return;}
-
-    var destRoot = prePublicPath();
     var total = 0;
     cells.forEach(function(k){
         var parts = k.split('__');
-        var src = CLASSIFICATIONS_ROOT+'FILTERED/'+parts[1]+'/'+parts[0]+'/'+parts[2];
-        var dest = destRoot+parts[2];
-
-        try{ee.data.getAsset(dest);setExportStatus('info','Ja existe: '+parts[2]);}
+        var camp = parts[0], stage = parts[1], prop = parts[2], period = parts[3];
+        if(!ensurePrePublicStructure(camp))return;
+        var src = classificationsRoot(camp)+'FILTERED/'+prop+'/'+stage+'/'+period;
+        var dest = prePublicPath(camp)+period;
+        try{ee.data.getAsset(dest);setExportStatus('info','Ja existe: '+period+' ('+camp+')');}
         catch(e){
             total++;
             print('Copiando: '+src+' -> '+dest);
@@ -466,7 +619,6 @@ function doPromote(cells){
 
     protocolBox.clear();
     protocolBox.add(ui.Label(L.done+' ('+total+' imagen'+(total===1?'':'es')+')',{fontSize:'12px',color:'#0f9d58',fontWeight:'bold',margin:'4px'}));
-    protocolBox.add(ui.Label('Destino: '+destRoot,{fontSize:'10px',color:'#555',fontFamily:'monospace',margin:'2px'}));
     hideLoading();
     loadAll();
 }
@@ -476,11 +628,25 @@ function doPromote(cells){
 function buildConfigSection(){
     var section = ui.Panel({layout:ui.Panel.Layout.flow('vertical'), style:SECTION_STYLE.config});
     section.add(ui.Label(L.cfg, STYLE.sectionTitle));
+
+    section.add(ui.Label(L.country, STYLE.label));
+    dropdownCountry = ui.Select({items:Object.keys(COUNTRIES), value:COUNTRY, style:STYLE.input});
+    dropdownCountry.onChange(function(v){if(v&&v!==COUNTRY)setCountry(v);});
+    section.add(dropdownCountry);
+
+    dateBox = ui.Panel({layout:ui.Panel.Layout.flow('vertical')});
+    section.add(dateBox);
+    renderDateGrid();
+
     section.add(ui.Label(L.campaign, STYLE.label));
-    dropdownCampaign = ui.Select({items:['MONITOR_01','MONITOR_DEV'], value:'MONITOR_01', style:STYLE.input});
-    dropdownCampaign.onChange(function(){loadAll();});
-    section.add(dropdownCampaign);
-    section.add(ui.Label(L.proposal+': '+proposals.length, {fontSize:'10px',fontFamily:'monospace',color:'#555',margin:'2px 0'}));
+    campaignBox = ui.Panel({layout:ui.Panel.Layout.flow('horizontal')});
+    CAMPAIGNS.forEach(function(c, idx){
+        var cb = ui.Checkbox({label:c, value:idx===0, style:STYLE.gridCell});
+        enabledCampaigns[c] = idx===0;
+        cb.onChange(function(v){enabledCampaigns[c]=v;selectedDate=null;loadAll();});
+        campaignBox.add(cb);
+    });
+    section.add(campaignBox);
     return section;
 }
 
@@ -527,7 +693,7 @@ function buildForm(){
 
     var sidePanel = ui.Panel({
         layout: ui.Panel.Layout.flow('vertical'),
-        style: {width: '520px', margin: '0', padding: '6px', backgroundColor: '#fff'}
+        style: {width: '540px', margin: '0', padding: '6px', backgroundColor: '#fff'}
     });
 
     sidePanel.add(ui.Label('MapBiomas-Fuego | '+L.title,{fontSize:'14px',fontWeight:'bold',color:'#d32f2f',margin:'4px'}));
@@ -562,4 +728,4 @@ function buildForm(){
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
 buildForm();
-print('M9_00 4.2 carregado.');
+print('M9_00 5.0 carregado.');
