@@ -376,8 +376,7 @@ function buildProtocolChecklist(){
         protocolBox.add(cb);
     });
     var link = ui.Label(L.stats_link, {fontSize:'10px',color:'#1a73e8',margin:'2px 0 0 18px',textDecoration:'underline'});
-    link.style().set('cursor','pointer');
-    link.onClick(function(){window.open(STATS_URL, '_blank');});
+    link.setUrl(STATS_URL);
     protocolBox.add(link);
 }
 
