@@ -1,7 +1,7 @@
 # MapBiomas Fire Monitor — M7 / M8 / M9 Scripts
 
 JavaScript (GEE Code Editor) scripts for MONITOR_01 post-classification pipeline.
-Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v5.0).
+Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v5.1).
 
 ## Scripts
 
@@ -11,7 +11,7 @@ Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v5.0).
 | `M7_01_lulc_filters.js` | M7 — ft01 | Water LULC mask by region + solitary pixel cleanup (connectedPixelCount <= 2) |
 | `M7_02_temporal_filter.js` | M7 — ft02 | Monthly memory filter (removes burn if scar in previous months) |
 | `M8_statistics.js` | M8 — Stats | Universal statistics generator (area + LULC) → CSV GCS/Drive |
-| `M9_00_promote_ui.js` | M9 — UI | Redesign v5.0: pais + grid de datas (selecao unica) + campanhas multi (root por campanha); etapas ftXX auto-descobertas; grid por etapa (propuestas x data global); bloqueio de re-promocao + despromover (deleteAsset); protocolo + mapa |
+| `M9_00_promote_ui.js` | M9 — UI | Redesign v5.1: paises checkboxes multi + campanhas multi (root por pais+campanha) + grid de datas; etapas ftXX auto-descobertas; grid por etapa (propuestas x data global); bloqueio por pais+campanha + despromover (painel isolado, deleteAsset); mosaico MINNBR por pais; protocolo + mapa |
 
 ## Naming
 
@@ -36,7 +36,7 @@ M6 REGIONAL/{model_id}/{region}_{period}
 - `M7_00`: digite o nome em "Crear nueva colección" (ou selecione uma existente)
 - `M7_01` / `M7_02`: edite `COLLECTION_BASE` no topo do script (copie/duplique por colecao)
 - `M8_statistics`: universal — `COLLECTIONS = []` varre todas automaticamente; `STAGES` define os estagios
-- `M9_00`: pais (dropdown) + campanhas (checkbox multi, root por campanha) + grid de datas; etapas `ftXX` descobertas automaticamente
+- `M9_00`: paises (checkboxes multi) + campanhas (checkbox multi, root por pais+campanha) + grid de datas; etapas `ftXX` descobertas automaticamente
 
 ## Asset paths
 
