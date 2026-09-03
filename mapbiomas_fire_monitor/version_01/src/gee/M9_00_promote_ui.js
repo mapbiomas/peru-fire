@@ -261,7 +261,8 @@ function loadCampaign(camp, cb){
             ee.data.listAssets(root+'FILTERED/'+prop+'/',{},function(r2,err2){
                 if(!err2&&r2&&r2.assets)r2.assets.forEach(function(a){
                     var name = a.id.split('/').pop();
-                    if(a.type==='FOLDER'&&/^ft\d\d$/.test(name))stageUnion[name]=true;
+                    // etapas ftXX sao IMAGE_COLLECTION no GEE (ver ensureFolder do M7)
+                    if((a.type==='IMAGE_COLLECTION'||a.type==='FOLDER')&&/^ft\d\d$/.test(name))stageUnion[name]=true;
                 });
                 pendingStages--;
                 if(pendingStages===0){
