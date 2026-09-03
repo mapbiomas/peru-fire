@@ -3,7 +3,7 @@ MAPBIOMAS FUEGO - MONITOR_01 - M9_00
 Pre-Public Promotion (UI) — Redesign v5.4
 
 📅 DATA: setembro 2026
-🏷️ VERSAO: 5.4.3
+🏷️ VERSAO: 5.5
 
 📌 SEÇÕES COM FUNDO COLORIDO (ordem vertical):
   CONFIG — cinza       (paises + campanhas + fechas)
@@ -82,9 +82,27 @@ var STYLE = {
     gridCell:     { fontSize:'10px', margin:'1px 2px' },
     gridDate:     { fontSize:'10px', fontFamily:'monospace', color:'#333', margin:'2px 4px', width:'64px' },
     gridHead:     { fontSize:'10px', fontWeight:'bold', color:'#1a73e8', margin:'2px 4px' },
+    swatch:       { width:'10px', height:'10px', margin:'2px 3px', borderRadius:'2px', border:'1px solid rgba(0,0,0,0.3)' },
 };
 
 // ─── APPLICATION STATE ──────────────────────────────────────────────────────
+
+// Paleta de cores unicas por ft/proposta (saturadas, contraste com satelite).
+// As primeiras sao as mais fortes; suporta ate 40 combinacoes.
+var PALETTE = [
+    '#ff0055', '#00ff66', '#6600ff', '#ff9900', '#00ccff', '#ff00aa', '#aaff00', '#ff00ff',
+    '#00ffaa', '#ff5500', '#5500ff', '#00ffdd', '#ffcc00', '#ff0066', '#33ff00', '#cc00ff',
+    '#00aaff', '#ffaa00', '#aa00ff', '#00ff33', '#ff0044', '#66ff00', '#ff00cc', '#00ffee',
+    '#ff8800', '#4400ff', '#00ff88', '#ff2200', '#88ff00', '#ff00ee', '#00ddff', '#ffee00',
+    '#ff0066', '#00ffcc', '#ff00aa', '#22ff00', '#cc00aa', '#00ccff', '#ffaa44', '#ff44cc'
+];
+var colorIndex = {};               // chave stage__proposal -> indice na paleta
+
+function colorFor(stage, proposal){
+    var key = stage+'__'+proposal;
+    if(!(key in colorIndex))colorIndex[key] = Object.keys(colorIndex).length % PALETTE.length;
+    return PALETTE[colorIndex[key]];
+}
 
 var selectedCells = {};          // key: pais__campanha__etapa__propuesta__fecha
 var countryData = {};            // { pais: { CAMPAIGN: { proposals, stages, stageData, promoted } } }
@@ -214,7 +232,7 @@ function setCellSelected(country, camp, stage, proposal, period, v){
     if(v){
         loadMosaic(country, period);
         var img = ee.Image(classificationsRoot(country, camp)+'FILTERED/'+proposal+'/'+stage+'/'+period).select('probability').selfMask();
-        manageMapLayer('cand_'+key, img, {min:0,max:1000,palette:['#fcc','#f00','#600']}, 'Cand '+period+' | '+proposal+' | '+stage+' | '+camp+' | '+country);
+        manageMapLayer('cand_'+key, img, {min:0,max:1000,palette:[colorFor(stage, proposal)]}, 'Cand '+period+' | '+proposal+' | '+stage+' | '+camp+' | '+country);
         // radio por linea: desmarcar otras propuestas de la misma fecha en este grid
         countryData[country][camp].proposals.forEach(function(p2){
             if(p2!==proposal){
@@ -479,6 +497,8 @@ function buildStageGrid(country, camp, stage, d){
     head.add(ui.Label(stage, STYLE.gridHeader));
     d.proposals.forEach(function(prop){
         var headPromoted = origin && origin.proposal===prop && origin.stage===stage;
+        var sw = ui.Label('', {backgroundColor:colorFor(stage, prop), ...STYLE.swatch});
+        head.add(sw);
         head.add(ui.Label(prop + (headPromoted?'  ✅':''), {fontSize:'10px',fontWeight:'bold',color:headPromoted?'#0f9d58':'#1a73e8',margin:'2px 4px'}));
     });
     grid.add(head);
@@ -493,6 +513,8 @@ function buildStageGrid(country, camp, stage, d){
         }
         var cellPromoted = origin && origin.proposal===prop && origin.stage===stage;
         var key = cellKey(country, camp, stage, prop, selectedDate);
+        var sw = ui.Label('', {backgroundColor:colorFor(stage, prop), ...STYLE.swatch});
+        row.add(sw);
         if(cellPromoted){
             var viewCb = ui.Checkbox({label:'✅', value:!!viewChecks[key], style:STYLE.gridCell});
             viewCb.onChange(function(v){toggleViewPromoted(country, camp, stage, prop, selectedDate, key, v);});
@@ -513,7 +535,7 @@ function toggleViewPromoted(country, camp, stage, proposal, period, key, v){
     if(v){
         loadMosaic(country, period);
         var img = ee.Image(prePublicPath(country, camp)+period).select('probability').selfMask();
-        manageMapLayer('promoted_'+key, img, {min:0,max:1000,palette:['#fcc','#f00','#600']}, 'Promovido '+period+' | '+proposal+' | '+stage+' | '+camp+' | '+country);
+        manageMapLayer('promoted_'+key, img, {min:0,max:1000,palette:[colorFor(stage, proposal)]}, 'Promovido '+period+' | '+proposal+' | '+stage+' | '+camp+' | '+country);
     } else {
         removeMapLayer('promoted_'+key);
     }
@@ -826,4 +848,4 @@ function buildForm(){
 // ─── INIT ───────────────────────────────────────────────────────────────────
 
 buildForm();
-print('M9_00 5.4.3 carregado.');
+print('M9_00 5.5 carregado.');
