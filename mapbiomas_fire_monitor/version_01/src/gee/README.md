@@ -1,7 +1,7 @@
 # MapBiomas Fire Monitor — M7 / M8 / M9 Scripts
 
 JavaScript (GEE Code Editor) scripts for MONITOR_01 post-classification pipeline.
-Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v2.0).
+Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v4.2).
 
 ## Scripts
 
@@ -11,11 +11,11 @@ Sincronizado com `mapbiomas-fire/5-Monitor-Fuego` (M7 v4.9, M8 v3.1, M9 v2.0).
 | `M7_01_lulc_filters.js` | M7 — ft01 | Water LULC mask by region + solitary pixel cleanup (connectedPixelCount <= 2) |
 | `M7_02_temporal_filter.js` | M7 — ft02 | Monthly memory filter (removes burn if scar in previous months) |
 | `M8_statistics.js` | M8 — Stats | Universal statistics generator (area + LULC) → CSV GCS/Drive |
-| `M9_00_promote_ui.js` | M9 — UI | Promote candidates from CANDIDATES/ to PRE_PUBLIC/ |
+| `M9_00_promote_ui.js` | M9 — UI | Matriz de candidatos (grids por etapa: ft00/ft01/ft02 × propuestas × fechas), bloqueio de re-promocao, despromover (deleteAsset), protocolo + mapa. Promove de FILTERED/ → PRE_PUBLIC/ |
 
 ## Naming
 
-- Folders: `FILTERED/`, `CANDIDATES/`, `PRE_PUBLIC/` (UPPER)
+- Folders: `FILTERED/`, `PRE_PUBLIC/` (UPPER)
 - Collections: `{collection}/ft{NN}` (lower), ex: `propuesta_a/ft01`
 - Images: `{ano}` or `{ano}_{mes}` (lower)
 - Bands: `probability` + `dayOfYear`
@@ -36,14 +36,13 @@ M6 REGIONAL/{model_id}/{region}_{period}
 - `M7_00`: digite o nome em "Crear nueva colección" (ou selecione uma existente)
 - `M7_01` / `M7_02`: edite `COLLECTION_BASE` no topo do script (copie/duplique por colecao)
 - `M8_statistics`: universal — `COLLECTIONS = []` varre todas automaticamente; `STAGES` define os estagios
-- `M9_00`: dropdown de colecao carrega tudo que existe em `CANDIDATES/`
+- `M9_00`: matriz de candidatos carrega tudo que existe em `FILTERED/` (propostas × etapas `STAGES`)
 
 ## Asset paths
 
 ```
 CATALOG_01/MONITOR_01/LIBRARY_CLASSIFICATIONS/
 ├── FILTERED/{collection}/ft{00..02}/{period}
-├── CANDIDATES/{collection}/{period}
 ├── PRE_PUBLIC/{campanha}/{period}
 └── LIBRARY_STATISTICS/m8_stats_{collection}.csv   (GCS/Drive)
 ```
