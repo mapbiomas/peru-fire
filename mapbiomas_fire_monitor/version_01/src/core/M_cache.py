@@ -18,6 +18,22 @@ class CacheManager:
     _lock = threading.RLock() # Lock reentrante para evitar race conditions no mesmo kernel
 
     @staticmethod
+    def _scope():
+        """Configuracao a que este cache pertence; evita reutilizar estado de outro pais/campanha."""
+        from M0_auth_config import CONFIG
+        if not CONFIG:
+            return None
+        return {
+            'country': CONFIG.get('country'),
+            'bucket': CONFIG.get('bucket'),
+            'gcs_library_images_prefix': CONFIG.get('gcs_library_images_prefix'),
+            'gcs_campaigns_prefix': CONFIG.get('gcs_campaigns_prefix'),
+            'gee_library_images_prefix': CONFIG.get('gee_library_images_prefix'),
+            'gee_campaigns_prefix': CONFIG.get('gee_campaigns_prefix'),
+            'campaign': CONFIG.get('campaign'),
+        }
+
+    @staticmethod
     def clear():
         """Deleta cache local + GCS e reseta o estado em memória."""
         with CacheManager._lock:
@@ -47,13 +63,17 @@ class CacheManager:
         """
         Carrega cache priorizando o arquivo local para velocidade offline.
         """
+        scope = CacheManager._scope()
         if CacheManager._state is not None and not force:
-            return CacheManager._state
+            if CacheManager._state.get('_cache_scope') == scope:
+                return CacheManager._state
+            CacheManager._state = None
         
         with CacheManager._lock:
             CacheManager._state = {
                 "updated_at": None,
                 "country": CONFIG['country'],
+                "_cache_scope": scope,
                 "assets_monthly": [],
                 "assets_annually": [],
                 "gcs_chunks": {},
@@ -77,6 +97,8 @@ class CacheManager:
                     try:
                         with open(local_path, 'r') as f:
                             data = json.load(f)
+                            if data.get('_cache_scope') != scope:
+                                continue
                             CacheManager._state.update(data)
                             local_found = True
                             break
@@ -94,13 +116,14 @@ class CacheManager:
                 if fs.exists(gcs_path):
                     with fs.open(gcs_path, 'r') as f:
                         data = json.load(f)
-                        CacheManager._state.update(data)
-                        # Salva uma cópia local para a próxima vez
-                        try:
-                            with open(CacheManager.CACHE_FILE, 'w') as lf:
-                                json.dump(data, lf, indent=2)
-                        except Exception:
-                            pass
+                        if data.get('_cache_scope') == scope:
+                            CacheManager._state.update(data)
+                            # Salva uma cópia local para a próxima vez
+                            try:
+                                with open(CacheManager.CACHE_FILE, 'w') as lf:
+                                    json.dump(data, lf, indent=2)
+                            except Exception:
+                                pass
                 else:
                     print(f"Cache not found at {gcs_path}.")
             except Exception as e:
@@ -127,7 +150,7 @@ class CacheManager:
         mosaic_methods = _all_mosaic_methods()
         # CORRIGIDO: Escanear TODOS os sensores relevantes, não apenas o GLOBAL_OPTS atual
         # (o sensor padrão pode ser 'landsat' mas os dados podem ser de 'sentinel2')
-        all_sensors = ['sentinel2', 'landsat']  # Expandir conforme necessário
+        all_sensors = ['sentinel2', 'landsat', 'hls', 'modis']
         tasks = []
         
         for sensor_name in all_sensors:
@@ -408,6 +431,7 @@ class CacheManager:
                 
                 state['updated_at'] = datetime.datetime.utcnow().isoformat() + 'Z'
                 state['country'] = CONFIG['country']
+                state['_cache_scope'] = CacheManager._scope()
                 
                 # Salva local primeiro para garantir consistência imediata
                 try:
@@ -427,8 +451,8 @@ class CacheManager:
     def get_state():
         """Retorna estado atual."""
         with CacheManager._lock:
-            if CacheManager._state is None:
-                return CacheManager.load()
+            if CacheManager._state is None or CacheManager._state.get('_cache_scope') != CacheManager._scope():
+                return CacheManager.load(force=True)
             return CacheManager._state
 
     @staticmethod

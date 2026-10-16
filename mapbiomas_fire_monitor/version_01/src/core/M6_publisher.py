@@ -8,7 +8,7 @@ from datetime import datetime
 import numpy as np
 import rasterio
 from osgeo import gdal
-from M0_auth_config import CONFIG, _get_fs, _gcs_download, _gcs_upload, get_temp_dir, gcs_classifications_path
+from M0_auth_config import CONFIG, _get_fs, _gcs_download, _gcs_upload, get_temp_dir, gcs_classifications_path, get_model_scale
 from M5_workplan import (
     classified_tiles_dir, classified_region_dir, region_path,
     consolidated_stats_path, classifications_base,
@@ -20,11 +20,40 @@ from M_ui_components import _fmt_time, ProgressTracker
 
 
 def _get_resolution_from_model(model_id):
-    """Extrai resolução em metros a partir do model_id (ex: 'sentinel2' → 10, 'landsat' → 30)."""
-    model_lower = model_id.lower()
-    if 'landsat' in model_lower:
-        return 30
-    return 10
+    """Resolve pixel size from the sensor encoded in the trained model ID."""
+    return get_model_scale(model_id)
+
+
+def _period_export_metadata(period):
+    """Return GEE time properties for a YYYY or YYYY_MM period."""
+    period_parts = str(period).split('_')
+    if len(period_parts) not in (1, 2):
+        raise ValueError(f"Invalid period '{period}'; expected YYYY or YYYY_MM.")
+
+    year_s = period_parts[0]
+    year = int(year_s)
+    if len(period_parts) == 2:
+        month_s = period_parts[1]
+        month = int(month_s)
+        start = datetime(year, month, 1)
+        end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+        periodicity = 'monthly'
+        asset_type = 'monthly_burned_area'
+    else:
+        month_s = '0'
+        start = datetime(year, 1, 1)
+        end = datetime(year + 1, 1, 1)
+        periodicity = 'yearly'
+        asset_type = 'yearly_burned_area'
+
+    return {
+        'year': year_s,
+        'month': month_s,
+        'time_start': int(start.timestamp() * 1000),
+        'time_end': int(end.timestamp() * 1000),
+        'periodicity': periodicity,
+        'asset_type': asset_type,
+    }
 
 
 def _gcs_exists(path, timeout=15):
@@ -234,14 +263,7 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
     except Exception:
         pass
 
-    # Parse period -> timestamps
-    year_s, month_s = period.split('_')
-    y, m = int(year_s), int(month_s)
-    ts_start = int(datetime(y, m, 1).timestamp() * 1000)
-    if m == 12:
-        ts_end = int(datetime(y + 1, 1, 1).timestamp() * 1000)
-    else:
-        ts_end = int(datetime(y, m + 1, 1).timestamp() * 1000)
+    time_metadata = _period_export_metadata(period)
 
     ee_project = CONFIG.get('gee_project', 'mapbiomas-peru')
     country = CONFIG.get('country', 'peru')
@@ -251,19 +273,19 @@ def upload_to_gee(model_id, region, period, fs=None, logger=None, campaign=None,
         f'earthengine --project {ee_project} upload image '
         f'--asset_id={asset_id} '
         f'--pyramiding_policy=mode '
-        f'--time_start {ts_start} '
-        f'--time_end {ts_end} '
+        f'--time_start {time_metadata["time_start"]} '
+        f'--time_end {time_metadata["time_end"]} '
         f'--property source=mapbiomas-fire '
         f'--property model_id={model_id} '
         f'--property region={region} '
         f'--property period={period} '
-        f'--property year={year_s} '
-        f'--property month={month_s} '
+        f'--property year={time_metadata["year"]} '
+        f'--property month={time_metadata["month"]} '
         f'--property campaign={campaign or ""} '
         f'--property country={country} '
         f'--property version={version} '
-        f'--property type=monthly_burned_area '
-        f'--property periodicity=monthly '
+        f'--property type={time_metadata["asset_type"]} '
+        f'--property periodicity={time_metadata["periodicity"]} '
         f'{gcs_uri}'
     )
 
@@ -509,20 +531,17 @@ def generate_region_thumbnail(region_name, size=128):
     if not getattr(ee.data, '_credentials', None):
         authenticate()
 
-    peru = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(
-        ee.Filter.eq('ADM0_NAME', 'Peru'))
     all_regions = ee.FeatureCollection(CONFIG['asset_regions'])
     sel_region = all_regions.filter(
         ee.Filter.eq(REGION_NAME_PROPERTY, region_name))
     grid = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
 
-    bg = peru.style(**{'fillColor': 'f0f0f0', 'color': 'cccccc', 'width': 1})
     region_lines = all_regions.style(**{'color': '2980b9', 'width': 1, 'fillColor': '00000000'})
     sel_fill = sel_region.style(**{'color': 'f39c12', 'width': 2, 'fillColor': 'f39c1260'})
     grid_lines = grid.style(**{'color': 'e0e0e0', 'width': 0.3, 'fillColor': '00000000'})
 
-    overlay = ee.ImageCollection([bg, region_lines, sel_fill, grid_lines]).mosaic()
-    bounds = peru.geometry().bounds(1, 'EPSG:4326')
+    overlay = ee.ImageCollection([region_lines, sel_fill, grid_lines]).mosaic()
+    bounds = all_regions.geometry().bounds(1, 'EPSG:4326')
     try:
         url = overlay.getThumbURL({'region': bounds, 'dimensions': size, 'format': 'png'})
         resp = requests.get(url, timeout=60)

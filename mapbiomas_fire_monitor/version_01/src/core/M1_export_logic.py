@@ -165,6 +165,16 @@ def get_landsat_constellation(year):
     elif year <= 2021: return ['L7', 'L8']
     else: return ['L8', 'L9']
 
+def _landsat_blocklist_filter(sensor):
+    """Build a scene exclusion filter from the live GEE blocklist module."""
+    from M_blocklist import get_blocklist
+    blocked_ids = get_blocklist(sensor)
+    if not blocked_ids:
+        return None
+    return ee.Filter.Not(
+        ee.Filter.inList('system:index', ee.List(blocked_ids))
+    )
+
 def get_quality_mosaic(sensor, year, start_date, end_date, bounds, month=None, method='minnbr'):
     """
     Gera o mosaico de qualidade para a constelação e método escolhidos.
@@ -177,10 +187,18 @@ def get_quality_mosaic(sensor, year, start_date, end_date, bounds, month=None, m
     if sensor == 'landsat':
         constellation = get_landsat_constellation(year)
         lst_collects = []
-        if 'L9' in constellation: lst_collects.append(ee.ImageCollection("LANDSAT/LC09/C02/T1_L2").filterDate(start_date, end_date).filterBounds(bounds).map(process_ls89))
-        if 'L8' in constellation: lst_collects.append(ee.ImageCollection("LANDSAT/LC08/C02/T1_L2").filterDate(start_date, end_date).filterBounds(bounds).map(process_ls89))
-        if 'L7' in constellation: lst_collects.append(ee.ImageCollection("LANDSAT/LE07/C02/T1_L2").filterDate(start_date, end_date).filterBounds(bounds).map(process_ls57))
-        if 'L5' in constellation: lst_collects.append(ee.ImageCollection("LANDSAT/LT05/C02/T1_L2").filterDate(start_date, end_date).filterBounds(bounds).map(process_ls57))
+        blocked_filter = _landsat_blocklist_filter(sensor)
+
+        def _filtered_landsat(collection_id, processor):
+            collection = ee.ImageCollection(collection_id).filterDate(start_date, end_date).filterBounds(bounds)
+            if blocked_filter is not None:
+                collection = collection.filter(blocked_filter)
+            return collection.map(processor)
+
+        if 'L9' in constellation: lst_collects.append(_filtered_landsat("LANDSAT/LC09/C02/T1_L2", process_ls89))
+        if 'L8' in constellation: lst_collects.append(_filtered_landsat("LANDSAT/LC08/C02/T1_L2", process_ls89))
+        if 'L7' in constellation: lst_collects.append(_filtered_landsat("LANDSAT/LE07/C02/T1_L2", process_ls57))
+        if 'L5' in constellation: lst_collects.append(_filtered_landsat("LANDSAT/LT05/C02/T1_L2", process_ls57))
         collection = lst_collects[0]
         for c in lst_collects[1:]: collection = collection.merge(c)
         multiplier = 100
@@ -225,7 +243,9 @@ def get_quality_mosaic(sensor, year, start_date, end_date, bounds, month=None, m
 # ─── FUNÇÕES DE EXPORTAÇÃO ─────────────────────────────────────────────────────
 
 def export_to_asset(mosaic_obj, name, year, month=None, period='monthly', config=None, band=None, mosaic=None, sensor=None):
-    country_geom = config.get_country_geometry() if config else mosaic_obj.geometry()
+    from M0_auth_config import get_country_geometry, get_sensor_scale
+
+    country_geom = config.get_country_geometry() if config else get_country_geometry()
     if period == 'monthly':
         t_start = ee.Date(f'{year}-{month:02d}-01').millis()
         t_end = ee.Date(f'{year}-{month:02d}-01').advance(1, 'month').millis()
@@ -243,7 +263,7 @@ def export_to_asset(mosaic_obj, name, year, month=None, period='monthly', config
         'period': period, 'name': name,
         'country': CONFIG['country'],
         'sensor': s,
-        'mosaic': GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower() + ("_buffer" if GLOBAL_OPTS.get('FIRE_POTENTIAL_FILTER', False) else ""),
+        'mosaic': (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).lower(),
         'band': band or 'all',
         'produced_for': 'mapbiomas-fire'
     }
@@ -265,7 +285,7 @@ def export_to_asset(mosaic_obj, name, year, month=None, period='monthly', config
 
     task = ee.batch.Export.image.toAsset(
         image=img, description=f"{GLOBAL_OPTS['PERSONAL_TASK_FLAG']}_ASSET_{name}", assetId=asset_id,
-        region=country_geom.bounds(), scale=config.get_sensor_scale() if config else 10, maxPixels=1e13,
+        region=country_geom.bounds(), scale=get_sensor_scale(s), maxPixels=1e13,
         pyramidingPolicy={'.default': 'median'},
         overwrite=True
     )
@@ -295,13 +315,14 @@ def clear_gcs_chunks(year, month=None, period='monthly'):
         print(f"[WARN] Failed to clean chunks: {e}")
 
 
-def delete_gcs_band(year, month, period, band):
+def delete_gcs_band(year, month, period, band, sensor=None, mosaic=None):
     """Deleta os chunks de uma banda específica no GCS."""
-    from M0_auth_config import monthly_chunk_path, yearly_chunk_path, CONFIG, mosaic_name, GLOBAL_OPTS
+    from M0_auth_config import monthly_chunk_path, yearly_chunk_path, CONFIG, mosaic_name, GLOBAL_OPTS, _single
     from M_gcs import glob, rm
-    m_method = GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()
-    folder = monthly_chunk_path(year, month, mosaic=m_method) if period == 'monthly' else yearly_chunk_path(year, mosaic=m_method)
-    name = mosaic_name(year, month, period, mosaic=m_method)
+    m_method = (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).lower()
+    s = sensor or _single(GLOBAL_OPTS['SENSOR'])
+    folder = monthly_chunk_path(year, month, mosaic=m_method, sensor=s) if period == 'monthly' else yearly_chunk_path(year, mosaic=m_method, sensor=s)
+    name = mosaic_name(year, month, period, mosaic=m_method, sensor=s)
     prefix = f"{CONFIG['bucket']}/{folder}/{name}_{band}"
     print(f"[GCS] Removing band {band}: gs://{prefix}*")
     try:
@@ -326,7 +347,7 @@ def delete_asset_band(year, month, period, band):
 
 
 def export_to_gcs(mosaic_obj, name, year, month=None, period='monthly', bands=None, config_module=None, mosaic=None, sensor=None):
-    from M0_auth_config import CONFIG, GLOBAL_OPTS, monthly_chunk_path, yearly_chunk_path, mosaic_name
+    from M0_auth_config import CONFIG, GLOBAL_OPTS, monthly_chunk_path, yearly_chunk_path, mosaic_name, get_sensor_scale
     geometry = config_module.get_country_geometry() if config_module else mosaic_obj.geometry()
     
     m_method = mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr').lower()
@@ -349,7 +370,7 @@ def export_to_gcs(mosaic_obj, name, year, month=None, period='monthly', bands=No
             image=mosaic_obj.select(band).clip(geometry),
             description=f"{GLOBAL_OPTS['PERSONAL_TASK_FLAG']}_GCS_{band_name}", bucket=CONFIG['bucket'],
             fileNamePrefix=f"{folder}/{band_name}_", region=geometry.bounds(),
-            scale=10, maxPixels=1e13, fileFormat='GeoTIFF',
+            scale=get_sensor_scale(s), maxPixels=1e13, fileFormat='GeoTIFF',
             formatOptions={'cloudOptimized': True},
         )
         task.start()

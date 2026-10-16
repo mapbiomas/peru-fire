@@ -2,7 +2,7 @@ import os
 import json
 import time
 import datetime
-from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs, gcs_classifications_path, gcs_models_path
+from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs, gcs_classifications_path, gcs_models_path, get_model_scale
 
 # --- Stale lock cleanup on startup ---
 _lock_path_stale = os.path.join(
@@ -275,7 +275,7 @@ def archive_job_on_gcs(job, tile_results, fs=None):
     total_pixels = sum(tr.get('total_pixels', 0) for tr in tile_results)
     burned_pixels = sum(tr.get('burned_pixels', 0) for tr in tile_results)
     confidences = [tr.get('mean_confidence', 0) for tr in tile_results if tr.get('burned_pixels', 0) > 0]
-    resolution_m = 10
+    resolution_m = get_model_scale(model_id)
     pixel_area_m2 = resolution_m ** 2
     burned_area_km2 = burned_pixels * pixel_area_m2 / 1_000_000
     timestamp = datetime.datetime.utcnow().strftime('T%Y%m%dT%H%M%SZ')

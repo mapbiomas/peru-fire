@@ -123,6 +123,7 @@ def gee_classifications_path(campaign=None):
 
 _AUTHENTICATED = False
 _GCS_CREDENTIALS = None
+_MODEL_SCALE_CACHE = {}
 
 
 def authenticate(project=None):
@@ -137,29 +138,29 @@ def authenticate(project=None):
     
     import ee
 
-    if getattr(ee.data, '_credentials', None):
-        _AUTHENTICATED = True
-        return
-    
-    # Deteccao de ambiente Colab para autenticacao GCS
-    try:
-        import google.colab
-        print("[COLAB] Detected Google Colab environment. Authenticating user...")
-        from google.colab import auth
-        auth.authenticate_user()
-        import google.auth
-        _GCS_CREDENTIALS, _ = google.auth.default()
-    except ImportError:
-        pass  # Ambiente local, assume Application Default Credentials (ADC)
-    
-    try:
+    if not getattr(ee.data, '_credentials', None):
+        # Deteccao de ambiente Colab para autenticacao GCS
+        try:
+            import google.colab
+            print("[COLAB] Detected Google Colab environment. Authenticating user...")
+            from google.colab import auth
+            auth.authenticate_user()
+            import google.auth
+            _GCS_CREDENTIALS, _ = google.auth.default()
+        except ImportError:
+            pass  # Ambiente local, assume Application Default Credentials (ADC)
+
+        try:
+            ee.Initialize(project=project)
+            print("[GEE] Inicializado.")
+        except Exception:
+            print("GEE session expired or null. Starting authentication...")
+            ee.Authenticate()
+            ee.Initialize(project=project)
+            print("[GEE] Authenticated successfully.")
+    else:
         ee.Initialize(project=project)
-        print("[GEE] Inicializado.")
-    except Exception:
-        print("GEE session expired or null. Starting authentication...")
-        ee.Authenticate()
-        ee.Initialize(project=project)
-        print("[GEE] Authenticated successfully.")
+        print("[GEE] Reusing credentials for configured project.")
     
     from M_gcs import authenticate as _mgcs_auth
     _mgcs_auth()
@@ -230,8 +231,22 @@ def set_global_opts(
     """
     global GLOBAL_OPTS, CONFIG
 
+    requested_periods = periodicity if isinstance(periodicity, list) else [periodicity]
+    requested_periods = [str(p).lower() for p in requested_periods]
+    if len(requested_periods) != 1 or requested_periods[0] not in {'monthly', 'yearly'}:
+        raise ValueError("periodicity must contain exactly one value: 'monthly' or 'yearly'.")
+
+    selected_mosaics = None
+    if mosaic_methods is not None:
+        from M_mosaics import all_methods as _all_mosaic_methods
+        valid_mosaics = set(_all_mosaic_methods())
+        requested_mosaics = mosaic_methods if isinstance(mosaic_methods, list) else [mosaic_methods]
+        selected_mosaics = [m for m in requested_mosaics if m in valid_mosaics]
+        if not selected_mosaics:
+            raise ValueError(f"mosaic_methods must contain one or more of: {', '.join(sorted(valid_mosaics))}.")
+
     # Build CONFIG
-    CONFIG = _make_config(
+    new_config = _make_config(
         country=country,
         bucket=gcs_bucket,
         gcs_library_images_prefix=gcs_library_images_prefix,
@@ -243,16 +258,22 @@ def set_global_opts(
         asset_regions=asset_regions,
     )
 
+    # Preserve the CONFIG object so modules that imported it keep the active values.
+    if CONFIG is None:
+        CONFIG = new_config
+    else:
+        CONFIG.clear()
+        CONFIG.update(new_config)
+
     GLOBAL_OPTS['SENSOR'] = sensor if isinstance(sensor, list) else [sensor]
-    GLOBAL_OPTS['PERIODICITY'] = periodicity if isinstance(periodicity, list) else [periodicity]
+    GLOBAL_OPTS['PERIODICITY'] = requested_periods
     GLOBAL_OPTS['PERSONAL_TASK_FLAG'] = personal_task_flag
     GLOBAL_OPTS['LANGUAGE'] = language
 
     # Aplica filtro de metodos de mosaico se passado
-    if mosaic_methods is not None:
-        from M_mosaics import all_methods as _all_mosaic_methods
-        valid = set(_all_mosaic_methods())
-        CONFIG['mosaic_methods'] = [m for m in mosaic_methods if m in valid]
+    if selected_mosaics is not None:
+        CONFIG['mosaic_methods'] = selected_mosaics
+    GLOBAL_OPTS['MOSAIC_METHOD'] = CONFIG['mosaic_methods'][0]
 
     from M_lang import L
     L.load_locale(language)
@@ -538,7 +559,51 @@ def get_sensor_scale(sensor=None):
         'hls': 30,
         'modis': 250
     }
-    return scales.get(sensor, 30)
+    if sensor not in scales:
+        raise ValueError(f"Unsupported sensor for scale lookup: {sensor}")
+    return scales[sensor]
+
+def get_model_scale(model_id):
+    """Resolve pixel size from the sensor encoded in a trained model ID."""
+    cache_key = (CONFIG.get('country'), CONFIG.get('campaign'), str(model_id))
+    if cache_key in _MODEL_SCALE_CACHE:
+        return _MODEL_SCALE_CACHE[cache_key]
+
+    known_sensors = ('sentinel2', 'landsat', 'hls', 'modis')
+    tokens = str(model_id).lower().split('_')
+    model_sensors = [sensor for sensor in known_sensors if sensor in tokens]
+    if model_sensors:
+        scales = {get_sensor_scale(sensor) for sensor in model_sensors}
+        if len(scales) == 1:
+            scale = scales.pop()
+            _MODEL_SCALE_CACHE[cache_key] = scale
+            return scale
+
+    # Multi-sensor model IDs do not carry one sensor; inference uses the first
+    # band in band_order as the output raster grid, so use that band's sensor.
+    try:
+        import json
+        meta_path = f"{CONFIG['bucket']}/{gcs_models_path()}/{model_id}/metadata.json"
+        with _get_fs().open(meta_path, 'r') as f:
+            metadata = json.load(f)
+        band_order = metadata.get('band_order', [])
+        bands_config = metadata.get('bands_config', {})
+        if band_order:
+            sensor = bands_config.get(band_order[0], {}).get('sensor')
+            if sensor:
+                scale = get_sensor_scale(sensor)
+                _MODEL_SCALE_CACHE[cache_key] = scale
+                return scale
+    except Exception:
+        pass
+
+    configured = [s.lower() for s in GLOBAL_OPTS.get('SENSOR', []) if s.lower() in known_sensors]
+    configured_scales = {get_sensor_scale(sensor) for sensor in configured}
+    if len(configured_scales) == 1:
+        scale = configured_scales.pop()
+        _MODEL_SCALE_CACHE[cache_key] = scale
+        return scale
+    raise ValueError(f"Cannot determine one pixel scale for model '{model_id}'.")
 
 def set_country(country):
     """Update country while preserving project-level params."""

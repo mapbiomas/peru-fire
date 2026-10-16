@@ -320,7 +320,7 @@ class M6WorkplanUI:
             if not data:
                 return
             now = time.strftime('%Y-%m-%d')
-            fname = f"peru_fire_stats_{f_model.value}_{f_region.value}_{f_period.value}_{now}.csv"
+            fname = f"{CONFIG.get('country', 'fire')}_fire_stats_{f_model.value}_{f_region.value}_{f_period.value}_{now}.csv"
             fname = fname.replace(' ', '_').replace('/', '-')
 
             output = io.StringIO()

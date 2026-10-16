@@ -270,7 +270,7 @@ class ModelTrainerUI(PipelineStepUI):
                 if m:
                     regions.add(f"r{m.group(1)}")
             if not regions:
-                short = 'peru_v1'
+                short = f"{CONFIG.get('country', 'fire')}_v1"
             else:
                 region_part = '_'.join(sorted(regions)) if len(regions) == 1 else 'multiregion'
                 n_bands = 4
@@ -338,7 +338,9 @@ class ModelTrainerUI(PipelineStepUI):
         try:
             # 1. Tenta carregar o cache. O CacheManager agora tentará local primeiro.
             state = CacheManager.load()
-            all_cogs = state.get('cogs_monthly', []) + state.get('cogs_annually', [])
+            selected_period = GLOBAL_OPTS['PERIODICITY'][0]
+            period_key = 'cogs_monthly' if selected_period == 'monthly' else 'cogs_annually'
+            all_cogs = state.get(period_key, [])
             
             if not all_cogs:
                 raise ValueError("Cache vazio")
@@ -365,28 +367,22 @@ class ModelTrainerUI(PipelineStepUI):
                 
                 return {'sensor': sensor, 'mosaic': mosaic, 'band': band}
 
-            # Processar Mensais
-            for cog_name in state.get('cogs_monthly', []):
+            period_key = 'cogs_monthly' if selected_period == 'monthly' else 'cogs_annually'
+            period_label = 'mensal' if selected_period == 'monthly' else 'anual'
+            for cog_name in state.get(period_key, []):
                 p = _parse_cog_agnostic(cog_name)
                 if p:
-                    combo = (p['sensor'], p['mosaic'], 'mensal')
-                    if combo not in available_combos: available_combos[combo] = set()
-                    available_combos[combo].add(p['band'])
-
-            # Processar Anuais
-            for cog_name in state.get('cogs_annually', []):
-                p = _parse_cog_agnostic(cog_name)
-                if p:
-                    combo = (p['sensor'], p['mosaic'], 'anual')
+                    combo = (p['sensor'], p['mosaic'], period_label)
                     if combo not in available_combos: available_combos[combo] = set()
                     available_combos[combo].add(p['band'])
         except Exception:
             # Fallback offline fixo se nem o cache existir
+            selected_period = GLOBAL_OPTS['PERIODICITY'][0]
+            period_label = 'mensal' if selected_period == 'monthly' else 'anual'
             all_combos = {
-                ('sentinel2', 'minnbr', 'mensal'): {'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'},
-                ('sentinel2', 'minnbr_buffer', 'mensal'): {'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'},
-                ('landsat', 'minnbr', 'mensal'): {'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'},
-                ('landsat', 'minnbr_buffer', 'mensal'): {'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'},
+                (sensor, mosaic, period_label): {'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'}
+                for sensor in ('sentinel2', 'landsat')
+                for mosaic in ('minnbr', 'minnbr_buffer')
             }
             active = [s.lower() for s in GLOBAL_OPTS.get('SENSOR', ['sentinel2'])]
             available_combos = {k: v for k, v in all_combos.items() if k[0] in active}

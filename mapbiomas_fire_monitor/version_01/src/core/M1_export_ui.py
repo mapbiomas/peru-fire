@@ -59,13 +59,19 @@ class ExportDispatcherUI(PipelineStepUI):
     _CELL_W  = '80px'
 
     def _on_select_all(self, _):
-        rw = is_edit_mode()
         for chk in self.chk_dict.values():
-            if not chk.disabled and (rw or not chk._meta.get('exists')): chk.value = True
+            if not chk.disabled and not chk._meta.get('exists'): chk.value = True
 
     def _on_select_none(self, _):
         for chk in self.chk_dict.values():
             if not chk.disabled: chk.value = False
+
+    def _on_reexport_toggle(self, change):
+        config_module.set_edit_mode(change['new'])
+        for chk in self.chk_dict.values():
+            chk.disabled = chk._meta.get('active', False) or (
+                chk._meta.get('exists', False) and not change['new']
+            )
 
     def _on_select_row(self, btn):
         prefix = f"{btn._sensor}_{btn._period}_{btn._mosaic}_{btn._date}_{btn._type}_"
@@ -149,6 +155,7 @@ class ExportDispatcherUI(PipelineStepUI):
                         
                         exists = exists_gcs if row_type == 'GCS' else exists_gee
                         chk._meta['exists'] = exists
+                        chk._meta['active'] = is_active
                         
                         if is_active:
                             status, css = 'RUN', 'mfm-run'
@@ -157,8 +164,7 @@ class ExportDispatcherUI(PipelineStepUI):
                         else:
                             status, css = 'MISS', 'mfm-null'
                         
-                        if not is_edit_mode():
-                            if exists or is_active: chk.disabled = True
+                        chk.disabled = is_active or (exists and not is_edit_mode())
                         
                         cell = PipelineStepUI.make_status_cell(chk, status, css, width='auto')
                         cell.layout.flex = '1'
@@ -206,9 +212,16 @@ class ExportDispatcherUI(PipelineStepUI):
         btn_none = widgets.Button(description=Lang.CLEAR_SELECTION, button_style='warning', layout=L(width='150px'))
         btn_all.on_click(self._on_select_all)
         btn_none.on_click(self._on_select_none)
+
+        self.chk_reexport = widgets.Checkbox(
+            value=is_edit_mode(),
+            description='Allow re-export of existing outputs',
+            indent=False
+        )
+        self.chk_reexport.observe(self._on_reexport_toggle, names='value')
         
         footer = widgets.VBox([
-            widgets.HBox([btn_all, btn_none, self.btn_refresh, self.loader_html], layout=L(margin='15px 0', gap='10px', align_items='center'))
+            widgets.HBox([btn_all, btn_none, self.chk_reexport, self.btn_refresh, self.loader_html], layout=L(margin='15px 0', gap='10px', align_items='center'))
         ])
 
         sensors = [s.upper() for s in (GLOBAL_OPTS['SENSOR'] if isinstance(GLOBAL_OPTS['SENSOR'], list) else [GLOBAL_OPTS['SENSOR']])]
@@ -355,6 +368,18 @@ def start_export(ui_obj, mode=None):
         cell_log(Lang.EXPORT_NONE_SEL, type='warning')
         return
 
+    selected_sensors = {meta['sensor'].lower() for meta in selected}
+    if 'landsat' in selected_sensors:
+        try:
+            from M_blocklist import refresh_blocklists
+            blocklists = refresh_blocklists()
+            print(f"[BLOCKLIST] Refreshed live GEE lists: {len(blocklists.get('landsat', []))} Landsat scene IDs.")
+        except Exception as e:
+            message = f"Landsat export cancelled: could not refresh GEE blocklists: {e}"
+            print(f"[ERROR] {message}")
+            cell_log(message, type='error')
+            return
+
     from M1_export_logic import export_to_asset, export_to_gcs
     print(f" Starting {len(selected)} exports...")
     cell_log(f"Starting {len(selected)} exports...", type='info')
@@ -383,6 +408,8 @@ def start_export(ui_obj, mode=None):
             if meta['type'] == 'ASSET':
                 logic.export_to_asset(mosaic_obj, name_full, y, m, p, band=band, mosaic=mosaic_m, sensor=sensor)
             else:
+                if meta.get('exists'):
+                    logic.delete_gcs_band(y, m, p, band, sensor=sensor, mosaic=mosaic_m)
                 logic.export_to_gcs(mosaic_obj, name_base, y, m, p, bands=[band], mosaic=mosaic_m, sensor=sensor)
             succeeded += 1
             cell_log(f"Export sent: {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d} [{meta['type']}]", type='success')

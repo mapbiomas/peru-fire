@@ -120,7 +120,8 @@ class MosaicAssemblerUI(PipelineStepUI):
                     # 2. Verifica se existem chunks para montar
                     # No CacheManager, a chave dos chunks é o nome base sem a banda
                     m_base_name = mosaic_name(y, m, period, mosaic=mosaic_method, sensor=sensor)
-                    has_chunks = b in self.state.get('gcs_chunks', {}).get(m_base_name, [])
+                    chunk_bands = self.state.get('gcs_chunks', {}).get(m_base_name.lower(), [])
+                    has_chunks = b.lower() in {chunk.lower() for chunk in chunk_bands}
                     
                     chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
                     chk._meta = {'sensor': sensor, 'period': period, 'mosaic': mosaic_method, 'year': y, 'month': m, 'band': b}

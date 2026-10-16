@@ -17,7 +17,10 @@ L = widgets.Layout
 class M5WorkplanUI:
     def __init__(self, years=None, periodicity_active=None):
         self.years = years or [2025, 2026]
-        self.periodicity_active = periodicity_active or ['monthly']
+        configured_periods = [p.lower() for p in GLOBAL_OPTS.get('PERIODICITY', ['monthly'])]
+        if periodicity_active and [p.lower() for p in periodicity_active] != configured_periods:
+            print(f"M5 periodicity follows M0 configuration: {configured_periods}")
+        self.periodicity_active = configured_periods
         self.plan = load_workplan()
 
         self._thumb_cache = {}
@@ -114,7 +117,6 @@ class M5WorkplanUI:
             if not getattr(ee.data, '_credentials', None):
                 from M0_auth_config import authenticate
                 authenticate()
-            peru = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(ee.Filter.eq('ADM0_NAME', 'Peru'))
             grid = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
 
             if regions is not None:
@@ -122,18 +124,17 @@ class M5WorkplanUI:
             else:
                 all_regions = ee.FeatureCollection(CONFIG['asset_regions'])
 
-            bg = peru.style(**{'fillColor': 'f0f0f0', 'color': 'cccccc', 'width': 1})
             region_lines = all_regions.style(**{'color': '2980b9', 'width': 1, 'fillColor': '00000000'})
             grid_lines = grid.style(**{'color': 'e0e0e0', 'width': 0.3, 'fillColor': '00000000'})
 
             if regions:
                 sel_fill = all_regions.style(**{'color': '2980b9', 'width': 1, 'fillColor': '2980b920'})
-                layers = [bg, region_lines, grid_lines, sel_fill]
+                layers = [region_lines, grid_lines, sel_fill]
             else:
-                layers = [bg, region_lines, grid_lines]
+                layers = [region_lines, grid_lines]
 
             overlay = ee.ImageCollection(layers).mosaic()
-            bounds = peru.geometry().bounds(1, 'EPSG:4326')
+            bounds = all_regions.geometry().bounds(1, 'EPSG:4326')
             url = overlay.getThumbURL({'region': bounds, 'dimensions': size, 'format': 'png'})
             resp = requests.get(url, timeout=60)
             b64 = base64.b64encode(resp.content).decode('ascii')
@@ -206,7 +207,7 @@ class M5WorkplanUI:
             models = []
         box, self.chk_models = self._create_checkbox_grid(models, Lang.SECTION_MODEL, single_select=True, bg_color='#e8f4fd')
         self.w_model_box.children = box.children
-        regions = ['Peru', 'Amazonia', 'Cerrado']
+        regions = [CONFIG.get('country', 'country').title()]
         err_banner = None
         try:
             import ee
@@ -547,10 +548,7 @@ class M5WorkplanUI:
                 from M0_auth_config import authenticate
                 authenticate()
             cim = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
-            if region_name.lower() == 'peru':
-                fc = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(ee.Filter.eq('ADM0_NAME', 'Peru'))
-            else:
-                fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.eq(REGION_NAME_PROPERTY, region_name))
+            fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.eq(REGION_NAME_PROPERTY, region_name))
             n = cim.filterBounds(fc.geometry()).size().getInfo()
             self._grid_count_cache[region_name] = n
             return n
@@ -1142,15 +1140,13 @@ class M5WorkplanUI:
                 from M0_auth_config import authenticate
                 authenticate()
 
-            peru = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(ee.Filter.eq('ADM0_NAME', 'Peru'))
             all_regions = ee.FeatureCollection(CONFIG['asset_regions'])
             grid = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
 
-            bg = peru.style(**{'fillColor': 'f0f0f0', 'color': '2c3e50', 'width': 2})
             region_lines = all_regions.style(**{'color': '2980b9', 'width': 1, 'fillColor': '00000000'})
             grid_lines = grid.style(**{'color': 'bdc3c7', 'width': 0.3, 'fillColor': '00000000'})
 
-            overlay = ee.ImageCollection([bg, region_lines, grid_lines]).mosaic()
+            overlay = ee.ImageCollection([region_lines, grid_lines]).mosaic()
 
             region_val = self.f_mapa_region.value
             if region_val and region_val != Lang.ALL_F:
@@ -1159,14 +1155,14 @@ class M5WorkplanUI:
                 overlay = ee.ImageCollection([overlay, sel_style]).mosaic()
 
             # bounds para scale bar
-            peru_bounds = peru.geometry().bounds(1, 'EPSG:4326')
-            bounds_coords = peru_bounds.getInfo()['coordinates'][0]
+            country_bounds = all_regions.geometry().bounds(1, 'EPSG:4326')
+            bounds_coords = country_bounds.getInfo()['coordinates'][0]
             xs = [c[0] for c in bounds_coords]
             ys = [c[1] for c in bounds_coords]
             bounds_info = (min(xs), min(ys), max(xs), max(ys))
 
             img_w = 600
-            url = overlay.getThumbURL({'region': peru_bounds, 'dimensions': img_w, 'format': 'png'})
+            url = overlay.getThumbURL({'region': country_bounds, 'dimensions': img_w, 'format': 'png'})
             resp = requests.get(url, timeout=60)
             b64 = base64.b64encode(resp.content).decode('ascii')
             scale_html = self._build_scale_bar(img_w, bounds_info)

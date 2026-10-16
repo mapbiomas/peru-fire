@@ -428,10 +428,7 @@ def _get_region_cells(region_name):
     import ee
     cim = ee.FeatureCollection("projects/mapbiomas-workspace/AUXILIAR/cim-world-1-250000")
 
-    if region_name.lower() == 'peru':
-        region_fc = ee.FeatureCollection("FAO/GAUL/2015/level0").filter(ee.Filter.eq('ADM0_NAME', 'Peru'))
-    else:
-        region_fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.eq(REGION_NAME_PROPERTY, region_name))
+    region_fc = ee.FeatureCollection(CONFIG['asset_regions']).filter(ee.Filter.eq(REGION_NAME_PROPERTY, region_name))
 
     intersected = cim.filterBounds(region_fc.geometry())
     try:
