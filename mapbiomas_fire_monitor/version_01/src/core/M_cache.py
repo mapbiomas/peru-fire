@@ -24,6 +24,7 @@ class CacheManager:
         if not CONFIG:
             return None
         return {
+            '_cache_format_version': 2,
             'country': CONFIG.get('country'),
             'bucket': CONFIG.get('bucket'),
             'gcs_library_images_prefix': CONFIG.get('gcs_library_images_prefix'),
@@ -298,23 +299,45 @@ class CacheManager:
                             found_band = band
                             break
                     
-                    if found_band:
-                        # Extrai a data (YYYY_MM ou YYYY) usando regex
+                    if found_band and name_no_ext.lower().startswith('image_'):
+                        # New-format chunks encode the date in the folder and
+                        # filename. Read the folder first: an annual filename
+                        # ends in YYYY_000000..., which a loose regex misreads
+                        # as YYYY_00 and prevents M2 from finding its bands.
                         import re as _re
-                        date_match = _re.search(r'(\d{4}_\d{2})|(\d{4})', name_no_ext)
-                        clean_date = date_match.group(0) if date_match else "unknown"
-                        
-                        # A chave da UI deve ser: image_{country}_fire_{sensor}_{mosaic}_{date}
-                        # Vamos isolar o prefixo (tudo antes da banda)
-                        prefix = name_no_ext.split(f"_{found_band}")[0]
-                        
-                        mosaic_key = f"{prefix}_{clean_date}".lower()
-                        
-                        if mosaic_key not in gcs_chunks:
-                            gcs_chunks[mosaic_key] = []
-                        if found_band not in gcs_chunks[mosaic_key]:
-                            gcs_chunks[mosaic_key].append(found_band)
-                        continue
+                        parts = fpath.split('/')
+                        lib_idx = next((i for i, part in enumerate(parts) if part.upper() == 'LIBRARY_IMAGES'), -1)
+                        clean_date = None
+                        if lib_idx >= 0 and len(parts) > lib_idx + 4:
+                            folder_period = parts[lib_idx + 2].upper()
+                            folder_date = parts[lib_idx + 4]
+                            if folder_period == 'MONTHLY' and _re.fullmatch(r'\d{4}_\d{2}', folder_date):
+                                clean_date = folder_date
+                            elif folder_period in ('ANNUALLY', 'YEARLY') and _re.fullmatch(r'\d{4}', folder_date):
+                                clean_date = folder_date
+
+                        # Fallback for valid new-format filenames outside the
+                        # standard folder layout. A two-digit month is distinct
+                        # from the zero-padded shard suffix of annual exports.
+                        if clean_date is None:
+                            marker = f"_{found_band}_"
+                            if marker in name_no_ext:
+                                date_parts = name_no_ext.split(marker, 1)[1].split('_')
+                                if date_parts and _re.fullmatch(r'\d{4}', date_parts[0]):
+                                    if len(date_parts) > 1 and _re.fullmatch(r'\d{2}', date_parts[1]):
+                                        clean_date = f"{date_parts[0]}_{date_parts[1]}"
+                                    else:
+                                        clean_date = date_parts[0]
+
+                        if clean_date is not None:
+                            # The UI key is image_{country}_fire_{sensor}_{mosaic}_{date}.
+                            prefix = name_no_ext.split(f"_{found_band}", 1)[0]
+                            mosaic_key = f"{prefix}_{clean_date}".lower()
+                            if mosaic_key not in gcs_chunks:
+                                gcs_chunks[mosaic_key] = []
+                            if found_band not in gcs_chunks[mosaic_key]:
+                                gcs_chunks[mosaic_key].append(found_band)
+                            continue
 
                     # Fallback para o padrão antigo: {mosaic}_{sensor}_fire_{country}_{date}_{band}
                     # Ex: minnbr_sentinel2_fire_peru_2026_01_dayOfYear...
