@@ -563,6 +563,19 @@ def get_sensor_scale(sensor=None):
         raise ValueError(f"Unsupported sensor for scale lookup: {sensor}")
     return scales[sensor]
 
+def get_sensor_start_year(sensor=None):
+    """First full year available to the M1/M2 sensor collections."""
+    sensor = (sensor or _single(GLOBAL_OPTS['SENSOR'])).lower()
+    start_years = {
+        'sentinel2': 2015,
+        'landsat': 1985,
+        'hls': 2013,
+        'modis': 2000,
+    }
+    if sensor not in start_years:
+        raise ValueError(f"Unsupported sensor for start-year lookup: {sensor}")
+    return start_years[sensor]
+
 def get_model_scale(model_id):
     """Resolve pixel size from the sensor encoded in a trained model ID."""
     cache_key = (CONFIG.get('country'), CONFIG.get('campaign'), str(model_id))

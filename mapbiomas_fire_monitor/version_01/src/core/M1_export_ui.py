@@ -5,7 +5,7 @@ import threading
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
-from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode
+from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode, get_sensor_start_year
 import M0_auth_config as config_module
 from M_cache import CacheManager
 from M_ui_components import PipelineStepUI, cell_log
@@ -39,7 +39,9 @@ class ExportDispatcherUI(PipelineStepUI):
         if self.requested_years:
             self.years = sorted(self.requested_years, reverse=True)
         else:
-            self.years = list(range(curr_year, 2018, -1))
+            sensors = GLOBAL_OPTS['SENSOR'] if isinstance(GLOBAL_OPTS['SENSOR'], list) else [GLOBAL_OPTS['SENSOR']]
+            first_year = min(get_sensor_start_year(sensor) for sensor in sensors)
+            self.years = list(range(curr_year, first_year - 1, -1))
         self.bands = CONFIG['bands_all']
         self.update_status(Lang.LOADING_CACHE)
         self.state = CacheManager.load() or {}
@@ -111,6 +113,8 @@ class ExportDispatcherUI(PipelineStepUI):
         ))]
         
         for y in self.years:
+            if y < get_sensor_start_year(sensor):
+                continue
             import datetime
             now = datetime.datetime.now()
             
