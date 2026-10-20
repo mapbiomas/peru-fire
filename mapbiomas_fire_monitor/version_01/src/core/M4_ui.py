@@ -339,8 +339,7 @@ class ModelTrainerUI(PipelineStepUI):
             # 1. Tenta carregar o cache. O CacheManager agora tentará local primeiro.
             state = CacheManager.load()
             selected_period = GLOBAL_OPTS['PERIODICITY'][0]
-            period_key = 'cogs_monthly' if selected_period == 'monthly' else 'cogs_annually'
-            all_cogs = state.get(period_key, [])
+            all_cogs = CacheManager.cogs_for(selected_period)
             
             if not all_cogs:
                 raise ValueError("Cache vazio")
@@ -367,9 +366,8 @@ class ModelTrainerUI(PipelineStepUI):
                 
                 return {'sensor': sensor, 'mosaic': mosaic, 'band': band}
 
-            period_key = 'cogs_monthly' if selected_period == 'monthly' else 'cogs_annually'
-            period_label = 'mensal' if selected_period == 'monthly' else 'anual'
-            for cog_name in state.get(period_key, []):
+            period_label = {'monthly': 'mensal', 'yearly': 'anual'}.get(selected_period, selected_period)
+            for cog_name in all_cogs:
                 p = _parse_cog_agnostic(cog_name)
                 if p:
                     combo = (p['sensor'], p['mosaic'], period_label)
@@ -378,7 +376,7 @@ class ModelTrainerUI(PipelineStepUI):
         except Exception:
             # Fallback offline fixo se nem o cache existir
             selected_period = GLOBAL_OPTS['PERIODICITY'][0]
-            period_label = 'mensal' if selected_period == 'monthly' else 'anual'
+            period_label = {'monthly': 'mensal', 'yearly': 'anual'}.get(selected_period, selected_period)
             all_combos = {
                 (sensor, mosaic, period_label): {'red', 'nir', 'swir1', 'swir2', 'nbr', 'ndvi', 'dayOfYear'}
                 for sensor in ('sentinel2', 'landsat')
@@ -931,8 +929,8 @@ def start_training(ui):
     sensors_used = set()
     for (s, m, p, b), chk in ui.band_chk_map.items():
         if chk.value:
-            # p_norm será 'monthly' ou 'yearly'
-            p_norm = 'monthly' if p == 'mensal' else 'yearly'
+            # p_norm mapeia os rótulos da UI para as chaves do registry
+            p_norm = {'mensal': 'monthly', 'anual': 'yearly'}.get(p, p)
             # A extração espera: bands_config[band_name] = {'sensor': ..., 'mosaic': ..., 'periodicity': ...}
             bands_config[b] = {
                 'sensor': s,

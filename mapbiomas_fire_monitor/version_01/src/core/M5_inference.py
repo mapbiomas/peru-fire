@@ -9,8 +9,9 @@ from shapely.geometry import shape, mapping
 from pyproj import Transformer
 from osgeo import gdal
 from M_lang import L as Lang
-from M0_auth_config import CONFIG, mosaic_name, monthly_cog_path, yearly_cog_path, get_temp_dir, _gcs_download, _gcs_upload
+from M0_auth_config import CONFIG, mosaic_name_for_period, period_cog_path, get_temp_dir, _gcs_download, _gcs_upload
 from M4_data_extractor import normalize
+from M_periods import parse_period
 
 BLOCK_SIZE = 4096
 
@@ -84,33 +85,26 @@ def load_model_from_gcs(model_dir, fs, logger=None):
 
     return predict_fn, meta, bands_config, norm_stats, band_order
 
-def build_band_paths(bands_config, year, month):
+def build_band_paths(bands_config, period):
     """Construye diccionario {banda: gcs_path} para un periodo."""
     from M0_auth_config import CONFIG
-    periodicity = 'monthly' if month else 'yearly'
+    info = parse_period(period)
     paths = {}
     for b, cfg in bands_config.items():
         s_name = cfg.get('sensor', 'sentinel2').lower()
         m_type = cfg.get('mosaic', 'minnbr').lower()
 
-        if periodicity == 'monthly':
-            rel_folder = monthly_cog_path(year, month, mosaic=m_type, sensor=s_name)
-        else:
-            rel_folder = yearly_cog_path(year, mosaic=m_type, sensor=s_name)
-
+        rel_folder = period_cog_path(info.key, mosaic=m_type, sensor=s_name)
         b_correct = 'dayOfYear' if b.lower() == 'dayofyear' else b
-        cog_name = f"{mosaic_name(year, month, periodicity, band=b_correct, mosaic=m_type, sensor=s_name)}_cog.tif"
+        cog_name = f"{mosaic_name_for_period(info.key, band=b_correct, mosaic=m_type, sensor=s_name)}_cog.tif"
         paths[b] = f"{CONFIG['bucket']}/{rel_folder}/{cog_name}"
 
     # dayOfYear sempre incluso para banda de saida, independente de ser feature
     if 'dayOfYear' not in paths:
         first_cfg = next(iter(bands_config.values()), {})
         s_name = first_cfg.get('sensor', 'sentinel2').lower()
-        if periodicity == 'monthly':
-            doy_folder = monthly_cog_path(year, month, mosaic='minnbr', sensor=s_name)
-        else:
-            doy_folder = yearly_cog_path(year, mosaic='minnbr', sensor=s_name)
-        doy_name = f"{mosaic_name(year, month, periodicity, band='dayOfYear', mosaic='minnbr', sensor=s_name)}_cog.tif"
+        doy_folder = period_cog_path(info.key, mosaic='minnbr', sensor=s_name)
+        doy_name = f"{mosaic_name_for_period(info.key, band='dayOfYear', mosaic='minnbr', sensor=s_name)}_cog.tif"
         paths['dayOfYear'] = f"{CONFIG['bucket']}/{doy_folder}/{doy_name}"
 
     return paths

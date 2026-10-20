@@ -7,7 +7,7 @@ from shapely.geometry import shape
 import rasterio
 from rasterio.mask import mask
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path, gcs_samples_path
-from M_periods import normalize_period, period_year
+from M_periods import ENABLED_PERIODICITIES, normalize_period, parse_period, period_year
 from M_cache import CacheManager, _get_fs
 
 
@@ -67,12 +67,14 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
     Extrai píxeis do GCS baseado em uma configuração flexível de bandas.
     Validando existência prévia para evitar erros silenciosos.
     """
-    from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name
+    from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name_for_period, period_cog_path
     from M_cache import CacheManager
     
     fs = _get_fs()
     state = CacheManager.load() or {}
-    cogs_avail = state.get('cogs_monthly', []) + state.get('cogs_annually', [])
+    cogs_avail = []
+    for periodicity in ENABLED_PERIODICITIES:
+        cogs_avail.extend(CacheManager.cogs_for(periodicity))
     
     dfs = []
     for group in sample_groups:
@@ -149,9 +151,7 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
         geometries = subset.geometry.tolist()
         labels = subset['fire'].tolist()
         
-        parts = str(p).split('_')
-        y = int(parts[0]); m = int(parts[1]) if len(parts) > 1 else None
-        periodicity = 'monthly' if m else 'annually'
+        info = parse_period(p)
         
         # --- VERIFICAÇÃO PRÉVIA DE DISPONIBILIDADE ---
         missing_bands = []
@@ -162,22 +162,18 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
             m_type = bands_config[b].get('mosaic').lower()
             
             # Constrói o ID único do COG (ex: image_peru_fire_sentinel2_minnbr_2025_10_blue)
-            cog_id = f"{mosaic_name(y, m, periodicity, band=b, mosaic=m_type, sensor=s_name)}".lower()
+            cog_id = f"{mosaic_name_for_period(info.key, band=b, mosaic=m_type, sensor=s_name)}".lower()
             
             if cog_id not in cogs_avail:
                 missing_bands.append(f"{s_name}/{m_type}/{b}")
                 continue
             
-            # Constrói o path real do COG usando os auxiliares do M0
-            from M0_auth_config import monthly_cog_path, yearly_cog_path
-            if periodicity == 'monthly':
-                rel_folder = monthly_cog_path(y, m, mosaic=m_type, sensor=s_name)
-            else:
-                rel_folder = yearly_cog_path(y, mosaic=m_type, sensor=s_name)
+            # Constr��i o path real do COG usando os auxiliares do M0
+            rel_folder = period_cog_path(info.key, mosaic=m_type, sensor=s_name)
             
-            # O arquivo real no GCS é sensível a maiúsculas (Case Sensitive)
+            # O arquivo real no GCS Ǹ sens��vel a maiǧsculas (Case Sensitive)
             b_correct = 'dayOfYear' if b.lower() == 'dayofyear' else b
-            m_file_name = f"{mosaic_name(y, m, periodicity, band=b_correct, mosaic=m_type, sensor=s_name)}_cog.tif"
+            m_file_name = f"{mosaic_name_for_period(info.key, band=b_correct, mosaic=m_type, sensor=s_name)}_cog.tif"
             band_paths[b] = f"gs://{CONFIG['bucket']}/{rel_folder}/{m_file_name}"
 
         if missing_bands:

@@ -5,7 +5,8 @@ import threading
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
-from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode, get_sensor_start_year, resolve_years
+from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name_for_period, is_edit_mode, get_sensor_start_year, resolve_years
+from M_periods import list_periods, parse_period, period_state_key
 import M0_auth_config as config_module
 from M_cache import CacheManager
 from M_ui_components import PipelineStepUI, cell_log
@@ -106,70 +107,67 @@ class ExportDispatcherUI(PipelineStepUI):
             overflow='visible'
         ))]
         
-        for y in self.years:
-            if y < get_sensor_start_year(sensor):
+        periods = list_periods(
+            self.years, period,
+            include_current=(period == 'yearly'),
+            now=self.now,
+        )
+        for period_info in periods:
+            if period_info.year < get_sensor_start_year(sensor):
                 continue
-            import datetime
-            now = datetime.datetime.now()
-            
-            if period == 'monthly':
-                limit_month = now.month - 1 if y == now.year else 12
-                months = range(limit_month, 0, -1)
-            else:
-                months = [None]
-                
-            for m in months:
-                date_str = f"{y}_{m:02d}" if m else f"{y}"
-                
-                for row_type in ['GCS', 'ASSET']:
-                    cells = [
-                        widgets.HTML(f'<div style="width:100px;font-family:monospace;">{date_str if row_type=="GCS" else ""}</div>'),
-                        widgets.HTML(f'<div style="width:60px;font-weight:bold;color:#666;">{row_type}</div>'),
-                    ]
-                    
-                    btn_s = widgets.Button(description=Lang.BTN_SELECT_ROW, layout=L(width='40px', height='28px', padding='0'))
-                    btn_s._sensor, btn_s._period, btn_s._mosaic, btn_s._date, btn_s._type = sensor, period, mosaic_method, date_str, row_type
-                    btn_s.on_click(self._on_select_row)
-                    cells.append(btn_s)
+            date_str = period_info.key
+            y = period_info.year
+            m = period_info.index if period_info.periodicity == 'monthly' else None
 
-                    for b in self.bands:
-                        m_name = mosaic_name(y, m, period, band=b, mosaic=mosaic_method, sensor=sensor)
-                        m_base_name = mosaic_name(y, m, period, mosaic=mosaic_method, sensor=sensor)
-                        
-                        chunks_dict = self.state.get('gcs_chunks', {})
-                        exists_gcs = b in chunks_dict.get(m_base_name.lower(), [])
-                        
-                        assets_key = 'assets_monthly' if period == 'monthly' else 'assets_annually'
-                        assets_list = self.state.get(assets_key, [])
-                        exists_gee = m_name.lower() in assets_list
-                        
-                        m_name_lower = m_name.lower()
-                        # Busca precisa usando a flag pessoal: FLAG_TIPO_NOME
-                        task_id = f"{GLOBAL_OPTS['PERSONAL_TASK_FLAG']}_{row_type}_{m_name_lower}".lower()
-                        is_active = any(task_id in t.lower() for t in active_tasks)
-                        
-                        chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
-                        chk._meta = {'sensor': sensor, 'period': period, 'mosaic': mosaic_method, 'year': y, 'month': m, 'band': b, 'type': row_type}
-                        
-                        exists = exists_gcs if row_type == 'GCS' else exists_gee
-                        chk._meta['exists'] = exists
-                        chk._meta['active'] = is_active
-                        
-                        if is_active:
-                            status, css = 'RUN', 'mfm-run'
-                        elif exists:
-                            status, css = 'OK', 'mfm-ok'
-                        else:
-                            status, css = 'MISS', 'mfm-null'
-                        
-                        chk.disabled = is_active or (exists and not is_edit_mode())
-                        
-                        cell = PipelineStepUI.make_status_cell(chk, status, css, width='auto')
-                        cell.layout.flex = '1'
-                        self.chk_dict[f"{sensor}_{period}_{mosaic_method}_{date_str}_{row_type}_{b}"] = chk
-                        cells.append(cell)
-                        
-                    matrix_rows.append(widgets.HBox(cells, layout=matrix_row_layout))
+            for row_type in ['GCS', 'ASSET']:
+                cells = [
+                    widgets.HTML(f'<div style="width:100px;font-family:monospace;">{date_str if row_type=="GCS" else ""}</div>'),
+                    widgets.HTML(f'<div style="width:60px;font-weight:bold;color:#666;">{row_type}</div>'),
+                ]
+                
+                btn_s = widgets.Button(description=Lang.BTN_SELECT_ROW, layout=L(width='40px', height='28px', padding='0'))
+                btn_s._sensor, btn_s._period, btn_s._mosaic, btn_s._date, btn_s._type = sensor, period, mosaic_method, date_str, row_type
+                btn_s.on_click(self._on_select_row)
+                cells.append(btn_s)
+
+                for b in self.bands:
+                    m_name = mosaic_name_for_period(date_str, band=b, mosaic=mosaic_method, sensor=sensor)
+                    m_base_name = mosaic_name_for_period(date_str, mosaic=mosaic_method, sensor=sensor)
+
+                    chunks_dict = self.state.get('gcs_chunks', {})
+                    exists_gcs = b in chunks_dict.get(m_base_name.lower(), [])
+
+                    assets_key = period_state_key('assets', period)
+                    assets_list = self.state.get(assets_key, [])
+                    exists_gee = m_name.lower() in assets_list
+
+                    m_name_lower = m_name.lower()
+                    # Busca precisa usando a flag pessoal: FLAG_TIPO_NOME
+                    task_id = f"{GLOBAL_OPTS['PERSONAL_TASK_FLAG']}_{row_type}_{m_name_lower}".lower()
+                    is_active = any(task_id in t.lower() for t in active_tasks)
+
+                    chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
+                    chk._meta = {'sensor': sensor, 'period': period, 'mosaic': mosaic_method, 'year': y, 'month': m, 'period_key': date_str, 'band': b, 'type': row_type}
+
+                    exists = exists_gcs if row_type == 'GCS' else exists_gee
+                    chk._meta['exists'] = exists
+                    chk._meta['active'] = is_active
+                    
+                    if is_active:
+                        status, css = 'RUN', 'mfm-run'
+                    elif exists:
+                        status, css = 'OK', 'mfm-ok'
+                    else:
+                        status, css = 'MISS', 'mfm-null'
+
+                    chk.disabled = is_active or (exists and not is_edit_mode())
+
+                    cell = PipelineStepUI.make_status_cell(chk, status, css, width='auto')
+                    cell.layout.flex = '1'
+                    self.chk_dict[f"{sensor}_{period}_{mosaic_method}_{date_str}_{row_type}_{b}"] = chk
+                    cells.append(cell)
+
+                matrix_rows.append(widgets.HBox(cells, layout=matrix_row_layout))
         
         return widgets.VBox(matrix_rows, layout=L(
             max_height='450px', 
@@ -393,31 +391,45 @@ def start_export(ui_obj, mode=None):
 
     succeeded = 0
     for i, meta in enumerate(selected, 1):
-        y, m, p, band, mosaic_m, sensor = meta['year'], meta['month'], meta['period'], meta['band'], meta['mosaic'], meta['sensor']
-        
-        date_suffix = f"_{y}_{m:02d}" if m else f"_{y}"
-        name_base = mosaic_name(y, m, p, mosaic=mosaic_m, sensor=sensor, band=None).replace(date_suffix, "").replace(f"_{y}", "")
-        name_full = mosaic_name(y, m, p, mosaic=mosaic_m, sensor=sensor, band=band)
-        
-        try:
-            print(f"  [{i}/{len(selected)}] Sending {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d} for {meta['type']}...")
+        y, m, p = meta['year'], meta['month'], meta['period']
+        period_key = meta.get('period_key') or (f"{y}_{m:02d}" if m else str(y))
+        info = parse_period(period_key)
+        y = info.year
+        m = info.index if info.periodicity == 'monthly' else None
+        p = info.periodicity
+        band, mosaic_m, sensor = meta['band'], meta['mosaic'], meta['sensor']
 
-            start_date = f"{y}-{m:02d}-01" if p == 'monthly' and m else f"{y}-01-01"
-            end_date = (f"{y}-{m+1:02d}-01" if p == 'monthly' and m and m < 12 else f"{y+1}-01-01")
+        name_base = mosaic_name_for_period(period_key, mosaic=mosaic_m, sensor=sensor, band=None)
+        name_full = mosaic_name_for_period(period_key, band=band, mosaic=mosaic_m, sensor=sensor)
+
+        try:
+            print(f"  [{i}/{len(selected)}] Sending {sensor} {mosaic_m} ({band}) {period_key} for {meta['type']}...")
+
+            start_date = info.start.strftime('%Y-%m-%d')
+            end_date = info.end.strftime('%Y-%m-%d')
 
             mosaic_obj = logic.get_quality_mosaic(sensor, y, start_date, end_date, country_geom, month=m, method=mosaic_m)
-            
+
             if meta['type'] == 'ASSET':
-                logic.export_to_asset(mosaic_obj, name_full, y, m, p, band=band, mosaic=mosaic_m, sensor=sensor)
+                logic.export_to_asset(
+                    mosaic_obj, name_full, y, m, p, band=band, mosaic=mosaic_m,
+                    sensor=sensor, period_key=period_key,
+                )
             else:
                 if meta.get('exists'):
-                    logic.delete_gcs_band(y, m, p, band, sensor=sensor, mosaic=mosaic_m)
-                logic.export_to_gcs(mosaic_obj, name_base, y, m, p, bands=[band], mosaic=mosaic_m, sensor=sensor)
+                    logic.delete_gcs_band(
+                        y, m, p, band, sensor=sensor, mosaic=mosaic_m,
+                        period_key=period_key,
+                    )
+                logic.export_to_gcs(
+                    mosaic_obj, name_base, y, m, p, bands=[band], mosaic=mosaic_m,
+                    sensor=sensor, period_key=period_key,
+                )
             succeeded += 1
-            cell_log(f"Export sent: {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d} [{meta['type']}]", type='success')
+            cell_log(f"Export sent: {sensor} {mosaic_m} ({band}) {period_key} [{meta['type']}]", type='success')
         except Exception as e:
-            print(f"  [ERR] Failed {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d}: {e}")
-            cell_log(f"Failed {sensor} {mosaic_m} ({band}) {y}-{m or 0:02d}: {e}", type='error')
+            print(f"  [ERR] Failed {sensor} {mosaic_m} ({band}) {period_key}: {e}")
+            cell_log(f"Failed {sensor} {mosaic_m} ({band}) {period_key}: {e}", type='error')
             traceback.print_exc()
             
     print(f"\n Completed! {succeeded}/{len(selected)} tasks sent.")

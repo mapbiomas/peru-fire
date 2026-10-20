@@ -8,11 +8,13 @@ import glob
 import time
 
 from M0_auth_config import (
-    CONFIG, mosaic_name, _get_fs,
+    CONFIG, mosaic_name, mosaic_name_for_period, _get_fs,
     monthly_chunk_path, monthly_mosaic_path, monthly_cog_path,
     yearly_chunk_path, yearly_mosaic_path, yearly_cog_path,
+    period_chunk_path, period_cog_path,
     get_temp_dir, check_command_exists
 )
+from M_periods import parse_period
 from M_gcs import upload, download
 
 # Mapeamento de Tipos de Dados Recomendado (IPAM/MapBiomas)
@@ -59,14 +61,23 @@ def run_cmd(args, label="Comando"):
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Error in {label}: {e.stderr.strip() if e.stderr else e.stdout.strip()}")
 
-def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sensor=None, mosaic_method='minnbr', logger=None, progress_idx=0, progress_total=0, start_time=None):
+def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sensor=None, mosaic_method='minnbr', logger=None, progress_idx=0, progress_total=0, start_time=None, period_key=None):
     import shutil
     from M0_auth_config import GLOBAL_OPTS, _single
 
     s = sensor or _single(GLOBAL_OPTS['SENSOR'])
     m_method = mosaic_method or 'minnbr'
 
-    if period == 'monthly':
+    info = parse_period(period_key, periodicity=period) if period_key else None
+    if info:
+        year = info.year
+        month = info.index if info.periodicity == 'monthly' else None
+        period = info.periodicity
+        chunk_prefix  = period_chunk_path(info.key, mosaic=m_method, sensor=s)
+        mosaic_prefix = period_cog_path(info.key, mosaic=m_method, sensor=s)
+        base_name = mosaic_name_for_period(info.key, mosaic=m_method, sensor=s)
+        label = info.key
+    elif period == 'monthly':
         chunk_prefix  = monthly_chunk_path(year, month, mosaic=m_method, sensor=s)
         mosaic_prefix = monthly_cog_path(year, month, mosaic=m_method, sensor=s)
         base_name = mosaic_name(year, month, 'monthly', mosaic=m_method, sensor=s)
@@ -146,7 +157,11 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
                 vrt_path = os.path.join(tmp_path, f"{base_name}_{b_name}.vrt")
                 run_cmd(['gdalbuildvrt', vrt_path] + local_shards, label=f"VRT ({b_name})")
 
-                cog_remote_name = f"{mosaic_name(year, month, period, clean_b_name, sensor=s, mosaic=m_method)}_cog.tif"
+                cog_base = (
+                    mosaic_name_for_period(info.key, band=clean_b_name, sensor=s, mosaic=m_method)
+                    if info else mosaic_name(year, month, period, clean_b_name, sensor=s, mosaic=m_method)
+                )
+                cog_remote_name = f"{cog_base}_cog.tif"
                 cog_local_path = os.path.join(tmp_path, cog_remote_name)
                 
                 dt = BAND_DATATYPES.get(clean_b_name, 'Int16')

@@ -11,6 +11,7 @@ import datetime
 import threading
 import logging
 from M0_auth_config import CONFIG, _get_fs
+from M_periods import ENABLED_PERIODICITIES, FOLDER_TO_PERIODICITY, PERIODS, parse_period, period_state_key
 
 class CacheManager:
     CACHE_FILE = "state.json"
@@ -24,7 +25,7 @@ class CacheManager:
         if not CONFIG:
             return None
         return {
-            '_cache_format_version': 2,
+            '_cache_format_version': 3,
             'country': CONFIG.get('country'),
             'bucket': CONFIG.get('bucket'),
             'gcs_library_images_prefix': CONFIG.get('gcs_library_images_prefix'),
@@ -142,8 +143,8 @@ class CacheManager:
         
         start_time = time.time()
         state = CacheManager.get_state()
-        state['assets_monthly'] = []
-        state['assets_annually'] = []
+        for period_type in ENABLED_PERIODICITIES:
+            state[period_state_key('assets', period_type)] = []
         
         bands = CONFIG.get('bands_all', ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'dayOfYear'])
         # Todos os métodos de mosaico disponíveis para este país (SEMPRE escaneia tudo)
@@ -155,7 +156,7 @@ class CacheManager:
         tasks = []
         
         for sensor_name in all_sensors:
-            for period_type in ['monthly', 'yearly']:
+            for period_type in ENABLED_PERIODICITIES:
                 for mosaic_m in mosaic_methods:
                     col_id = get_asset_mosaic_collection(
                         sensor=sensor_name,
@@ -208,7 +209,8 @@ class CacheManager:
             for future in futures:
                 res = future.result()
                 for period_type, asset_name in res:
-                    target_key = 'assets_monthly' if period_type == 'monthly' else 'assets_annually'
+                    target_key = period_state_key('assets', period_type)
+                    state.setdefault(target_key, [])
                     name_lower = asset_name.lower()
                     if name_lower not in state[target_key]:
                         state[target_key].append(name_lower)
@@ -234,8 +236,7 @@ class CacheManager:
 
         state = CacheManager.get_state()
         gcs_chunks = {}
-        cogs_monthly = []
-        cogs_annually = []
+        cogs = {periodicity: [] for periodicity in ENABLED_PERIODICITIES}
 
         try:
             fs = _get_fs()
@@ -272,16 +273,17 @@ class CacheManager:
                         
                         if lib_idx != -1 and len(parts) >= lib_idx + 6:
                             sensor = parts[lib_idx + 1].lower()
-                            period = parts[lib_idx + 2].lower() # monthly / annually
+                            folder_period = parts[lib_idx + 2].upper()
+                            periodicity = FOLDER_TO_PERIODICITY.get(folder_period)
                             mosaic = parts[lib_idx + 3].lower()
                             # date   = parts[lib_idx + 4]
                             
                             name_no_ext = basename[:-8].lower() # image_peru_fire_{sensor}_{mosaic}_{band}_{date}
                             
-                            if period == 'monthly':
-                                if name_no_ext not in cogs_monthly: cogs_monthly.append(name_no_ext)
-                            else:
-                                if name_no_ext not in cogs_annually: cogs_annually.append(name_no_ext)
+                            if periodicity:
+                                bucket_list = cogs.setdefault(periodicity, [])
+                                if name_no_ext not in bucket_list:
+                                    bucket_list.append(name_no_ext)
                     except Exception:
                         continue
                 
@@ -311,10 +313,12 @@ class CacheManager:
                         if lib_idx >= 0 and len(parts) > lib_idx + 4:
                             folder_period = parts[lib_idx + 2].upper()
                             folder_date = parts[lib_idx + 4]
-                            if folder_period == 'MONTHLY' and _re.fullmatch(r'\d{4}_\d{2}', folder_date):
-                                clean_date = folder_date
-                            elif folder_period in ('ANNUALLY', 'YEARLY') and _re.fullmatch(r'\d{4}', folder_date):
-                                clean_date = folder_date
+                            periodicity = FOLDER_TO_PERIODICITY.get(folder_period)
+                            if periodicity:
+                                try:
+                                    clean_date = parse_period(folder_date, periodicity=periodicity).key
+                                except ValueError:
+                                    clean_date = None
 
                         # Fallback for valid new-format filenames outside the
                         # standard folder layout. A two-digit month is distinct
@@ -324,7 +328,7 @@ class CacheManager:
                             if marker in name_no_ext:
                                 date_parts = name_no_ext.split(marker, 1)[1].split('_')
                                 if date_parts and _re.fullmatch(r'\d{4}', date_parts[0]):
-                                    if len(date_parts) > 1 and _re.fullmatch(r'\d{2}', date_parts[1]):
+                                    if len(date_parts) > 1 and _re.fullmatch(r'0[1-9]|1[0-2]|S[12]|Q[1-4]', date_parts[1]):
                                         clean_date = f"{date_parts[0]}_{date_parts[1]}"
                                     else:
                                         clean_date = date_parts[0]
@@ -372,15 +376,16 @@ class CacheManager:
                     if found_legacy: continue
 
             state['gcs_chunks'] = gcs_chunks
-            state['cogs_monthly'] = cogs_monthly
-            state['cogs_annually'] = cogs_annually
+            for periodicity, values in cogs.items():
+                state[period_state_key('cogs', periodicity)] = values
             
             CacheManager._state = state
             CacheManager.save()
 
             if logger:
                 total_chunks = sum(len(b) for b in gcs_chunks.values())
-                logger(f"GCS Sincronizado: {len(cogs_monthly) + len(cogs_annually)} COGs, {total_chunks} fragmentos.", "success")
+                total_cogs = sum(len(values) for values in cogs.values())
+                logger(f"GCS Sincronizado: {total_cogs} COGs, {total_chunks} fragmentos.", "success")
 
         except Exception as e:
             if logger: logger(f"Erro ao escanear GCS: {e}", "warning")
@@ -479,10 +484,17 @@ class CacheManager:
             return CacheManager._state
 
     @staticmethod
+    def cogs_for(periodicity):
+        """Return cached COG names for a periodicity."""
+        state = CacheManager.get_state()
+        return list(state.get(period_state_key('cogs', periodicity), []))
+
+    @staticmethod
     def add_asset(name, period):
         with CacheManager._lock:
             state = CacheManager.get_state()
-            key = 'assets_monthly' if period == 'monthly' else 'assets_annually'
+            key = period_state_key('assets', period) if period in PERIODS else ('assets_monthly' if period == 'monthly' else 'assets_annually')
+            state.setdefault(key, [])
             if name not in state[key]:
                 state[key].append(name)
                 CacheManager.save(state)
@@ -491,7 +503,8 @@ class CacheManager:
     def remove_asset(name, period):
         with CacheManager._lock:
             state = CacheManager.get_state()
-            key = 'assets_monthly' if period == 'monthly' else 'assets_annually'
+            key = period_state_key('assets', period) if period in PERIODS else ('assets_monthly' if period == 'monthly' else 'assets_annually')
+            state.setdefault(key, [])
             if name in state[key]:
                 state[key].remove(name)
                 CacheManager.save(state)

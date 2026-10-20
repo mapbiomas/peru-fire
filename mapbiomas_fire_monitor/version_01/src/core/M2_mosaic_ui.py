@@ -5,7 +5,8 @@ import threading
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
-from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode, monthly_cog_path, yearly_cog_path, get_sensor_start_year, resolve_years
+from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name_for_period, is_edit_mode, period_cog_path, get_sensor_start_year, resolve_years
+from M_periods import list_periods, period_state_key
 import M0_auth_config as config_module
 from M_cache import CacheManager
 from M_ui_components import PipelineStepUI, cell_log, ProgressTracker
@@ -101,86 +102,77 @@ class MosaicAssemblerUI(PipelineStepUI):
             overflow='visible'
         ))]
         
-        # Limite de data: até o mês passado
-        last_month_year = self.now.year
-        last_month = self.now.month - 1
-        if last_month == 0:
-            last_month = 12
-            last_month_year -= 1
-
-        for y in self.years:
-            if y < get_sensor_start_year(sensor):
+        periods = list_periods(
+            self.years, period,
+            include_current=(period == 'yearly'),
+            now=self.now,
+        )
+        for period_info in periods:
+            if period_info.year < get_sensor_start_year(sensor):
                 continue
-            months = range(12, 0, -1) if period == 'monthly' else [None]
-            for m in months:
-                # Pula meses futuros
-                if y > last_month_year: continue
-                if y == last_month_year and m is not None and m > last_month: continue
+            date_str = period_info.key
+            y = period_info.year
+            m = period_info.index if period_info.periodicity == 'monthly' else None
 
-                date_str = f"{y}_{m:02d}" if m else f"{y}"
-                
-                # Filtro de busca
-                if self.search_query and self.search_query.lower() not in date_str.lower():
-                    continue
-                
-                cells = [widgets.HTML(f'<div style="width:100px;font-family:monospace;">{date_str}</div>')]
-                
-                btn_s = widgets.Button(description=Lang.BTN_SELECT_ROW, layout=L(width='40px', height='28px', padding='0'))
-                btn_s._sensor, btn_s._period, btn_s._mosaic, btn_s._date = sensor, period, mosaic_method, date_str
-                btn_s.on_click(self._on_select_row)
-                cells.append(btn_s)
+            # Filtro de busca
+            if self.search_query and self.search_query.lower() not in date_str.lower():
+                continue
 
-                for b in self.bands:
-                    # Lógica de existência (COG) vs disponibilidade (Chunks)
-                    # Sincronizado com CacheManager
-                    m_name = mosaic_name(y, m, period, band=b, mosaic=mosaic_method, sensor=sensor)
-                    
-                    # 1. Verifica se o COG final existe
-                    cogs_list = self.state.get('cogs_monthly' if period=='monthly' else 'cogs_annually', [])
-                    exists_cog = m_name.lower() in [c.lower() for c in cogs_list]
-                    
-                    # 2. Verifica se existem chunks para montar
-                    # No CacheManager, a chave dos chunks é o nome base sem a banda
-                    m_base_name = mosaic_name(y, m, period, mosaic=mosaic_method, sensor=sensor)
-                    chunk_bands = self.state.get('gcs_chunks', {}).get(m_base_name.lower(), [])
-                    has_chunks = b.lower() in {chunk.lower() for chunk in chunk_bands}
-                    
-                    chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
-                    chk._meta = {'sensor': sensor, 'period': period, 'mosaic': mosaic_method, 'year': y, 'month': m, 'band': b}
-                    
-                    if exists_cog:
-                        if not is_edit_mode(): chk.disabled = True
-                        if period == 'monthly':
-                            cog_dir = monthly_cog_path(y, m, mosaic=mosaic_method, sensor=sensor)
-                        else:
-                            cog_dir = yearly_cog_path(y, mosaic=mosaic_method, sensor=sensor)
-                        cog_file = f"{m_name}_cog.tif"
-                        gcs_url = f"https://storage.googleapis.com/{CONFIG['bucket']}/{cog_dir}/{cog_file}"
-                        status_html = widgets.HTML(
-                            f'<a href="{gcs_url}" target="_blank" '
-                            f'style="font-size:10px;font-weight:700;color:#155724;text-decoration:underline;">OK ↗</a>',
-                            layout=widgets.Layout(width='32px')
+            cells = [widgets.HTML(f'<div style="width:100px;font-family:monospace;">{date_str}</div>')]
+                
+            btn_s = widgets.Button(description=Lang.BTN_SELECT_ROW, layout=L(width='40px', height='28px', padding='0'))
+            btn_s._sensor, btn_s._period, btn_s._mosaic, btn_s._date = sensor, period, mosaic_method, date_str
+            btn_s.on_click(self._on_select_row)
+            cells.append(btn_s)
+
+            for b in self.bands:
+                # Lógica de existência (COG) vs disponibilidade (Chunks)
+                # Sincronizado com CacheManager
+                m_name = mosaic_name_for_period(date_str, band=b, mosaic=mosaic_method, sensor=sensor)
+                
+                # 1. Verifica se o COG final existe
+                cogs_list = self.state.get(period_state_key('cogs', period), [])
+                exists_cog = m_name.lower() in [c.lower() for c in cogs_list]
+                
+                # 2. Verifica se existem chunks para montar
+                # No CacheManager, a chave dos chunks é o nome base sem a banda
+                m_base_name = mosaic_name_for_period(date_str, mosaic=mosaic_method, sensor=sensor)
+                chunk_bands = self.state.get('gcs_chunks', {}).get(m_base_name.lower(), [])
+                has_chunks = b.lower() in {chunk.lower() for chunk in chunk_bands}
+
+                chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
+                chk._meta = {'sensor': sensor, 'period': period, 'mosaic': mosaic_method, 'year': y, 'month': m, 'period_key': date_str, 'band': b}
+
+                if exists_cog:
+                    if not is_edit_mode(): chk.disabled = True
+                    cog_dir = period_cog_path(date_str, mosaic=mosaic_method, sensor=sensor)
+                    cog_file = f"{m_name}_cog.tif"
+                    gcs_url = f"https://storage.googleapis.com/{CONFIG['bucket']}/{cog_dir}/{cog_file}"
+                    status_html = widgets.HTML(
+                        f'<a href="{gcs_url}" target="_blank" '
+                        f'style="font-size:10px;font-weight:700;color:#155724;text-decoration:underline;">OK ↗</a>',
+                        layout=widgets.Layout(width='32px')
+                    )
+                    cell = widgets.HBox(
+                        [chk, status_html],
+                        layout=widgets.Layout(
+                            width='auto', min_height='34px',
+                            justify_content='center', align_items='center',
+                            padding='0', overflow='hidden', margin='1px'
                         )
-                        cell = widgets.HBox(
-                            [chk, status_html],
-                            layout=widgets.Layout(
-                                width='auto', min_height='34px',
-                                justify_content='center', align_items='center',
-                                padding='0', overflow='hidden', margin='1px'
-                            )
-                        )
-                        cell.add_class('mfm-ok')
-                    elif has_chunks:
-                        cell = PipelineStepUI.make_status_cell(chk, 'READY', 'mfm-run', width='auto')
-                    else:
-                        cell = PipelineStepUI.make_status_cell(chk, 'MISS', 'mfm-null', width='auto')
-                        chk.disabled = True
-                    
-                    cell.layout.flex = '1'
-                    self.chk_dict[f"{sensor}_{period}_{mosaic_method}_{date_str}_{b}"] = chk
-                    cells.append(cell)
-                    
-                matrix_rows.append(widgets.HBox(cells, layout=matrix_row_layout))
+                    )
+                    cell.add_class('mfm-ok')
+                elif has_chunks:
+                    cell = PipelineStepUI.make_status_cell(chk, 'READY', 'mfm-run', width='auto')
+                else:
+                    cell = PipelineStepUI.make_status_cell(chk, 'MISS', 'mfm-null', width='auto')
+                    chk.disabled = True
+
+                cell.layout.flex = '1'
+                self.chk_dict[f"{sensor}_{period}_{mosaic_method}_{date_str}_{b}"] = chk
+                cells.append(cell)
+
+            matrix_rows.append(widgets.HBox(cells, layout=matrix_row_layout))
         
         return widgets.VBox(matrix_rows, layout=L(
             max_height='450px', 
@@ -406,7 +398,10 @@ def start_mosaic_assembly(ui_obj):
     succeeded = 0
     prog = ProgressTracker(len(selected), "COG Assembly")
     for item in selected:
-        d_label = f"{item['year']}_{item['month']:02d}" if item['month'] else f"{item['year']}"
+        period_key = item.get('period_key') or (
+            f"{item['year']}_{item['month']:02d}" if item['month'] else f"{item['year']}"
+        )
+        d_label = period_key
         try:
             cell_log(f"[{prog.completed+1}/{prog.total}] Processing {item['sensor']} {d_label} {item['band']}...", type='info')
             
@@ -417,6 +412,7 @@ def start_mosaic_assembly(ui_obj):
                 sensor=item['sensor'],
                 mosaic_method=item['mosaic'],
                 bands=[item['band']],
+                period_key=period_key,
                 logger=print
             )
             succeeded += 1

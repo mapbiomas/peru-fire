@@ -9,6 +9,7 @@ from M_cache import CacheManager
 from M5_workplan import load_workplan, save_workplan, make_job_id, tile_path, gcs_full, archive_job_on_gcs, delete_pending_job_gcs
 from M5_inference import load_model_from_gcs, classify_cell_with_cogs, build_band_paths
 from M_lang import L as Lang
+from M_periods import parse_period
 from M_regions import REGION_NAME_PROPERTY
 from M_ui_components import THEME, _fmt_time
 
@@ -177,9 +178,7 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
     # Extrai campanha do primeiro job (todos no grupo compartilham o mesmo periodo)
     campaign = group_jobs[0].get('campaign', '') if group_jobs else ''
 
-    parts = period.split('_')
-    year = int(parts[0])
-    month = int(parts[1]) if len(parts) > 1 else 0
+    period_info = parse_period(period)
 
     # 1. Cargar modelo + metadatos (una vez)
     with out:
@@ -191,11 +190,9 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
     )
 
     # 2. Construir paths e verificar COGs via CacheManager primeiro
-    band_paths = build_band_paths(bands_config, year, month)
+    band_paths = build_band_paths(bands_config, period)
 
-    period_type = 'monthly' if month else 'annually'
-    state = CacheManager.get_state()
-    known_cogs = set(state.get(f'cogs_{period_type}', []))
+    known_cogs = set(CacheManager.cogs_for(period_info.periodicity))
 
     with out:
         print(f"  Checking COGs for period '{period}'...")

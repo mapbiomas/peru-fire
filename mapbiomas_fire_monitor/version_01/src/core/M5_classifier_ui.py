@@ -11,6 +11,7 @@ from M4_data_extractor import list_campaigns_gcs
 from M_ui_components import THEME, inline_confirm, make_spinner, make_empty_state, build_thumbnail_column, make_task_badges, make_card_body, flash_output, make_select_all_none, make_refresh_button, make_sync_button
 from M_lang import L as Lang
 from M_regions import REGION_NAME_PROPERTY
+from M_periods import list_periods
 
 L = widgets.Layout
 
@@ -87,20 +88,16 @@ class M5WorkplanUI:
     # --- PERIODOS ---
 
     def _get_all_periods(self):
-        """Retorna dict {year: [month_str, ...]} com todos periodos disponiveis."""
+        """Retorna dict {year: [period_label, ...]} com todos periodos disponiveis."""
         import datetime
         now = datetime.datetime.now()
         periods_by_year = {}
-        for y in self.years:
-            months = []
-            if "yearly" in self.periodicity_active and y < now.year:
-                months.append('')
-            if "monthly" in self.periodicity_active:
-                max_m = (now.month - 1) if y == now.year else (12 if y < now.year else 0)
-                for m in range(1, max_m + 1):
-                    months.append(f"{m:02d}")
-            if months:
-                periods_by_year[y] = months
+        for periodicity in self.periodicity_active:
+            for period in list_periods(
+                self.years, periodicity, include_current=False, now=now
+            ):
+                label = '' if period.periodicity == 'yearly' else period.key.split('_', 1)[1]
+                periods_by_year.setdefault(period.year, []).append(label)
         return periods_by_year
 
     # --- THUMBNAIL (GEE) ---
@@ -274,15 +271,14 @@ class M5WorkplanUI:
         import datetime
         now = datetime.datetime.now()
         periods = []
-        for y in self.years:
-            if "yearly" in self.periodicity_active:
-                if y < now.year:
-                    periods.append(str(y))
-            if "monthly" in self.periodicity_active:
-                max_m = (now.month - 1) if y == now.year else (12 if y < now.year else 0)
-                for m in range(1, max_m + 1):
-                    periods.append(f"{y}_{m:02d}")
-        periods.sort(reverse=True)
+        for periodicity in self.periodicity_active:
+            periods.extend(
+                period.key
+                for period in list_periods(
+                    self.years, periodicity, include_current=False, now=now
+                )
+            )
+        periods = sorted(set(periods), reverse=True)
         box, self.chk_periods = self._create_checkbox_grid(periods, Lang.SECTION_PERIODS, bg_color='#ebf5eb', columns=4)
         btn_all_per, btn_none_per, hbox_per = make_select_all_none(
             on_all=lambda _: self._toggle_periods(True),

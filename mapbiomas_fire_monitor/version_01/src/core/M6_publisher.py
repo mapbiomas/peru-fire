@@ -9,6 +9,7 @@ import numpy as np
 import rasterio
 from osgeo import gdal
 from M0_auth_config import CONFIG, _get_fs, _gcs_download, _gcs_upload, get_temp_dir, gcs_classifications_path, get_model_scale
+from M_periods import parse_period
 from M5_workplan import (
     classified_tiles_dir, classified_region_dir, region_path,
     consolidated_stats_path, classifications_base,
@@ -25,34 +26,17 @@ def _get_resolution_from_model(model_id):
 
 
 def _period_export_metadata(period):
-    """Return GEE time properties for a YYYY or YYYY_MM period."""
-    period_parts = str(period).split('_')
-    if len(period_parts) not in (1, 2):
-        raise ValueError(f"Invalid period '{period}'; expected YYYY or YYYY_MM.")
-
-    year_s = period_parts[0]
-    year = int(year_s)
-    if len(period_parts) == 2:
-        month_s = period_parts[1]
-        month = int(month_s)
-        start = datetime(year, month, 1)
-        end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
-        periodicity = 'monthly'
-        asset_type = 'monthly_burned_area'
-    else:
-        month_s = '0'
-        start = datetime(year, 1, 1)
-        end = datetime(year + 1, 1, 1)
-        periodicity = 'yearly'
-        asset_type = 'yearly_burned_area'
+    """Return GEE time properties for a period key (YYYY, YYYY_MM, ...)."""
+    info = parse_period(period)
+    month_s = f"{info.index:02d}" if info.periodicity == 'monthly' else '0'
 
     return {
-        'year': year_s,
+        'year': str(info.year),
         'month': month_s,
-        'time_start': int(start.timestamp() * 1000),
-        'time_end': int(end.timestamp() * 1000),
-        'periodicity': periodicity,
-        'asset_type': asset_type,
+        'time_start': int(info.start.timestamp() * 1000),
+        'time_end': int(info.end.timestamp() * 1000),
+        'periodicity': info.periodicity,
+        'asset_type': info.asset_type,
     }
 
 
