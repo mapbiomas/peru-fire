@@ -50,11 +50,11 @@ function fireEnd() {
 }
 
 function listAssetsAsync(parent, callback, pageToken, accumulated) {
-    var params = {parent: parent};
+    var params = {};
     if (pageToken) params.pageToken = pageToken;
     var acc = accumulated || [];
     try {
-        ee.data.listAssets(params, function(result, error) {
+        ee.data.listAssets(parent, params, function(result, error) {
             if (error) { callback(null, error); return; }
             if (!result) { callback(acc, null); return; }
             var assets = acc.concat(result.assets || []);
