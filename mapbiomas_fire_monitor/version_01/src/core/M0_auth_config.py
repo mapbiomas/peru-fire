@@ -7,6 +7,8 @@ import os
 import warnings
 import logging
 
+from M_periods import ENABLED_PERIODICITIES, PERIODS, parse_period, period_state_key
+
 # Silenciar avisos de autenticacao do Google e loggers verbosos do GCSFS
 warnings.filterwarnings("ignore", message="Your application has authenticated using end user credentials")
 warnings.filterwarnings("ignore", message=".*gdal.UseExceptions.*", category=FutureWarning)
@@ -170,7 +172,11 @@ def authenticate(project=None):
     try:
         from M_cache import CacheManager
         state = CacheManager.get_state()
-        if not state.get('updated_at') or not state.get('cogs_monthly'):
+        has_cogs = any(
+            state.get(period_state_key('cogs', periodicity))
+            for periodicity in ENABLED_PERIODICITIES
+        )
+        if not state.get('updated_at') or not has_cogs:
             CacheManager.build_full_cache()
     except Exception as e:
         print(f"Cache sync deferred: {e}")
@@ -238,8 +244,12 @@ def set_global_opts(
     requested_sensors = sensor if isinstance(sensor, (list, tuple)) else [sensor]
     requested_periods = periodicity if isinstance(periodicity, (list, tuple)) else [periodicity]
     requested_periods = [str(p).lower() for p in requested_periods]
-    if len(requested_periods) != 1 or requested_periods[0] not in {'monthly', 'yearly'}:
-        raise ValueError("periodicity must be a single value: 'monthly' or 'yearly'.")
+    if len(requested_periods) != 1 or requested_periods[0] not in ENABLED_PERIODICITIES:
+        raise ValueError(
+            "periodicity must be a single value from: "
+            + ', '.join(ENABLED_PERIODICITIES)
+            + '.'
+        )
 
     selected_mosaics = None
     if mosaic_methods is not None:
@@ -320,35 +330,48 @@ def _gcs_models_base():
     """Base folder for trained models in GCS."""
     return gcs_models_path()
 
+def _period_folder(periodicity=None):
+    key = (periodicity or _single(GLOBAL_OPTS['PERIODICITY'])).lower()
+    definition = PERIODS.get(key)
+    return definition['folder'] if definition else key.upper()
+
 def _gcs_mosaic_path(periodicity, temporal_id, mosaic=None):
     base = _gcs_library_base()
-    period = periodicity.upper()
+    period = _period_folder(periodicity)
     m = (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).upper()
     return f"{base}/{period}/{m}/{temporal_id}"
 
+def period_chunk_path(period, mosaic='minnbr', sensor=None):
+    info = parse_period(period)
+    s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()
+    return f"{CONFIG['gcs_library_images']}/{s}/{info.folder}/{mosaic.upper()}/{info.key}/CHUNKS"
+
+def period_cog_path(period, mosaic='minnbr', sensor=None):
+    info = parse_period(period)
+    s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()
+    return f"{CONFIG['gcs_library_images']}/{s}/{info.folder}/{mosaic.upper()}/{info.key}/COG"
+
+def period_mosaic_path(period, mosaic=None):
+    info = parse_period(period)
+    return _gcs_mosaic_path(info.periodicity, info.key, mosaic=mosaic)
+
 def monthly_mosaic_path(year, month, mosaic=None):
-    temporal_id = f"{year}_{month:02d}"
-    return _gcs_mosaic_path("monthly", temporal_id, mosaic=mosaic)
+    return period_mosaic_path(f"{year}_{month:02d}", mosaic=mosaic)
 
 def yearly_mosaic_path(year, mosaic=None):
-    temporal_id = f"{year}"
-    return _gcs_mosaic_path("yearly", temporal_id, mosaic=mosaic)
+    return period_mosaic_path(str(year), mosaic=mosaic)
 
 def monthly_chunk_path(year, month, mosaic='minnbr', sensor=None):
-    s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()
-    return f"{CONFIG['gcs_library_images']}/{s}/MONTHLY/{mosaic.upper()}/{year}_{month:02d}/CHUNKS"
+    return period_chunk_path(f"{year}_{month:02d}", mosaic=mosaic, sensor=sensor)
 
 def yearly_chunk_path(year, mosaic='minnbr', sensor=None):
-    s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()
-    return f"{CONFIG['gcs_library_images']}/{s}/ANNUALLY/{mosaic.upper()}/{year}/CHUNKS"
+    return period_chunk_path(str(year), mosaic=mosaic, sensor=sensor)
 
 def monthly_cog_path(year, month, mosaic='minnbr', sensor=None):
-    s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()
-    return f"{CONFIG['gcs_library_images']}/{s}/MONTHLY/{mosaic.upper()}/{year}_{month:02d}/COG"
+    return period_cog_path(f"{year}_{month:02d}", mosaic=mosaic, sensor=sensor)
 
 def yearly_cog_path(year, mosaic='minnbr', sensor=None):
-    s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()
-    return f"{CONFIG['gcs_library_images']}/{s}/ANNUALLY/{mosaic.upper()}/{year}/COG"
+    return period_cog_path(str(year), mosaic=mosaic, sensor=sensor)
 
 def model_path(training_id, shortname, region=None):
     sensor = _single(GLOBAL_OPTS['SENSOR']).lower()
@@ -372,9 +395,11 @@ def gcs_path(relative):
 # GEE path generators
 # ---------------------------------------------------------------------------
 
-def get_asset_mosaic_collection(sensor=None, periodicity=None, band=None, period=None, mosaic=None):
-    period = period or periodicity or _single(GLOBAL_OPTS['PERIODICITY'])
-    folder_period = period.upper()
+def get_asset_mosaic_collection(sensor=None, periodicity=None, band=None, period=None, mosaic=None, period_key=None):
+    if period_key:
+        folder_period = parse_period(period_key).folder
+    else:
+        folder_period = _period_folder(period or periodicity)
     m_name = (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).upper()
     
     sensor_name = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()
@@ -390,16 +415,19 @@ def get_asset_mosaic_collection(sensor=None, periodicity=None, band=None, period
 # Nomenclature
 # ---------------------------------------------------------------------------
 
-def mosaic_name(year, month=None, period=None, band=None, mosaic=None, sensor=None):
+def mosaic_name_for_period(period, band=None, mosaic=None, sensor=None):
+    info = parse_period(period)
     country = CONFIG['country']
     s = (sensor or _single(GLOBAL_OPTS['SENSOR'])).lower()
     m = (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).lower()
-    
-    date_str = f"{year}_{month:02d}" if month else f"{year}"
-    
+
     if band:
-        return f"image_{country}_fire_{s}_{m}_{band}_{date_str}"
-    return f"image_{country}_fire_{s}_{m}_{date_str}"
+        return f"image_{country}_fire_{s}_{m}_{band}_{info.key}"
+    return f"image_{country}_fire_{s}_{m}_{info.key}"
+
+def mosaic_name(year, month=None, period=None, band=None, mosaic=None, sensor=None):
+    key = f"{year}_{month:02d}" if month else f"{year}"
+    return mosaic_name_for_period(key, band=band, mosaic=mosaic, sensor=sensor)
 
 def get_temp_dir(subdir=None):
     is_colab = 'COLAB_RELEASE_TAG' in os.environ

@@ -27,6 +27,9 @@ Ideias registradas para depois; nenhuma delas está implementada.
 
 ## 3. Períodos temporais adicionais
 
+- **Base pronta:** `M_periods.py` centraliza o registry; anual e mensal já
+  passam por `parse_period`/`list_periods`. Semestral e trimestral estão
+  declarados no registry, mas desabilitados.
 - **Desejos:** semestral (6 meses), trimestral (3 meses), bimestral (2 meses) e
   bianual (2 anos).
 - **Situação atual:** `monthly` e `yearly` estão fixos em:
