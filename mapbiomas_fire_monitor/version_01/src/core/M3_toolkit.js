@@ -9,6 +9,73 @@ v10: Exclusive Tool for Sample Collection and Export (Vectors)
 // ─── GLOBAL CONFIGURATION ───────────────────────────────────────────────────
 var PERSONAL_TASK_FLAG = 'CATALOG';
 
+// ─── FIRE LOADER ────────────────────────────────────────────────────────────
+var fireLabel = ui.Label({
+    value: '',
+    style: {shown: false, fontSize: '11px', color: '#e65100', fontWeight: 'bold', margin: '4px'}
+});
+var firePending = 0;
+
+function fireStart(message) {
+    firePending++;
+    fireLabel.setValue('🔥 ' + (message || 'carregando...'));
+    fireLabel.style().set('shown', true);
+}
+
+function fireEnd() {
+    firePending = Math.max(0, firePending - 1);
+    if (!firePending) fireLabel.style().set('shown', false);
+}
+
+function listAssetsAsync(parent, callback, pageToken, accumulated) {
+    var params = {parent: parent};
+    if (pageToken) params.pageToken = pageToken;
+    var acc = accumulated || [];
+    try {
+        ee.data.listAssets(params, function(result, error) {
+            if (error) {
+                callback(null, error);
+                return;
+            }
+            if (!result) {
+                callback(acc, null);
+                return;
+            }
+            var assets = acc.concat(result.assets || []);
+            if (result.nextPageToken) {
+                listAssetsAsync(parent, callback, result.nextPageToken, assets);
+            } else {
+                callback(assets, null);
+            }
+        });
+    } catch (e) {
+        callback(null, e);
+    }
+}
+
+var hotspotsAssets = null;
+var hotspotsLoading = false;
+var hotspotsRefresh = null;
+
+function loadHotspotsAssets() {
+    if (hotspotsAssets || hotspotsLoading) return;
+    hotspotsLoading = true;
+    fireStart('carregando hotspots...');
+    listAssetsAsync(
+        'projects/mapbiomas-fire-485203/assets/DATABASE/monthly-focus-sul-america',
+        function(assets, error) {
+            hotspotsLoading = false;
+            fireEnd();
+            if (error || !assets) {
+                print('Erro Hotspots:', error);
+                return;
+            }
+            hotspotsAssets = assets;
+            if (hotspotsRefresh) hotspotsRefresh();
+        }
+    );
+}
+
 // ─── LANGUAGE CONFIGURATION ─────────────────────────────────────────────────
 // Change APP_LANG to switch the interface language: 'es', 'pt', 'en'
 var APP_LANG = 'es';
@@ -353,7 +420,6 @@ var countryConfigs = {
         catalog_root: 'projects/mapbiomas-bolivia/assets/FIRE/CATALOG_01',
         campaign: 'COLLECTION_02',
         asset_regions: 'projects/mapbiomas-bolivia/assets/FIRE/CATALOG_01/COLLECTION_02/AUXILIARY/regiones_fuego_bolivia_v1',
-        asset_regions_fallback: 'projects/mapbiomas-bolivia/assets/FIRE/AUXILIARY_DATA/regiones_fuego_bolivia_v1',
         bucket: 'mapbiomas-fire',
         property: 'region_nam',
         defaultPeriodicity: 'anual',
@@ -363,20 +429,8 @@ var countryConfigs = {
     }
 };
 
-function resolveRegionsAsset(conf) {
-    var candidates = [conf.asset_regions];
-    if (conf.asset_regions_fallback) candidates.push(conf.asset_regions_fallback);
-    for (var i = 0; i < candidates.length; i++) {
-        try {
-            ee.data.getAsset(candidates[i]);
-            return candidates[i];
-        } catch (e) {}
-    }
-    return conf.asset_regions;
-}
-
 // Global variable to store active regions collection
-var current_regiones = ee.FeatureCollection(resolveRegionsAsset(countryConfigs['Peru']));
+var current_regiones = ee.FeatureCollection(countryConfigs['Peru'].asset_regions);
 
 // --- VISUALIZATION SETTINGS ---
 var VIS_PRESETS = {
@@ -475,22 +529,23 @@ var extraDatasets = {
         vis: { color: '0f03fc' },
         build: function (start, end, bounds, year, month) {
             if (!month) return ee.Image().select();
-            try {
-                var assets = ee.data.listAssets('projects/mapbiomas-fire-485203/assets/DATABASE/monthly-focus-sul-america').assets;
-                for (var i = 0; i < assets.length; i++) {
-                    var filename = assets[i].id.split('/').slice(-1)[0];
-                    if (filename.indexOf('_') > -1) {
-                        var split = filename.split('_')[1].split('-');
-                        if (split.length >= 2) {
-                            var aYear = parseInt(split[0], 10);
-                            var aMonth = parseInt(split[1], 10);
-                            if (aYear === year && aMonth === month) {
-                                return ee.FeatureCollection(assets[i].id).style({ color: '0f03fc', pointSize: 2 });
-                            }
+            if (!hotspotsAssets) {
+                loadHotspotsAssets();
+                return ee.Image().select();
+            }
+            for (var i = 0; i < hotspotsAssets.length; i++) {
+                var filename = hotspotsAssets[i].id.split('/').slice(-1)[0];
+                if (filename.indexOf('_') > -1) {
+                    var split = filename.split('_')[1].split('-');
+                    if (split.length >= 2) {
+                        var aYear = parseInt(split[0], 10);
+                        var aMonth = parseInt(split[1], 10);
+                        if (aYear === year && aMonth === month) {
+                            return ee.FeatureCollection(hotspotsAssets[i].id).style({ color: '0f03fc', pointSize: 2 });
                         }
                     }
                 }
-            } catch (e) { print("Erro Hotspots:", e); }
+            }
             return ee.Image().select();
         }
     }
@@ -578,6 +633,7 @@ function user_interface() {
     var panel_head = ui.Panel({ layout: ui.Panel.Layout.flow('vertical'), style: styles.row });
     var panel_body = ui.Panel({ style: { margin: '0px', padding: '0px' } });
     panel.add(panel_head).add(panel_body);
+    panel_body.add(fireLabel);
 
     var logo = ui.Button({ imageUrl: b64.get('logo_mapbiomas_fuego'), style: { margin: '1px', padding: '0px' } });
     var title = ui.Label(L.title, { fontSize: '15px', fontWeight: 'bold', color: '#222', margin: '1px', stretch: 'horizontal' });
@@ -591,18 +647,24 @@ function user_interface() {
     // GENERAL MAP / DRAWING FUNCTIONS
     // ==========================================
     var updateTimer = null;
-    var lab_loading = ui.Label({ imageUrl: b64.get('load_gif'), style: { margin: '4px', shown: false } });
+    var regionRequestId = 0;
 
     function debouncedUpdateMosaic() {
-        lab_loading.style().set('shown', true);
+        if (!updateTimer) fireStart('atualizando mosaico...');
         if (updateTimer) {
             ui.util.clearTimeout(updateTimer);
         }
         updateTimer = ui.util.setTimeout(function () {
-            updateMosaic();
-            lab_loading.style().set('shown', false);
+            updateTimer = null;
+            try {
+                updateMosaic();
+            } finally {
+                fireEnd();
+            }
         }, 1000);
     }
+
+    hotspotsRefresh = debouncedUpdateMosaic;
 
     function getSelectedCountry() {
         var pais = 'Peru';
@@ -851,55 +913,71 @@ function user_interface() {
         });
     }
 
+    var classRequestId = 0;
+
     function updateClassificationsDrawer() {
+        var requestId = ++classRequestId;
         drawerClassModels.panel.clear();
         classCheckboxes = {};
         var selectedNames = getSelectedRegionNames();
         if (selectedNames.length === 0) return;
 
-        var labelLoading = ui.Label(L.loading, { fontSize: '10px', color: '#888' });
-        drawerClassModels.panel.add(labelLoading);
-
-        // Deffere listAssets para nao travar a UI antes do label renderizar
-        ee.Number(0).evaluate(function () {
-            var collections = ee.data.listAssets(REGIONAL_FOLDER);
-            var modelAssets = collections ? collections.assets : [];
-
+        fireStart('listando modelos...');
+        listAssetsAsync(REGIONAL_FOLDER, function(modelAssets, error) {
+            if (requestId !== classRequestId) { fireEnd(); return; }
+            if (error) {
+                fireEnd();
+                print('Erro classificações:', error);
+                return;
+            }
             if (!modelAssets || modelAssets.length === 0) {
-                labelLoading.setValue('(sin modelos)');
+                fireEnd();
+                drawerClassModels.panel.add(ui.Label('(sin modelos)', {fontSize: '10px', color: '#888'}));
                 return;
             }
 
-            var totalAdded = 0;
-            modelAssets.forEach(function (c, idx) {
-                var modelId = c.id.split('/').pop();
-                var colPath = REGIONAL_FOLDER + '/' + modelId;
-                var images = ee.data.listAssets(colPath);
-                if (!images || !images.assets) return;
+            var models = modelAssets.map(function(c, idx) {
+                return {id: c.id.split('/').pop(), idx: idx};
+            });
+            var withData = [];
+            var cursor = 0;
 
-                var imageNames = images.assets.map(function (i) { return i.id.split('/').pop(); });
-                var hasData = selectedNames.some(function (r) {
-                    return imageNames.some(function (img) { return img.indexOf(r) !== -1; });
-                });
-
-                if (hasData) {
-                    totalAdded++;
+            function finish() {
+                fireEnd();
+                if (!withData.length) {
+                    drawerClassModels.panel.add(ui.Label(L.status_no_models_region, {fontSize: '10px', color: '#888'}));
+                    return;
+                }
+                withData.forEach(function(model) {
                     var chk = ui.Checkbox({
-                        label: modelId,
+                        label: model.id,
                         value: false,
                         onChange: function () { debouncedUpdateMosaic(); },
-                        style: { margin: '1px 3px', padding: '0px', fontSize: '10px', color: CLASS_PALETTE[idx % 50] }
+                        style: {margin: '1px 3px', padding: '0px', fontSize: '10px', color: CLASS_PALETTE[model.idx % 50]}
                     });
-                    classCheckboxes[modelId] = chk;
+                    classCheckboxes[model.id] = chk;
                     drawerClassModels.panel.add(chk);
-                }
-            });
-
-            if (totalAdded === 0) {
-                labelLoading.setValue(L.status_no_models_region);
-            } else {
-                drawerClassModels.panel.remove(labelLoading);
+                });
             }
+
+            function next() {
+                if (requestId !== classRequestId) { fireEnd(); return; }
+                if (cursor >= models.length) { finish(); return; }
+                var model = models[cursor++];
+                fireLabel.setValue('🔥 modelos ' + cursor + '/' + models.length);
+                listAssetsAsync(REGIONAL_FOLDER + '/' + model.id, function(images, err) {
+                    if (requestId !== classRequestId) { fireEnd(); return; }
+                    if (!err && images && images.length) {
+                        var names = images.map(function(i) { return i.id.split('/').pop(); });
+                        var hasData = selectedNames.some(function(r) {
+                            return names.some(function(img) { return img.indexOf(r) !== -1; });
+                        });
+                        if (hasData) withData.push(model);
+                    }
+                    next();
+                });
+            }
+            next();
         });
     }
 
@@ -1003,9 +1081,10 @@ function user_interface() {
             'notFire_area': ee.Number(notFireGeoms.map(function (g) { return ee.Geometry(g).area(); }).reduce(ee.Reducer.sum())).divide(10000)
         });
 
-        panel_stats.add(ui.Label({ imageUrl: b64.get('load_gif'), style: { margin: '4px' } }));
+        fireStart('calculando estatísticas...');
 
         stats.evaluate(function (s, err) {
+            fireEnd();
             if (err) {
                 panel_stats.clear();
                 panel_stats.add(ui.Label('Error recalculating stats', { fontSize: '10px', color: 'red' }));
@@ -1056,7 +1135,7 @@ function user_interface() {
     function loadCountryData(countryName) {
         var conf = countryConfigs[countryName];
         REGIONAL_FOLDER = conf.getRegionalFolder();
-        current_regiones = ee.FeatureCollection(resolveRegionsAsset(conf));
+        current_regiones = ee.FeatureCollection(conf.asset_regions);
 
         // Atualiza bordas de todas as regiões no mapa
         layerAllRegions.setEeObject(current_regiones.style({ color: 'ffffff', fillColor: '00000000', width: 1 }));
@@ -1099,7 +1178,7 @@ function user_interface() {
             }
         });
 
-        header.add(titleLabel).add(btt_all_regions).add(btt_center_icon).add(lab_loading);
+        header.add(titleLabel).add(btt_all_regions).add(btt_center_icon);
         drawerRegions.panel.add(header);
 
         var flowPanel = ui.Panel({
@@ -1108,8 +1187,11 @@ function user_interface() {
         });
         drawerRegions.panel.add(flowPanel);
 
+        var requestId = ++regionRequestId;
+        fireStart('carregando regiões...');
         current_regiones.aggregate_array(conf.property).distinct().sort().evaluate(function (list) {
-            lab_loading.style().set('shown', false);
+            if (requestId !== regionRequestId) { fireEnd(); return; }
+            fireEnd();
             regionCheckboxes = {};
             list.forEach(function (name, i) {
                 var chk = ui.Checkbox({
@@ -1154,23 +1236,31 @@ function user_interface() {
         updateClassificationsDrawer();
     }
 
+    var importRequestId = 0;
+
     function updateImportList(conf) {
         // Atualiza a lista de amostras no Asset para a aba IMPORTAR
-        try {
-            var campaignPath = conf.getAssetSamples();
-            var assetList = ee.data.listAssets(campaignPath);
-            var sample_list = assetList ? assetList.assets : [];
-            var items = sample_list ? sample_list.map(function (obj) { return { label: obj.id.split('/').slice(-1)[0], value: obj.id }; }) : [];
+        var requestId = ++importRequestId;
+        var campaignPath = conf.getAssetSamples();
+        fireStart('carregando amostras...');
+        listAssetsAsync(campaignPath, function(assets, error) {
+            if (requestId !== importRequestId) { fireEnd(); return; }
+            fireEnd();
+            if (error || !assets) {
+                select_address.items().reset([]);
+                select_address.setPlaceholder('Campanha não encontrada no Asset');
+                return;
+            }
+            var items = assets.map(function(obj) {
+                return {label: obj.id.split('/').slice(-1)[0], value: obj.id};
+            });
             select_address.items().reset(items);
             if (items.length > 0) {
                 select_address.setPlaceholder(L.placeholder_asset);
             } else {
                 select_address.setPlaceholder('Sin muestras en la campaña');
             }
-        } catch (e) {
-            select_address.items().reset([]);
-            select_address.setPlaceholder('Campanha não encontrada no Asset');
-        }
+        });
     }
 
     // ==========================================
@@ -1498,16 +1588,21 @@ function user_interface() {
     var lab_version_status = ui.Label(L.ver_checking, { fontSize: '10px', color: '#888', margin: '1px' });
     var txt_version = ui.Textbox({ placeholder: '0001', value: 'v0001', onChange: updateExportPreview, style: { margin: '1px', padding: '0px', width: '55px' } });
 
+    var versionRequestId = 0;
+
     function suggestNextVersion() {
+        var requestId = ++versionRequestId;
         lab_version_status.setValue(L.ver_checking).style().set('color', '#888');
         var conf = countryConfigs[getSelectedCountry()];
+        var campaignPath = conf.getAssetSamples();
 
-        try {
-            var campaignPath = conf.getAssetSamples();
-            var assetList = ee.data.listAssets(campaignPath);
-            var assets = assetList ? assetList.assets : [];
+        fireStart('verificando versão...');
+        listAssetsAsync(campaignPath, function(assets, error) {
+            if (requestId !== versionRequestId) { fireEnd(); return; }
+            fireEnd();
+            assets = assets || [];
 
-            if (!assets || assets.length === 0) {
+            if (error || assets.length === 0) {
                 txt_version.setValue('0001');
                 lab_version_status.setValue(L.ver_empty).style().set('color', '#e65100');
                 updateExportPreview();
@@ -1515,12 +1610,9 @@ function user_interface() {
             }
 
             var maxV = 0;
-
             assets.forEach(function (a) {
                 var fname = a.id.split('/').slice(-1)[0];
-
                 var m = fname.match(/^samples_(\d{4})/);
-
                 if (m) {
                     var n = parseInt(m[1], 10);
                     if (n > maxV) maxV = n;
@@ -1529,19 +1621,12 @@ function user_interface() {
 
             var nextNumber = ('000' + (maxV + 1)).slice(-4);
             var next = 'samples_' + nextNumber;
-
             txt_version.setValue(nextNumber);
-
             lab_version_status
                 .setValue(L.ver_suggested + next)
                 .style().set('color', '#0f9d58');
-
-        } catch (e) {
-            txt_version.setValue('0001');
-            lab_version_status.setValue(L.ver_empty).style().set('color', '#e65100');
-        }
-
-        updateExportPreview();
+            updateExportPreview();
+        });
     }
 
     // --- Shortname (opcional) ---
