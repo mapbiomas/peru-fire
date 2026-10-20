@@ -479,6 +479,7 @@ var countryConfigs = {
         property: 'region_nam',
         campaigns: ['COLLECTION_02', 'MONITOR_01'],
         defaultCampaign: 'COLLECTION_02',
+        defaultPeriodicity: 'anual',
         getAssetSamples: function(campaign) { return 'projects/mapbiomas-bolivia/assets/FIRE/CATALOG_01/' + campaign + '/LIBRARY_SAMPLES'; },
         getGcsSamples: function(campaign) { return 'sudamerica/bolivia/CATALOG_01/' + campaign + '/LIBRARY_SAMPLES'; },
         getRegionalFolder: function(campaign) { return 'projects/mapbiomas-bolivia/assets/FIRE/CATALOG_01/' + campaign + '/LIBRARY_CLASSIFICATIONS/REGIONAL'; },
@@ -1203,7 +1204,11 @@ function updateClassificationsDrawer() {
             if (!isCurrentAsync(ASYNC_STATE.classifications, classificationToken)) { fireEnd(); return; }
             if (error) {
                 fireEnd();
-                print('Erro classificações:', error);
+                var emptyPanel = ui.Panel({style: {margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9'}});
+                emptyPanel.add(ui.Label('(sin modelos)', {fontSize: '10px', color: '#888'}));
+                classCheckboxes = {};
+                drawerClassModels.panel.clear();
+                drawerClassModels.panel.add(emptyPanel);
                 return;
             }
             if (!modelAssets || modelAssets.length === 0) {
@@ -1571,6 +1576,12 @@ function updateStats() {
         var conf = countryConfigs[countryName];
         var defaultCampaign = conf.defaultCampaign || (conf.campaigns && conf.campaigns[0]);
         REGIONAL_FOLDER = conf.getRegionalFolder(defaultCampaign);
+        if (conf.defaultPeriodicity && typeof periodicityButtons !== 'undefined') {
+            periodicityActive['anual'] = conf.defaultPeriodicity === 'anual';
+            periodicityActive['mensal'] = conf.defaultPeriodicity === 'mensal';
+            styleToggleButton(periodicityButtons['anual'], periodicityActive['anual']);
+            styleToggleButton(periodicityButtons['mensal'], periodicityActive['mensal']);
+        }
         current_regiones = ee.FeatureCollection(conf.asset_regions);
 
         // Atualiza bordas de todas as regiões no mapa
@@ -1630,7 +1641,7 @@ function updateStats() {
             drawerRegions.panel.add(header);
             drawerRegions.flowPanel = ui.Panel({
                 layout: ui.Panel.Layout.flow('horizontal', true),
-                style: { margin: '0px', padding: '0px', backgroundColor: '#f9f9f9', height: '100px', maxHeight: '100px' }
+                style: { margin: '0px', padding: '0px', backgroundColor: '#f9f9f9', maxHeight: '100px' }
             });
             drawerRegions.panel.add(drawerRegions.flowPanel);
         }
@@ -1650,10 +1661,7 @@ function updateStats() {
             }
             fireEnd();
             regionCheckboxes = {};
-            var newFlow = ui.Panel({
-                layout: ui.Panel.Layout.flow('horizontal', true),
-                style: {margin: '0px', padding: '0px', backgroundColor: '#f9f9f9', height: '100px', maxHeight: '100px'}
-            });
+            var pendingCheckboxes = [];
             list.forEach(function (name, i) {
                 var selected = previousRegions[name] !== undefined ? previousRegions[name] : (i === 0);
                 var chk = ui.Checkbox({
@@ -1677,10 +1685,12 @@ function updateStats() {
                 });
                 styleCheck(chk, selected);
                 regionCheckboxes[name] = chk;
-                newFlow.add(chk);
+                pendingCheckboxes.push(chk);
             });
             drawerRegions.flowPanel.clear();
-            drawerRegions.flowPanel.add(newFlow);
+            pendingCheckboxes.forEach(function(chk) {
+                drawerRegions.flowPanel.add(chk);
+            });
             applyRegionFilter(txt_region_filter ? txt_region_filter.getValue() : '');
             updateAllRegionsButtonState();
             updateSelectedRegionsMap();
@@ -1907,7 +1917,7 @@ function loadSampleAssets(folderPath) {
         pnl.add(ui.Label(type.toUpperCase(), { fontSize: '10px', fontWeight: 'bold', margin: '2px' }));
         var flow = ui.Panel({
             layout: ui.Panel.Layout.flow('horizontal', true),
-            style: { margin: '0px', backgroundColor: '#f9f9f9', height: '120px', maxHeight: '120px' }
+            style: { margin: '0px', backgroundColor: '#f9f9f9', maxHeight: '120px' }
         });
         pnl.add(flow);
         dates.forEach(function (d, i) {
@@ -2070,7 +2080,7 @@ function loadSampleAssets(folderPath) {
             ['MONTHLY', 'YEARLY'].forEach(function (period) {
                 pending++;
                 var cacheKey = getSelectedCountry() + '::' + id + '::' + period;
-                getAssetAsync([layer.base, 'SENTINEL2', period, mosaicType].join('/'), function (ok) {
+                getAssetAsync([layer.base, 'SENTINEL2', period, mosaicType, 'dayofyear'].join('/'), function (ok) {
                     if (requestId !== assetRequestId) {
                         pending--;
                         if (pending === 0) fireEnd();
@@ -2115,7 +2125,7 @@ function loadSampleAssets(folderPath) {
     classBandCheckboxes = drawerClassToggle.checkboxes;
     subCabClass.content.add(drawerClassToggle.panel);
 
-    var drawerClassModels = { panel: ui.Panel({ style: { margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9', height: '180px', maxHeight: '180px' } }) };
+    var drawerClassModels = { panel: ui.Panel({ style: { margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9', maxHeight: '180px' } }) };
     subCabClass.content.add(drawerClassModels.panel);
 
     // --- CABINET 4: SAMPLES ---
