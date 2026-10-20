@@ -1551,7 +1551,8 @@ function updateStats() {
     function applyRegionFilter(text) {
         regionFilterGroups = smartParseQuery(text);
         Object.keys(regionCheckboxes).forEach(function (name) {
-            regionCheckboxes[name].style().set('shown', isRegionVisible(name));
+            // visibility keeps the checkbox slot in the layout, avoiding jumps
+            regionCheckboxes[name].style().set('visibility', isRegionVisible(name) ? 'visible' : 'hidden');
         });
         updateAllRegionsButtonState();
     }
@@ -1560,7 +1561,8 @@ function updateStats() {
     function applyDateFilter(text) {
         dateFilterGroups = smartParseQuery(text);
         Object.keys(periodCheckboxes).forEach(function (d) {
-            periodCheckboxes[d].style().set('shown', smartFilterMatch(d, dateFilterGroups));
+            // visibility keeps the checkbox slot in the layout, avoiding jumps
+            periodCheckboxes[d].style().set('visibility', smartFilterMatch(d, dateFilterGroups) ? 'visible' : 'hidden');
         });
     }
 
