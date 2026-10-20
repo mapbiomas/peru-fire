@@ -7,6 +7,7 @@ from shapely.geometry import shape
 import rasterio
 from rasterio.mask import mask
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path, gcs_samples_path
+from M_periods import normalize_period, period_year
 from M_cache import CacheManager, _get_fs
 
 
@@ -90,25 +91,43 @@ def extract_pixels_from_gcs(sample_groups, bands_config, logger=None):
                     file_date = f"{file_parts[-2]}_{file_parts[-1]}"
                 elif file_parts[-1].isdigit() and len(file_parts[-1]) == 4: # YYYY
                     file_date = file_parts[-1]
-                
+
+                if 'period' in temp_df.columns:
+                    temp_df['period'] = temp_df['period'].map(normalize_period)
+                    if file_date:
+                        temp_df.loc[temp_df['period'] == '', 'period'] = file_date
+                elif file_date:
+                    temp_df['period'] = file_date
+
                 if not temp_df.empty and 'period' in temp_df.columns:
                     p_found = temp_df['period'].unique().tolist()
                     
                     # Se encontrarmos uma data absurda (como 2026_04) mas o arquivo diz outra coisa,
                     # forçamos a data do arquivo para que a extração funcione.
-                    if file_date and any(int(p.split('_')[0]) > 2025 for p in p_found):
+                    if file_date and any((period_year(p) or 0) > (period_year(file_date) or 0) for p in p_found):
                         if logger: logger(f"  [AVISO] Se ha detectado una fecha futura {p_found} no CSV. Corrigiendo para {file_date}...", "warning")
                         temp_df['period'] = file_date
                         p_found = [file_date]
                     
                     if logger: logger(f"  [Buscar] Contenido: {len(temp_df)} puntos | Períodos: {p_found}", "info")
+                if 'period' not in temp_df.columns:
+                    if logger: logger(f"  [AVISO] {group}: sin 'period' y sin fecha en el nombre; se omite.", "warning")
+                    continue
                 dfs.append(temp_df)
         except Exception as e:
             if logger: logger(f"Error al leer {group}: {e}", "error")
             
     if not dfs: return np.array([]), np.array([])
-        
+
     df = pd.concat(dfs, ignore_index=True)
+    if 'period' not in df.columns:
+        if logger: logger("No 'period' column found in samples.", "error")
+        return np.array([]), np.array([])
+    df['period'] = df['period'].map(normalize_period)
+    df = df[df['period'] != ''].reset_index(drop=True)
+    if df.empty:
+        if logger: logger("No samples with a valid period.", "warning")
+        return np.array([]), np.array([])
     df['geometry'] = df['.geo'].apply(lambda x: shape(json.loads(x)))
     gdf = gpd.GeoDataFrame(df, geometry='geometry', crs="EPSG:4326")
     
