@@ -5,7 +5,7 @@ import threading
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
-from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode, monthly_cog_path, yearly_cog_path, get_sensor_start_year
+from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name, is_edit_mode, monthly_cog_path, yearly_cog_path, get_sensor_start_year, resolve_years
 import M0_auth_config as config_module
 from M_cache import CacheManager
 from M_ui_components import PipelineStepUI, cell_log, ProgressTracker
@@ -35,13 +35,7 @@ class MosaicAssemblerUI(PipelineStepUI):
     def _init_data(self):
         import datetime
         self.now = datetime.datetime.now()
-        curr_year = self.now.year
-        if self.requested_years:
-            self.years = sorted(self.requested_years, reverse=True)
-        else:
-            sensors = GLOBAL_OPTS['SENSOR'] if isinstance(GLOBAL_OPTS['SENSOR'], list) else [GLOBAL_OPTS['SENSOR']]
-            first_year = min(get_sensor_start_year(sensor) for sensor in sensors)
-            self.years = list(range(curr_year, first_year - 1, -1))
+        self.years = resolve_years(self.requested_years)
         self.bands = CONFIG['bands_all']
         self.state = CacheManager.load() or {}
         self.gcs_chunks = self.state.get('gcs_chunks', {})

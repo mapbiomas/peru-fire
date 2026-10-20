@@ -2,7 +2,7 @@ import os
 import base64
 from IPython.display import display, HTML, clear_output
 import ipywidgets as widgets
-from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs, gcs_models_path
+from M0_auth_config import CONFIG, GLOBAL_OPTS, _get_fs, gcs_models_path, resolve_years
 from M5_workplan import load_workplan, save_workplan, make_job_id, new_job, gcs_full, classified_tiles_dir, \
     tarea_path, save_tarea, delete_tarea, list_tareas, \
     save_pending_job_to_gcs, delete_pending_job_gcs, \
@@ -16,7 +16,7 @@ L = widgets.Layout
 
 class M5WorkplanUI:
     def __init__(self, years=None, periodicity_active=None):
-        self.years = years or [2025, 2026]
+        self.years = [2025, 2026] if years is None else resolve_years(years)
         configured_periods = [p.lower() for p in GLOBAL_OPTS.get('PERIODICITY', ['monthly'])]
         if periodicity_active and [p.lower() for p in periodicity_active] != configured_periods:
             print(f"M5 periodicity follows M0 configuration: {configured_periods}")

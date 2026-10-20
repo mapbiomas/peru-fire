@@ -576,6 +576,82 @@ def get_sensor_start_year(sensor=None):
         raise ValueError(f"Unsupported sensor for start-year lookup: {sensor}")
     return start_years[sensor]
 
+
+def resolve_years(years=None, sensor=None):
+    """Normalize a year selection to a descending list.
+
+    Accepted forms:
+    - None or []: every year available for the sensor (start year..current).
+    - int: a single year, e.g. 2020.
+    - list/tuple of ints: explicit years, e.g. [1985, 2000, 2020].
+    - string or one-item list with an interval: '1985:2000' (also ';' or '-').
+
+    Years outside the sensor range are ignored with a warning; if nothing
+    valid remains, a ValueError explains the available range.
+    """
+    import datetime
+    import re
+
+    if sensor is None:
+        sensors = GLOBAL_OPTS['SENSOR']
+    elif isinstance(sensor, (list, tuple)):
+        sensors = list(sensor)
+    else:
+        sensors = [sensor]
+    sensors = [str(item).lower() for item in sensors]
+    first_year = min(get_sensor_start_year(item) for item in sensors)
+    last_year = datetime.datetime.now().year
+
+    if years is None:
+        years = []
+    if isinstance(years, int):
+        years = [years]
+    elif isinstance(years, str):
+        years = [years]
+    else:
+        years = list(years)
+
+    if not years:
+        return list(range(last_year, first_year - 1, -1))
+
+    if len(years) == 1 and isinstance(years[0], str):
+        text = years[0].strip()
+        match = re.fullmatch(r'(\d{4})\s*[:;\-]\s*(\d{4})', text)
+        if match:
+            start, end = sorted(int(value) for value in match.groups())
+            years = list(range(start, end + 1))
+        else:
+            years = [text]
+
+    normalized = []
+    for value in years:
+        try:
+            normalized.append(int(value))
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                f"Invalid year value {value!r}. Use an int, a list of ints, "
+                "or a range like '1985:2000'."
+            ) from error
+
+    valid = sorted(
+        {year for year in normalized if first_year <= year <= last_year},
+        reverse=True,
+    )
+    ignored = sorted(
+        {year for year in normalized if year < first_year or year > last_year}
+    )
+    if ignored:
+        print(
+            f"[WARN] Years outside {first_year}-{last_year} for {sensors} "
+            f"ignored: {ignored}"
+        )
+    if not valid:
+        raise ValueError(
+            f"No valid years for {sensors}: requested {normalized}; "
+            f"available range is {first_year}-{last_year}."
+        )
+    return valid
+
 def get_model_scale(model_id):
     """Resolve pixel size from the sensor encoded in a trained model ID."""
     cache_key = (CONFIG.get('country'), CONFIG.get('campaign'), str(model_id))
