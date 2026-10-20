@@ -15,27 +15,23 @@ class BlocklistSourceError(RuntimeError):
     """Raised when current blocklists cannot be fetched or parsed safely."""
 
 
+GEE_GIT_URL = 'https://earthengine.googlesource.com'
+
+
 def _git_environment():
-    """Use the authenticated Colab/ADC token without putting it in argv."""
+    """Build a non-interactive git environment for the public GEE sources.
+
+    GEE git authentication uses a generated password (gitcookies or a
+    credential helper), not an OAuth bearer header. A stale ``extraheader``
+    inherited from the notebook turns anonymous reads into a credential
+    prompt, so reset it. Helpers stay enabled for private repositories.
+    """
     env = os.environ.copy()
-    try:
-        from M0_auth_config import _GCS_CREDENTIALS
-        credentials = _GCS_CREDENTIALS
-        if credentials is None:
-            import google.auth
-            credentials, _ = google.auth.default(
-                scopes=['https://www.googleapis.com/auth/cloud-platform']
-            )
-        if not getattr(credentials, 'valid', False):
-            from google.auth.transport.requests import Request
-            credentials.refresh(Request())
-        if credentials.token:
-            config_index = int(env.get('GIT_CONFIG_COUNT', '0'))
-            env['GIT_CONFIG_COUNT'] = str(config_index + 1)
-            env[f'GIT_CONFIG_KEY_{config_index}'] = 'http.https://earthengine.googlesource.com/.extraheader'
-            env[f'GIT_CONFIG_VALUE_{config_index}'] = f'Authorization: Bearer {credentials.token}'
-    except Exception:
-        pass
+    env['GIT_TERMINAL_PROMPT'] = '0'
+    config_index = int(env.get('GIT_CONFIG_COUNT', '0'))
+    env['GIT_CONFIG_COUNT'] = str(config_index + 1)
+    env[f'GIT_CONFIG_KEY_{config_index}'] = f'http.{GEE_GIT_URL}/.extraheader'
+    env[f'GIT_CONFIG_VALUE_{config_index}'] = ''
     return env
 
 
@@ -168,6 +164,7 @@ class _SparseGeeSources:
     def __init__(self, temp_root):
         self.temp_root = temp_root
         self.repositories = {}
+        self.git_env = _git_environment()
 
     def read(self, asset_id):
         remote, file_path = _parse_asset_id(asset_id)
@@ -177,10 +174,10 @@ class _SparseGeeSources:
             try:
                 subprocess.run(
                     ['git', 'clone', '--depth', '1', '--filter=blob:none', '--sparse', remote, local_path],
-                    check=True, capture_output=True, text=True, env=_git_environment(),
+                    check=True, capture_output=True, text=True, env=self.git_env,
                 )
             except (OSError, subprocess.CalledProcessError) as error:
-                detail = getattr(error, 'stderr', None) or str(error)
+                detail = (getattr(error, 'stderr', None) or str(error)).strip()
                 raise BlocklistSourceError(f"Could not fetch GEE source {remote}: {detail}") from error
             repository = {'path': local_path, 'files': set()}
             self.repositories[remote] = repository
@@ -192,10 +189,10 @@ class _SparseGeeSources:
             try:
                 subprocess.run(
                     ['git', '-C', repository['path'], 'sparse-checkout', 'set', '--no-cone', *sparse_paths],
-                    check=True, capture_output=True, text=True,
+                    check=True, capture_output=True, text=True, env=self.git_env,
                 )
             except subprocess.CalledProcessError as error:
-                detail = error.stderr or str(error)
+                detail = (error.stderr or str(error)).strip()
                 raise BlocklistSourceError(f"Could not select GEE source file {file_path}: {detail}") from error
 
         full_path = os.path.join(repository['path'], *normalized_path.split('/'))
