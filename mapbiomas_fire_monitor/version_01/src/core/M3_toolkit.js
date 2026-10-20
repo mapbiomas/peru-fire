@@ -8,8 +8,6 @@ v10: Exclusive Tool for Sample Collection and Export (Vectors)
 
 // ─── GLOBAL CONFIGURATION ───────────────────────────────────────────────────
 var PERSONAL_TASK_FLAG = 'CATALOG';
-var CAMPAIGN = 'MONITOR_01';
-var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
 
 // ─── LANGUAGE CONFIGURATION ─────────────────────────────────────────────────
 // Change APP_LANG to switch the interface language: 'es', 'pt', 'en'
@@ -342,17 +340,43 @@ var countryConfigs = {
     //   property: 'region_nam'
     // },
     'Peru': {
+        catalog_root: 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01',
+        campaign: 'MONITOR_01',
         asset_regions: 'projects/mapbiomas-peru/assets/FIRE/AUXILIARY_DATA/regiones_fuego_peru_v1',
         bucket: 'mapbiomas-fire',
         property: 'region_nam',
-        getAssetSamples: function() { return CATALOG_ROOT + '/' + CAMPAIGN + '/LIBRARY_SAMPLES'; },
-        getGcsSamples: function() { return 'sudamerica/peru/CATALOG_01/' + CAMPAIGN + '/LIBRARY_SAMPLES'; },
-        getRegionalFolder: function() { return CATALOG_ROOT + '/' + CAMPAIGN + '/LIBRARY_CLASSIFICATIONS/REGIONAL'; }
+        getAssetSamples: function() { return this.catalog_root + '/' + this.campaign + '/LIBRARY_SAMPLES'; },
+        getGcsSamples: function() { return 'sudamerica/peru/CATALOG_01/' + this.campaign + '/LIBRARY_SAMPLES'; },
+        getRegionalFolder: function() { return this.catalog_root + '/' + this.campaign + '/LIBRARY_CLASSIFICATIONS/REGIONAL'; }
+    },
+    'Bolivia': {
+        catalog_root: 'projects/mapbiomas-bolivia/assets/FIRE/CATALOG_01',
+        campaign: 'COLLECTION_02',
+        asset_regions: 'projects/mapbiomas-bolivia/assets/FIRE/CATALOG_01/COLLECTION_02/AUXILIARY/regiones_fuego_bolivia_v1',
+        asset_regions_fallback: 'projects/mapbiomas-bolivia/assets/FIRE/AUXILIARY_DATA/regiones_fuego_bolivia_v1',
+        bucket: 'mapbiomas-fire',
+        property: 'region_nam',
+        defaultPeriodicity: 'anual',
+        getAssetSamples: function() { return this.catalog_root + '/' + this.campaign + '/LIBRARY_SAMPLES'; },
+        getGcsSamples: function() { return 'sudamerica/bolivia/CATALOG_01/' + this.campaign + '/LIBRARY_SAMPLES'; },
+        getRegionalFolder: function() { return this.catalog_root + '/' + this.campaign + '/LIBRARY_CLASSIFICATIONS/REGIONAL'; }
     }
 };
 
+function resolveRegionsAsset(conf) {
+    var candidates = [conf.asset_regions];
+    if (conf.asset_regions_fallback) candidates.push(conf.asset_regions_fallback);
+    for (var i = 0; i < candidates.length; i++) {
+        try {
+            ee.data.getAsset(candidates[i]);
+            return candidates[i];
+        } catch (e) {}
+    }
+    return conf.asset_regions;
+}
+
 // Global variable to store active regions collection
-var current_regiones = ee.FeatureCollection(countryConfigs['Peru'].asset_regions);
+var current_regiones = ee.FeatureCollection(resolveRegionsAsset(countryConfigs['Peru']));
 
 // --- VISUALIZATION SETTINGS ---
 var VIS_PRESETS = {
@@ -666,7 +690,9 @@ function user_interface() {
                         var mosaicType = isBuffer ? 'MINNBR_BUFFER' : 'MINNBR';
                         var periodFolder = folderPeriod.toUpperCase();
 
-                        var assetBase = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01/LIBRARY_IMAGES';
+                        var mosaicConf = countryConfigs[getSelectedCountry()];
+                        var assetBase = mosaicConf.catalog_root + '/LIBRARY_IMAGES';
+                        var countryCode = getSelectedCountry().toLowerCase();
                         var imgAsset = ee.Image().select();
 
                         try {
@@ -677,7 +703,7 @@ function user_interface() {
 
                                 // Filtra a imagem pelo nome institucional
                                 var dateKey = periodicity === 'monthly' ? year + '_' + ('0' + month).slice(-2) : year;
-                                var imgName = 'image_peru_fire_sentinel2_' + mosaicType.toLowerCase() + '_' + b.toLowerCase() + '_' + dateKey;
+                                var imgName = 'image_' + countryCode + '_fire_sentinel2_' + mosaicType.toLowerCase() + '_' + b.toLowerCase() + '_' + dateKey;
 
                                 // Tenta carregar a imagem (safe-load via mosaic)
                                 var bandImg = col.filter(ee.Filter.eq('system:index', imgName)).mosaic();
@@ -1029,7 +1055,8 @@ function user_interface() {
     // ==========================================
     function loadCountryData(countryName) {
         var conf = countryConfigs[countryName];
-        current_regiones = ee.FeatureCollection(conf.asset_regions);
+        REGIONAL_FOLDER = conf.getRegionalFolder();
+        current_regiones = ee.FeatureCollection(resolveRegionsAsset(conf));
 
         // Atualiza bordas de todas as regiões no mapa
         layerAllRegions.setEeObject(current_regiones.style({ color: 'ffffff', fillColor: '00000000', width: 1 }));
@@ -1107,14 +1134,21 @@ function user_interface() {
             updateClassificationsDrawer();
         });
 
+        // Período padrão do país (Bolívia: anual; Peru: mantém o atual)
+        if (conf.defaultPeriodicity && typeof periodicityCheckboxes !== 'undefined') {
+            var wantAnnual = conf.defaultPeriodicity === 'anual';
+            periodicityCheckboxes['anual'].setValue(wantAnnual, false);
+            periodicityCheckboxes['mensal'].setValue(!wantAnnual, false);
+        }
+
         // Atualiza a gaveta de períodos
         updatePeriodDrawer();
 
-        // Atualiza Campanhas (fixo: MONITOR_01)
-        select_campaign_imp.items().reset([CAMPAIGN]);
-        select_campaign_exp.items().reset([CAMPAIGN]);
-        select_campaign_imp.setValue(CAMPAIGN, false);
-        select_campaign_exp.setValue(CAMPAIGN, false);
+        // Atualiza Campanhas (padrão do país)
+        select_campaign_imp.items().reset([conf.campaign]);
+        select_campaign_exp.items().reset([conf.campaign]);
+        select_campaign_imp.setValue(conf.campaign, false);
+        select_campaign_exp.setValue(conf.campaign, false);
 
         updateImportList(conf);
         updateClassificationsDrawer();
@@ -1358,10 +1392,11 @@ function user_interface() {
 
     // --- CAMPAIGN SELECTORS (Synced) ---
     function makeCampaignSelector() {
+        var campaign = countryConfigs[getSelectedCountry()].campaign;
         return ui.Select({
-            items: [CAMPAIGN],
+            items: [campaign],
             placeholder: L.placeholder_campaign,
-            value: CAMPAIGN,
+            value: campaign,
             style: { margin: '2px', stretch: 'horizontal' }
         });
     }
