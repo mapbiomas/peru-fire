@@ -34,20 +34,19 @@ var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
 
 // ─── FIRE LOADER ────────────────────────────────────────────────────────────
 var fireLabel = ui.Label({
-    value: '🔥',
-    style: {visibility: 'hidden', width: '18px', minWidth: '18px', height: '16px', textAlign: 'center', fontSize: '13px', margin: '4px'}
+    value: ' ',
+    style: {width: '18px', height: '16px', textAlign: 'center', fontSize: '13px', margin: '4px'}
 });
 var firePending = 0;
 
 function fireStart(message) {
     firePending++;
     fireLabel.setValue('🔥');
-    fireLabel.style().set('visibility', 'visible');
 }
 
 function fireEnd() {
     firePending = Math.max(0, firePending - 1);
-    if (!firePending) fireLabel.style().set('visibility', 'hidden');
+    if (!firePending) fireLabel.setValue(' ');
 }
 
 function listAssetsAsync(parent, callback, pageToken, accumulated) {
@@ -1551,8 +1550,7 @@ function updateStats() {
     function applyRegionFilter(text) {
         regionFilterGroups = smartParseQuery(text);
         Object.keys(regionCheckboxes).forEach(function (name) {
-            // visibility keeps the checkbox slot in the layout, avoiding jumps
-            regionCheckboxes[name].style().set('visibility', isRegionVisible(name) ? 'visible' : 'hidden');
+            regionCheckboxes[name].style().set('shown', isRegionVisible(name));
         });
         updateAllRegionsButtonState();
     }
@@ -1561,8 +1559,7 @@ function updateStats() {
     function applyDateFilter(text) {
         dateFilterGroups = smartParseQuery(text);
         Object.keys(periodCheckboxes).forEach(function (d) {
-            // visibility keeps the checkbox slot in the layout, avoiding jumps
-            periodCheckboxes[d].style().set('visibility', smartFilterMatch(d, dateFilterGroups) ? 'visible' : 'hidden');
+            periodCheckboxes[d].style().set('shown', smartFilterMatch(d, dateFilterGroups));
         });
     }
 
@@ -1633,7 +1630,7 @@ function updateStats() {
             drawerRegions.panel.add(header);
             drawerRegions.flowPanel = ui.Panel({
                 layout: ui.Panel.Layout.flow('horizontal', true),
-                style: { margin: '0px', padding: '0px', backgroundColor: '#f9f9f9', maxHeight: '100px', overflowY: 'auto' }
+                style: { margin: '0px', padding: '0px', backgroundColor: '#f9f9f9', height: '100px', maxHeight: '100px' }
             });
             drawerRegions.panel.add(drawerRegions.flowPanel);
         }
@@ -1655,7 +1652,7 @@ function updateStats() {
             regionCheckboxes = {};
             var newFlow = ui.Panel({
                 layout: ui.Panel.Layout.flow('horizontal', true),
-                style: {margin: '0px', padding: '0px', backgroundColor: '#f9f9f9', maxHeight: '100px', overflowY: 'auto'}
+                style: {margin: '0px', padding: '0px', backgroundColor: '#f9f9f9', height: '100px', maxHeight: '100px'}
             });
             list.forEach(function (name, i) {
                 var selected = previousRegions[name] !== undefined ? previousRegions[name] : (i === 0);
@@ -1910,7 +1907,7 @@ function loadSampleAssets(folderPath) {
         pnl.add(ui.Label(type.toUpperCase(), { fontSize: '10px', fontWeight: 'bold', margin: '2px' }));
         var flow = ui.Panel({
             layout: ui.Panel.Layout.flow('horizontal', true),
-            style: { margin: '0px', backgroundColor: '#f9f9f9', maxHeight: '120px', overflowY: 'auto' }
+            style: { margin: '0px', backgroundColor: '#f9f9f9', height: '120px', maxHeight: '120px' }
         });
         pnl.add(flow);
         dates.forEach(function (d, i) {
@@ -2118,7 +2115,7 @@ function loadSampleAssets(folderPath) {
     classBandCheckboxes = drawerClassToggle.checkboxes;
     subCabClass.content.add(drawerClassToggle.panel);
 
-    var drawerClassModels = { panel: ui.Panel({ style: { margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9', maxHeight: '180px', overflowY: 'auto' } }) };
+    var drawerClassModels = { panel: ui.Panel({ style: { margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9', height: '180px', maxHeight: '180px' } }) };
     subCabClass.content.add(drawerClassModels.panel);
 
     // --- CABINET 4: SAMPLES ---
