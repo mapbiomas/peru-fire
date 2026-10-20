@@ -520,6 +520,18 @@ class CacheManager:
         CacheManager._state = None
 
     @staticmethod
+    def mark_stale():
+        """Invalida o carimbo do cache em memoria.
+
+        Usado depois de disparar novos exports: os arquivos so existirao no GCS
+        daqui a pouco, mas o proximo modulo que abrir o cache deve reescanear
+        em vez de confiar no estado antigo.
+        """
+        with CacheManager._lock:
+            if CacheManager._state:
+                CacheManager._state['updated_at'] = None
+
+    @staticmethod
     def build_cache_from_classifications(fs=None, logger=None):
         """Scan GCS para descobrir grupos (modelo, regiao, periodo) classificados."""
         from M5_workplan import gcs_full, classified_tiles_dir

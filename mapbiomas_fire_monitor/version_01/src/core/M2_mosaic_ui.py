@@ -32,12 +32,36 @@ class MosaicAssemblerUI(PipelineStepUI):
             print(f"CRITICAL ERROR IN M2 INTERFACE: {e}")
             traceback.print_exc()
 
+    _CACHE_TTL_SECONDS = 300
+
+    def _cache_is_stale(self):
+        import datetime
+        raw = (self.state or {}).get('updated_at')
+        if not raw:
+            return True
+        try:
+            stamp = datetime.datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
+        except ValueError:
+            return True
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=datetime.timezone.utc)
+        age = (datetime.datetime.now(datetime.timezone.utc) - stamp).total_seconds()
+        return age > self._CACHE_TTL_SECONDS
+
     def _init_data(self):
         import datetime
         self.now = datetime.datetime.now()
         self.years = resolve_years(self.requested_years)
         self.bands = CONFIG['bands_all']
         self.state = CacheManager.load() or {}
+        # Chunks/COGs exported by earlier sessions live only in GCS. Rebuild the
+        # cache when it is empty (fresh clone) or older than the TTL, so the
+        # already-exported mosaics show up as READY/OK without a manual Sync.
+        if self._cache_is_stale():
+            try:
+                self.state = CacheManager.build_cache_from_gcs(logger=self.update_status, years=self.years)
+            except Exception as e:
+                print(f"[WARN] M2: could not sync GCS cache: {e}")
         self.gcs_chunks = self.state.get('gcs_chunks', {})
 
     _CELL_W  = '80px'
@@ -313,6 +337,19 @@ class MosaicAssemblerUI(PipelineStepUI):
         new_children[m_idx] = grid
         method_tabs.children = new_children
 
+    def _reload_current_tab(self):
+        """Forca a aba ativa a reconstruir o grid com o cache em memoria."""
+        vis_idx = self.sensor_tabs.selected_index
+        if vis_idx == 0:
+            vis_idx = 1
+        real_idx = vis_idx - 1
+        p_tabs = self.sensor_children[real_idx]
+        p_idx = p_tabs.selected_index
+        m_idx = p_tabs.children[p_idx].selected_index
+        target = p_tabs.children[p_idx].children[m_idx]
+        target.children = [widgets.HTML(f"<i>{Lang.LOADING_INTERFACE}</i>")]
+        self._load_tab(real_idx, p_idx, m_idx)
+
     def _on_search_change(self, change):
         self.search_query = change['new']
         vis_idx = self.sensor_tabs.selected_index
@@ -392,3 +429,15 @@ def start_mosaic_assembly(ui_obj):
             prog.step()
     print(f"\n[SUMMARY] Assembly completed: {succeeded}/{len(selected)} succeeded.")
     cell_log(f"Assembly completed: {succeeded}/{len(selected)} | {prog.summary()}", type='success')
+
+    # The COGs were just uploaded: rescan GCS and redraw the active tab so they
+    # appear as OK right away.
+    if ui_obj is not None:
+        try:
+            ui_obj.state = CacheManager.build_cache_from_gcs(
+                logger=print, years=getattr(ui_obj, 'years', None)
+            )
+            ui_obj.gcs_chunks = ui_obj.state.get('gcs_chunks', {})
+            ui_obj._reload_current_tab()
+        except Exception as e:
+            print(f"[WARN] M2: could not refresh cache after assembly: {e}")

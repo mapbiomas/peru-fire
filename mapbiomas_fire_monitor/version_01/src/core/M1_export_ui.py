@@ -422,3 +422,8 @@ def start_export(ui_obj, mode=None):
             
     print(f"\n Completed! {succeeded}/{len(selected)} tasks sent.")
     cell_log(f"Completed! {succeeded}/{len(selected)} tasks sent.", type='success' if succeeded == len(selected) else 'warning')
+
+    if succeeded:
+        # New files are still being written asynchronously; drop the cache stamp
+        # so M2 rescans GCS when it opens instead of trusting the old state.
+        CacheManager.mark_stale()
