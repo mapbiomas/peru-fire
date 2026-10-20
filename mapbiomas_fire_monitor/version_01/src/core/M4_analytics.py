@@ -12,7 +12,9 @@ import time
 from M0_auth_config import CONFIG, GLOBAL_OPTS, gcs_path, model_path
 from M_cache import _get_fs
 from M4_algorithms_dnn import ModelTrainer
+from M4_hub_manager import resolve_model_folder
 from M_lang import L as Lang
+
 
 def render_diagnostic_dashboard(history, embeds, preds, y_true, coords_override=None, save_path=None, viz_config=None):
     """
@@ -240,7 +242,13 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
     fs = _get_fs()
     from M0_auth_config import CONFIG, gcs_models_path
     try:
-        clean_path = f"{gcs_models_path()}/{model_info['training_id']}"
+        model_id = resolve_model_folder(model_info)
+        if not model_id and isinstance(hp_override, dict):
+            model_id = resolve_model_folder(hp_override)
+        if not model_id:
+            raise ValueError("Missing model identifier ('id' or 'training_id').")
+
+        clean_path = f"{gcs_models_path()}/{model_id}"
 
         # clean_path pode ser o dir do modelo ou ja apontar para metadata.json
         meta_suffix = '/metadata.json'
@@ -321,7 +329,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                         btn_cancel = widgets.Button(description=Lang.BTN_CLOSE, layout=widgets.Layout(width='30px', height='26px'), button_style='danger')
                         def _do_save(_):
                             user_stars_container.children = [widgets.HTML("<i>saving...</i>")]
-                            if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'rating': val}):
+                            if ModelTrainer.update_model_metadata(model_id, hp.get('shortname', ''), {'rating': val}):
                                 hp['rating'] = val
                                 if ui: ui._refresh_canvas_hub()
                             _show_stars()
@@ -381,9 +389,9 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                             stop[0] = True
                             del_out.clear_output()
                             with del_out: display(widgets.HTML(f"<i>{Lang.DELETING}</i>"))
-                            ModelTrainer.delete_model(hp['training_id'], hp['shortname'])
+                            ModelTrainer.delete_model(model_id, hp.get('shortname', ''))
                             if ui: 
-                                ui.selected_models.pop(hp['training_id'], None)
+                                ui.selected_models.pop(model_id, None)
                                 ui._update_canvas()
                         btn_conf.on_click(_do_conf); btn_canc.on_click(lambda _: _show_del_btn())
                         def _timer():
@@ -413,7 +421,7 @@ def view_analytics(model_info, out_widget=None, clear_before=True, viz_config=No
                             new_val = w_comment.value
                             comment_out.clear_output()
                             with comment_out: display(widgets.HTML("<i>saving...</i>"))
-                            if ModelTrainer.update_model_metadata(hp['training_id'], hp['shortname'], {'comment': new_val}):
+                            if ModelTrainer.update_model_metadata(model_id, hp.get('shortname', ''), {'comment': new_val}):
                                 hp['comment'] = new_val
                                 if ui: ui._refresh_canvas_hub()
                             comment_out.clear_output()

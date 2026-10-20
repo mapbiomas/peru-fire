@@ -634,6 +634,13 @@ class ModelTrainerUI(PipelineStepUI):
         # 1. Carregar lista e metadados
         m_ids = list_trained_models()
         cache = _load_m4_metadata()
+
+        # Normaliza seleções antigas (entradas sem 'id' causavam KeyError no analytics)
+        for key, info in list(self.selected_models.items()):
+            if isinstance(info, str):
+                self.selected_models[key] = {'id': key, 'training_id': key}
+            elif isinstance(info, dict):
+                info.setdefault('id', key)
         
         full_data = []
         for mid in m_ids:
@@ -642,15 +649,18 @@ class ModelTrainerUI(PipelineStepUI):
             if not mid: continue
             
             # O path e outros dados extras foram movidos para a sub-chave 'meta'
-            meta = cache.get('meta', {}).get(mid, {})
+            meta = dict(cache.get('meta', {}).get(mid, {}))
             # Se não estiver no cache, info mínima
             if not meta and mid in self.canvas_history:
-                meta = self.canvas_history[mid]
+                meta = dict(self.canvas_history[mid])
             
             # As métricas e dados pós-treino salvos no GCS ficam sob 'metadata'
             metadata_rich = cache.get('metadata', {}).get(mid, {})
             if metadata_rich:
                 meta.update(metadata_rich)
+            # Keep the GCS directory name separate from metadata['training_id']
+            # (which is the short numeric id used when retraining).
+            meta['id'] = mid
             
             metrics = meta.get('metrics', {})
             rep = metrics.get('classification_report', {})
@@ -1063,8 +1073,10 @@ def start_training(ui):
     print("Saving structure (samples, pixels, metadata, metrics) to GCS...")
     try:
         saved_meta = ui.trainer_instance.save(ui.w_training_id.value, ui.w_shortname.value, comment=ui.w_comment.value, logger=_logger)
+        saved_path = model_path(ui.w_training_id.value, ui.w_shortname.value)
         print("Model and Model Card saved successfully!")
-        cell_log("Model saved to GCS", type='success')
+        print(f"Model path: gs://{CONFIG['bucket']}/{saved_path}")
+        cell_log(f"Model saved to gs://{CONFIG['bucket']}/{saved_path}", type='success')
         
         # Inserir o modelo fresquinho na Mesa do Canvas automaticamente
         final_id = f"training_{ui.w_training_id.value}_{ui.w_shortname.value}_{GLOBAL_OPTS['SENSOR'][0].lower()}"

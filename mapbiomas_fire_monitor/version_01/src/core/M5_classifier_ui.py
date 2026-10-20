@@ -200,13 +200,32 @@ class M5WorkplanUI:
         return container, checkboxes
 
     def _populate_dropdowns(self):
+        load_error = None
         try:
             from M4_model_trainer import list_trained_models
             models = list_trained_models(force_refresh=True)
-        except Exception:
+        except Exception as e:
+            load_error = str(e)
+            print(f"[M5] Could not list trained models: {e}")
             models = []
-        box, self.chk_models = self._create_checkbox_grid(models, Lang.SECTION_MODEL, single_select=True, bg_color='#e8f4fd')
-        self.w_model_box.children = box.children
+
+        models = [m for m in (models or []) if isinstance(m, str)]
+        if models:
+            box, self.chk_models = self._create_checkbox_grid(models, Lang.SECTION_MODEL, single_select=True, bg_color='#e8f4fd')
+            self.w_model_box.children = box.children
+        else:
+            self.chk_models = []
+            path = f"gs://{CONFIG['bucket']}/{gcs_models_path()}"
+            detail = (
+                f"No trained models found in <code>{path}</code> "
+                f"(campaign=<b>{CONFIG.get('campaign', '?')}</b>)."
+                "<br>Train a model in M4 with this same campaign, or check the GCS path."
+            )
+            if load_error:
+                detail += f"<br><span style='color:#b91c1c;'>Error: {load_error}</span>"
+            self.w_model_box.children = (widgets.HTML(
+                f"<div style='padding:12px;border:1px solid #fde68a;background:#fffbeb;border-radius:6px;font-size:12px;color:#92400e;'>{detail}</div>"
+            ),)
         regions = [CONFIG.get('country', 'country').title()]
         err_banner = None
         try:

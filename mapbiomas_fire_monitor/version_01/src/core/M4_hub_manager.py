@@ -19,6 +19,42 @@ def _load_m4_metadata():
     return {}
 
 
+def resolve_model_id(model_info):
+    """Return the model directory name from a string or metadata dict."""
+    if isinstance(model_info, str):
+        return model_info
+    if isinstance(model_info, dict):
+        return model_info.get('id') or model_info.get('training_id')
+    return None
+
+
+def resolve_model_folder(model_info):
+    """Return the GCS folder name; metadata may store only the numeric id."""
+    model_id = resolve_model_id(model_info)
+    if model_id and not str(model_id).startswith('training_') and isinstance(model_info, dict):
+        shortname = model_info.get('shortname')
+        sensor = model_info.get('sensor')
+        if shortname and sensor:
+            sensor = str(sensor).split(',')[0].strip().lower()
+            model_id = f"training_{model_id}_{shortname}_{sensor}"
+    return model_id
+
+
+def _normalize_models(values):
+    """Return unique model names, accepting old dict-based cache entries."""
+    result = []
+    for value in values or []:
+        if isinstance(value, str):
+            name = value
+        elif isinstance(value, dict):
+            name = value.get('training_id') or value.get('id')
+        else:
+            name = None
+        if name and name not in result:
+            result.append(name)
+    return result
+
+
 def _save_m4_metadata(data):
     """Salva todos os metadados de treinamento em cache local."""
     try:
@@ -31,7 +67,7 @@ def _save_m4_metadata(data):
 def list_trained_models(force_refresh=False):
     """Lista modelos treinados usando CacheManager como fonte principal."""
     state = CacheManager.get_state()
-    trained = state.get('trained_models', [])
+    trained = _normalize_models(state.get('trained_models', []))
 
     if trained and not force_refresh:
         return trained
@@ -48,7 +84,7 @@ def list_trained_models(force_refresh=False):
                 t_name = t_dir.split('/')[-1]
                 if t_name.startswith('training_'):
                     if not fs.exists(f"{t_dir}/metadata.json"):
-                        fs.rm(t_dir, recursive=True)
+                        print(f"[WARN] Ignoring model without metadata.json: {t_dir}")
                         continue
                     models.append(t_name)
                     # Guarda o path em metadata
@@ -61,10 +97,12 @@ def list_trained_models(force_refresh=False):
                     _save_m4_metadata(meta_cache)
 
         # Atualiza CacheManager
+        models = _normalize_models(models)
         state['trained_models'] = models
         CacheManager._state = state
         CacheManager.save()
         return models
     except Exception as e:
+        print(f"[WARN] Could not scan trained models: {e}")
         return trained
 
