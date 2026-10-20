@@ -17,7 +17,15 @@ Ideias registradas para depois; nenhuma delas está implementada.
 - **Decisões pendentes:** produto, bandas, QA, escala e semântica da blocklist
   (granulo/tile vs. índice temporal).
 
-## 2. Períodos temporais adicionais
+## 2. Backend de inferência para modelos maiores
+
+- **Atual:** forward pass NumPy (`M_dnn.py`), thread-safe e adequado à DNN
+  pequena (4→N→1) usada hoje; sem TensorFlow no M5.
+- **Quando entrar CNN/GPU:** avaliar ONNX Runtime, TF Lite ou um processo
+  dedicado de inferência, mantendo o contrato `weights.npz` + `metadata.json`
+  ou criando um exportador explícito.
+
+## 3. Períodos temporais adicionais
 
 - **Desejos:** semestral (6 meses), trimestral (3 meses), bimestral (2 meses) e
   bianual (2 anos).

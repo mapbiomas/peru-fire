@@ -1,7 +1,6 @@
 import os
 import time
 import threading
-import numpy as np
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from IPython.display import display, HTML
@@ -187,15 +186,9 @@ def _process_period(model_id, period, group_jobs, out, progress_callback=None, n
         print(f"  Loading model '{model_id}'...")
 
     model_dir = f"gs://{CONFIG['bucket']}/{_gcs_models_base()}/{model_id}"
-    model, meta, bands_config, norm_stats, band_order = load_model_from_gcs(
+    predict_fn, meta, bands_config, norm_stats, band_order = load_model_from_gcs(
         model_dir, fs, logger=lambda m: _log(out, m)
     )
-    def predict_fn(x):
-        chunk = 65536
-        out = []
-        for i in range(0, len(x), chunk):
-            out.append(np.asarray(model.predict_on_batch(x[i:i+chunk])))
-        return np.concatenate(out, axis=0) if len(out) > 1 else out[0]
 
     # 2. Construir paths e verificar COGs via CacheManager primeiro
     band_paths = build_band_paths(bands_config, year, month)

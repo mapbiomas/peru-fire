@@ -8,6 +8,9 @@ from M0_auth_config import CONFIG, GLOBAL_OPTS, model_path, gcs_samples_path
 from M_cache import _get_fs
 
 from M4_data_extractor import compute_normalizer, normalize
+from M_dnn import forward_embeddings, forward_predict
+
+
 def _get_tf(force=False):
     """Carrega o TensorFlow apenas quando necessário (Lazy Load).
     
@@ -211,34 +214,17 @@ class ModelTrainer:
         """Aplica a inferência (forward pass manual usando os pesos numpy)."""
         if not hasattr(self, '_saved_vars'):
             raise RuntimeError("Modelo não treinado/carregado.")
-            
-        layer = normalize(X_raw, self.norm_stats)
-        for i in range(len(self.layers)):
-            W = self._saved_vars[f'fc_{i}/kernel:0']
-            b = self._saved_vars[f'fc_{i}/bias:0']
-            layer = np.maximum(0, np.dot(layer, W) + b)
-            
-        W_out = self._saved_vars['output/kernel:0']
-        b_out = self._saved_vars['output/bias:0']
-        logits = np.dot(layer, W_out) + b_out
-        
-        # Sigmoid robusta para evitar overflow
-        preds = 1 / (1 + np.exp(-np.clip(logits, -20, 20)))
-        return preds.flatten()
+        return forward_predict(
+            self._saved_vars, self.layers, normalize(X_raw, self.norm_stats)
+        )
 
     def get_embeddings(self, X_raw):
         """Extrai os embeddings (penúltima camada) usando os pesos numpy."""
         if not hasattr(self, '_saved_vars'):
             raise RuntimeError("Modelo não treinado/carregado.")
-            
-        layer = normalize(X_raw, self.norm_stats)
-        # Passa por todas as camadas ocultas
-        for i in range(len(self.layers)):
-            W = self._saved_vars[f'fc_{i}/kernel:0']
-            b = self._saved_vars[f'fc_{i}/bias:0']
-            layer = np.maximum(0, np.dot(layer, W) + b)
-            
-        return layer
+        return forward_embeddings(
+            self._saved_vars, self.layers, normalize(X_raw, self.norm_stats)
+        )
 
     @staticmethod
     def delete_model(training_id, shortname):

@@ -24,14 +24,12 @@ def _fmt_time(s):
     return f"{s}s"
 
 def load_model_from_gcs(model_dir, fs, logger=None):
-    """Carga modelo Keras + metadatos desde GCS.
+    """Carga pesos + metadatos desde GCS y devuelve un predictor NumPy.
 
     Returns:
-        (model, meta, bands_config, norm_stats, band_order)
+        (predict_fn, meta, bands_config, norm_stats, band_order)
     """
     import json
-    import tensorflow as tf
-    tf.config.run_functions_eagerly(True)
 
     meta_path = f"{model_dir}/metadata.json"
     if not fs.exists(meta_path):
@@ -73,25 +71,18 @@ def load_model_from_gcs(model_dir, fs, logger=None):
     local_npz = os.path.join(get_temp_dir('weights'), f"{meta.get('training_id', 'model')}_weights.npz")
     _gcs_download(f"{model_dir}/weights.npz", local_npz)
 
-    if logger:
-        logger(f"    Model '{meta.get('training_id')}' loaded ({num_input} bands)")
-
-    model = tf.keras.Sequential()
-    model.add(tf.keras.layers.Input(shape=(num_input,)))
-    for n_units in layers_cfg:
-        model.add(tf.keras.layers.Dense(n_units, activation='relu'))
-    model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
-
-    w = np.load(local_npz)
-    layer_names = [f'fc_{i}' for i in range(len(layers_cfg))] + ['output']
-    weights_list = []
-    for ln in layer_names:
-        weights_list.append(w[f'{ln}/kernel:0'])
-        weights_list.append(w[f'{ln}/bias:0'])
-    model.set_weights(weights_list)
-
+    saved_vars = dict(np.load(local_npz))
     os.remove(local_npz)
-    return model, meta, bands_config, norm_stats, band_order
+
+    from M_dnn import predict_chunked
+
+    def predict_fn(x_normalized, _vars=saved_vars, _layers=list(layers_cfg)):
+        return predict_chunked(_vars, _layers, x_normalized)
+
+    if logger:
+        logger(f"    Model '{meta.get('training_id')}' loaded ({num_input} bands, NumPy)")
+
+    return predict_fn, meta, bands_config, norm_stats, band_order
 
 def build_band_paths(bands_config, year, month):
     """Construye diccionario {banda: gcs_path} para un periodo."""
