@@ -34,20 +34,20 @@ var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
 
 // ─── FIRE LOADER ────────────────────────────────────────────────────────────
 var fireLabel = ui.Label({
-    value: '',
-    style: {shown: false, fontSize: '11px', color: '#e65100', fontWeight: 'bold', margin: '4px'}
+    value: '🔥',
+    style: {visibility: 'hidden', width: '18px', minWidth: '18px', height: '16px', textAlign: 'center', fontSize: '13px', margin: '4px'}
 });
 var firePending = 0;
 
 function fireStart(message) {
     firePending++;
-    fireLabel.setValue('🔥 ' + (message || 'carregando...'));
-    fireLabel.style().set('shown', true);
+    fireLabel.setValue('🔥');
+    fireLabel.style().set('visibility', 'visible');
 }
 
 function fireEnd() {
     firePending = Math.max(0, firePending - 1);
-    if (!firePending) fireLabel.style().set('shown', false);
+    if (!firePending) fireLabel.style().set('visibility', 'hidden');
 }
 
 function listAssetsAsync(parent, callback, pageToken, accumulated) {
@@ -1186,10 +1186,16 @@ function getDynamicDates(period) {
 
     // Lists regional classification models compatible with selected regions.
 function updateClassificationsDrawer() {
-        drawerClassModels.panel.clear();
-        classCheckboxes = {};
+        var previousChecked = {};
+        Object.keys(classCheckboxes).forEach(function(k) {
+            previousChecked[k] = classCheckboxes[k].getValue();
+        });
         var selectedNames = getSelectedRegionNames();
-        if (selectedNames.length === 0) return;
+        if (selectedNames.length === 0) {
+            classCheckboxes = {};
+            drawerClassModels.panel.clear();
+            return;
+        }
 
         var classificationToken = beginAsync(ASYNC_STATE.classifications);
         fireStart('listando modelos...');
@@ -1203,7 +1209,11 @@ function updateClassificationsDrawer() {
             }
             if (!modelAssets || modelAssets.length === 0) {
                 fireEnd();
-                drawerClassModels.panel.add(ui.Label('(sin modelos)', {fontSize: '10px', color: '#888'}));
+                var emptyPanel = ui.Panel({style: {margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9'}});
+                emptyPanel.add(ui.Label('(sin modelos)', {fontSize: '10px', color: '#888'}));
+                classCheckboxes = {};
+                drawerClassModels.panel.clear();
+                drawerClassModels.panel.add(emptyPanel);
                 return;
             }
 
@@ -1215,28 +1225,32 @@ function updateClassificationsDrawer() {
 
             function finish() {
                 fireEnd();
+                var newPanel = ui.Panel({style: {margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9'}});
+                classCheckboxes = {};
                 if (!withData.length) {
-                    drawerClassModels.panel.add(ui.Label(L.status_no_models_region, {fontSize: '10px', color: '#888'}));
-                    return;
-                }
-                withData.forEach(function(model) {
-                    var chk = ui.Checkbox({
-                        label: model.id,
-                        value: false,
-                        onChange: function () { syncCheckBorder(chk); debouncedUpdateMosaic(); },
-                        style: {margin: '1px 3px', padding: '0px', fontSize: '10px', color: CLASS_PALETTE[model.idx % 50]}
+                    newPanel.add(ui.Label(L.status_no_models_region, {fontSize: '10px', color: '#888'}));
+                } else {
+                    withData.forEach(function(model) {
+                        var selected = !!previousChecked[model.id];
+                        var chk = ui.Checkbox({
+                            label: model.id,
+                            value: selected,
+                            onChange: function () { syncCheckBorder(chk); debouncedUpdateMosaic(); },
+                            style: {margin: '1px 3px', padding: '0px', fontSize: '10px', color: CLASS_PALETTE[model.idx % 50]}
+                        });
+                        styleCheck(chk, selected);
+                        classCheckboxes[model.id] = chk;
+                        newPanel.add(chk);
                     });
-                    styleCheck(chk, false);
-                    classCheckboxes[model.id] = chk;
-                    drawerClassModels.panel.add(chk);
-                });
+                }
+                drawerClassModels.panel.clear();
+                drawerClassModels.panel.add(newPanel);
             }
 
             function next() {
                 if (!isCurrentAsync(ASYNC_STATE.classifications, classificationToken)) { fireEnd(); return; }
                 if (cursor >= models.length) { finish(); return; }
                 var model = models[cursor++];
-                fireLabel.setValue('🔥 modelos ' + cursor + '/' + models.length);
                 listAssetsAsync(REGIONAL_FOLDER + '/' + model.id, function(images, err) {
                     if (!isCurrentAsync(ASYNC_STATE.classifications, classificationToken)) { fireEnd(); return; }
                     if (!err && images && images.length) {
@@ -1617,12 +1631,15 @@ function updateStats() {
             drawerRegions.panel.add(header);
             drawerRegions.flowPanel = ui.Panel({
                 layout: ui.Panel.Layout.flow('horizontal', true),
-                style: { margin: '0px', padding: '0px', backgroundColor: '#f9f9f9', maxHeight: '100px' }
+                style: { margin: '0px', padding: '0px', backgroundColor: '#f9f9f9', maxHeight: '100px', overflowY: 'auto' }
             });
             drawerRegions.panel.add(drawerRegions.flowPanel);
         }
 
-        drawerRegions.flowPanel.clear();
+        var previousRegions = {};
+        Object.keys(regionCheckboxes).forEach(function(k) {
+            previousRegions[k] = regionCheckboxes[k].getValue();
+        });
         var requestId = ++regionRequestId;
         fireStart('carregando regiões...');
 
@@ -1634,10 +1651,15 @@ function updateStats() {
             }
             fireEnd();
             regionCheckboxes = {};
+            var newFlow = ui.Panel({
+                layout: ui.Panel.Layout.flow('horizontal', true),
+                style: {margin: '0px', padding: '0px', backgroundColor: '#f9f9f9', maxHeight: '100px', overflowY: 'auto'}
+            });
             list.forEach(function (name, i) {
+                var selected = previousRegions[name] !== undefined ? previousRegions[name] : (i === 0);
                 var chk = ui.Checkbox({
                     label: name,
-                    value: i === 0, // Apenas a primeira região ligada por default
+                    value: selected, // Mantém a seleção anterior quando existir
                     onChange: function () {
                         if (regionSelectMode === 'single' && chk.getValue()) {
                             Object.keys(regionCheckboxes).forEach(function (k) {
@@ -1654,10 +1676,12 @@ function updateStats() {
                     },
                     style: { margin: '1px 3px', padding: '0px', fontSize: '10px', backgroundColor: '#f9f9f9' }
                 });
-                styleCheck(chk, i === 0);
+                styleCheck(chk, selected);
                 regionCheckboxes[name] = chk;
-                drawerRegions.flowPanel.add(chk);
+                newFlow.add(chk);
             });
+            drawerRegions.flowPanel.clear();
+            drawerRegions.flowPanel.add(newFlow);
             applyRegionFilter(txt_region_filter ? txt_region_filter.getValue() : '');
             updateAllRegionsButtonState();
             updateSelectedRegionsMap();
@@ -1884,7 +1908,7 @@ function loadSampleAssets(folderPath) {
         pnl.add(ui.Label(type.toUpperCase(), { fontSize: '10px', fontWeight: 'bold', margin: '2px' }));
         var flow = ui.Panel({
             layout: ui.Panel.Layout.flow('horizontal', true),
-            style: { margin: '0px', backgroundColor: '#f9f9f9', maxHeight: '120px' }
+            style: { margin: '0px', backgroundColor: '#f9f9f9', maxHeight: '120px', overflowY: 'auto' }
         });
         pnl.add(flow);
         dates.forEach(function (d, i) {
@@ -2092,7 +2116,7 @@ function loadSampleAssets(folderPath) {
     classBandCheckboxes = drawerClassToggle.checkboxes;
     subCabClass.content.add(drawerClassToggle.panel);
 
-    var drawerClassModels = { panel: ui.Panel({ style: { margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9' } }) };
+    var drawerClassModels = { panel: ui.Panel({ style: { margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9', maxHeight: '180px', overflowY: 'auto' } }) };
     subCabClass.content.add(drawerClassModels.panel);
 
     // --- CABINET 4: SAMPLES ---
