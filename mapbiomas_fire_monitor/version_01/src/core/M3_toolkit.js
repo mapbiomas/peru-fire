@@ -32,23 +32,6 @@ v10: Exclusive Tool for Sample Collection and Export (Vectors)
 var PERSONAL_TASK_FLAG = 'CATALOG';
 var CATALOG_ROOT = 'projects/mapbiomas-peru/assets/FIRE/CATALOG_01';
 
-// ─── FIRE LOADER ────────────────────────────────────────────────────────────
-var fireLabel = ui.Label({
-    value: ' ',
-    style: {width: '18px', height: '16px', textAlign: 'center', fontSize: '13px', margin: '4px'}
-});
-var firePending = 0;
-
-function fireStart(message) {
-    firePending++;
-    fireLabel.setValue('🔥');
-}
-
-function fireEnd() {
-    firePending = Math.max(0, firePending - 1);
-    if (!firePending) fireLabel.setValue(' ');
-}
-
 function listAssetsAsync(parent, callback, pageToken, accumulated) {
     var params = {};
     if (pageToken) params.pageToken = pageToken;
@@ -83,12 +66,12 @@ var hotspotsRefresh = null;
 function loadHotspotsAssets() {
     if (hotspotsAssets || hotspotsLoading) return;
     hotspotsLoading = true;
-    fireStart('carregando hotspots...');
+    trackOpStart();
     listAssetsAsync(
         'projects/mapbiomas-fire-485203/assets/DATABASE/monthly-focus-sul-america',
         function(assets, error) {
             hotspotsLoading = false;
-            fireEnd();
+            trackOpEnd();
             if (error || !assets) { print('Erro Hotspots:', error); return; }
             hotspotsAssets = assets;
             if (hotspotsRefresh) hotspotsRefresh();
@@ -882,7 +865,6 @@ function getDynamicDates(period) {
     var panel_head = ui.Panel({ layout: ui.Panel.Layout.flow('vertical'), style: styles.row });
     var panel_body = ui.Panel({ style: { margin: '0px', padding: '0px' } });
     panel.add(panel_head).add(panel_body);
-    panel_body.add(fireLabel);
 
     var logo = ui.Button({ imageUrl: b64.get('logo_mapbiomas_fuego'), style: { margin: '1px', padding: '0px' } });
     var title = ui.Label(L.title, { fontSize: '15px', fontWeight: 'bold', color: '#222', margin: '1px', stretch: 'horizontal' });
@@ -905,7 +887,7 @@ function getDynamicDates(period) {
     var regionRequestId = 0;
 
     function debouncedUpdateMosaic() {
-        if (!updateTimer) fireStart('atualizando mosaico...');
+        if (!updateTimer) trackOpStart();
         if (updateTimer) {
             ui.util.clearTimeout(updateTimer);
         }
@@ -914,7 +896,7 @@ function getDynamicDates(period) {
             try {
                 updateMosaic();
             } finally {
-                fireEnd();
+                trackOpEnd();
             }
         }, 1000);
     }
@@ -1198,12 +1180,12 @@ function updateClassificationsDrawer() {
         }
 
         var classificationToken = beginAsync(ASYNC_STATE.classifications);
-        fireStart('listando modelos...');
+        trackOpStart();
 
         listAssetsAsync(REGIONAL_FOLDER, function(modelAssets, error) {
-            if (!isCurrentAsync(ASYNC_STATE.classifications, classificationToken)) { fireEnd(); return; }
+            if (!isCurrentAsync(ASYNC_STATE.classifications, classificationToken)) { trackOpEnd(); return; }
             if (error) {
-                fireEnd();
+                trackOpEnd();
                 var emptyPanel = ui.Panel({style: {margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9'}});
                 emptyPanel.add(ui.Label('(sin modelos)', {fontSize: '10px', color: '#888'}));
                 classCheckboxes = {};
@@ -1212,7 +1194,7 @@ function updateClassificationsDrawer() {
                 return;
             }
             if (!modelAssets || modelAssets.length === 0) {
-                fireEnd();
+                trackOpEnd();
                 var emptyPanel = ui.Panel({style: {margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9'}});
                 emptyPanel.add(ui.Label('(sin modelos)', {fontSize: '10px', color: '#888'}));
                 classCheckboxes = {};
@@ -1228,7 +1210,7 @@ function updateClassificationsDrawer() {
             var cursor = 0;
 
             function finish() {
-                fireEnd();
+                trackOpEnd();
                 var newPanel = ui.Panel({style: {margin: '2px 0px', padding: '1px', backgroundColor: '#f9f9f9'}});
                 classCheckboxes = {};
                 if (!withData.length) {
@@ -1252,11 +1234,11 @@ function updateClassificationsDrawer() {
             }
 
             function next() {
-                if (!isCurrentAsync(ASYNC_STATE.classifications, classificationToken)) { fireEnd(); return; }
+                if (!isCurrentAsync(ASYNC_STATE.classifications, classificationToken)) { trackOpEnd(); return; }
                 if (cursor >= models.length) { finish(); return; }
                 var model = models[cursor++];
                 listAssetsAsync(REGIONAL_FOLDER + '/' + model.id, function(images, err) {
-                    if (!isCurrentAsync(ASYNC_STATE.classifications, classificationToken)) { fireEnd(); return; }
+                    if (!isCurrentAsync(ASYNC_STATE.classifications, classificationToken)) { trackOpEnd(); return; }
                     if (!err && images && images.length) {
                         var names = images.map(function(i) { return i.id.split('/').pop(); });
                         var hasData = selectedNames.some(function(r) {
@@ -1378,11 +1360,8 @@ function updateStats() {
             'notFire_area': ee.Number(notFireGeoms.map(function (g) { return ee.Geometry(g).area(); }).reduce(ee.Reducer.sum())).divide(10000)
         });
 
-        fireStart('calculando estatísticas...');
-
         stats.evaluate(trackEvaluate(function (s, err) {
-            if (!isCurrentAsync(ASYNC_STATE.stats, statsToken)) { fireEnd(); return; }
-            fireEnd();
+            if (!isCurrentAsync(ASYNC_STATE.stats, statsToken)) return;
             if (err) {
                 panel_stats.clear();
                 panel_stats.add(ui.Label('Error recalculating stats', { fontSize: '10px', color: 'red' }));
@@ -1651,15 +1630,12 @@ function updateStats() {
             previousRegions[k] = regionCheckboxes[k].getValue();
         });
         var requestId = ++regionRequestId;
-        fireStart('carregando regiões...');
 
         var regionToken = beginAsync(ASYNC_STATE.regions);
         getCountryRegionNames(countryName, function (list) {
             if (requestId !== regionRequestId || !isCurrentAsync(ASYNC_STATE.regions, regionToken)) {
-                fireEnd();
                 return;
             }
-            fireEnd();
             regionCheckboxes = {};
             var pendingCheckboxes = [];
             list.forEach(function (name, i) {
@@ -1740,10 +1716,10 @@ function updateStats() {
     // Lists direct vector assets; nested folders and collections are ignored.
 function loadSampleAssets(folderPath) {
         var sampleToken = beginAsync(ASYNC_STATE.samples);
-        fireStart('carregando amostras...');
+        trackOpStart();
         listAssetsAsync(folderPath, function(assets, error) {
-            if (!isCurrentAsync(ASYNC_STATE.samples, sampleToken)) { fireEnd(); return; }
-            fireEnd();
+            if (!isCurrentAsync(ASYNC_STATE.samples, sampleToken)) { trackOpEnd(); return; }
+            trackOpEnd();
             if (error || !assets) {
                 select_address.items().reset([]);
                 select_address.setPlaceholder('Folder unavailable or has no vectors');
@@ -2073,7 +2049,7 @@ function loadSampleAssets(folderPath) {
         if (!layerIds.length) { render(); return; }
 
         var pending = 0;
-        fireStart('verificando mosaicos...');
+        trackOpStart();
         layerIds.forEach(function (id) {
             var layer = layers[id];
             var mosaicType = layer.buffer ? 'MINNBR_BUFFER' : 'MINNBR';
@@ -2083,14 +2059,14 @@ function loadSampleAssets(folderPath) {
                 getAssetAsync([layer.base, 'SENTINEL2', period, mosaicType, 'dayofyear'].join('/'), function (ok) {
                     if (requestId !== assetRequestId) {
                         pending--;
-                        if (pending === 0) fireEnd();
+                        if (pending === 0) trackOpEnd();
                         return;
                     }
                     assetLayersCache[cacheKey] = ok;
                     if (ok) availability[id] = true;
                     pending--;
                     if (pending === 0) {
-                        fireEnd();
+                        trackOpEnd();
                         render();
                     }
                 });
@@ -2228,13 +2204,6 @@ function loadSampleAssets(folderPath) {
             if (!id) return;
             var importToken = beginAsync(ASYNC_STATE.import);
             lab_import_status.style().set('shown', false);
-            fireStart('importando amostras...');
-            var importFinished = false;
-            function finishImport() {
-                if (importFinished) return;
-                importFinished = true;
-                fireEnd();
-            }
 
             var parts = id.split('_');
             var lastPart = parts[parts.length - 1], penultPart = parts[parts.length - 2];
@@ -2261,16 +2230,14 @@ function loadSampleAssets(folderPath) {
             var pending = 2;
             var results = {};
             function onImportResult(which, list, err) {
-                if (!isCurrentAsync(ASYNC_STATE.import, importToken)) { finishImport(); return; }
+                if (!isCurrentAsync(ASYNC_STATE.import, importToken)) return;
                 if (err) {
-                    finishImport();
                     lab_import_status.setValue('Error importing samples').style().set('shown', true);
                     return;
                 }
                 results[which] = list;
                 pending--;
                 if (pending > 0) return;
-                finishImport();
                 // Remove existing fire/notFire drawing layers
                 var layers = Map.drawingTools().layers();
                 for (var i = layers.length() - 1; i >= 0; i--) {
@@ -2312,10 +2279,10 @@ function loadSampleAssets(folderPath) {
         var conf = countryConfigs[getSelectedCountry()];
         var campaignPath = conf.getAssetSamples(select_campaign_exp.getValue());
 
-        fireStart('verificando versão...');
+        trackOpStart();
         listAssetsAsync(campaignPath, function(assets, error) {
-            if (requestId !== versionRequestId) { fireEnd(); return; }
-            fireEnd();
+            if (requestId !== versionRequestId) { trackOpEnd(); return; }
+            trackOpEnd();
             assets = assets || [];
 
             if (error || assets.length === 0) {
