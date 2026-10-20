@@ -557,7 +557,7 @@ def get_sensor_scale(sensor=None):
         'sentinel2': 10,
         'landsat': 30,
         'hls': 30,
-        'modis': 250
+        'modis': 500
     }
     if sensor not in scales:
         raise ValueError(f"Unsupported sensor for scale lookup: {sensor}")
@@ -567,7 +567,7 @@ def get_sensor_start_year(sensor=None):
     """First full year available to the M1/M2 sensor collections."""
     sensor = (sensor or _single(GLOBAL_OPTS['SENSOR'])).lower()
     start_years = {
-        'sentinel2': 2015,
+        'sentinel2': 2017,
         'landsat': 1985,
         'hls': 2013,
         'modis': 2000,

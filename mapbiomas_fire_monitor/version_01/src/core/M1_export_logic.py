@@ -165,15 +165,20 @@ def get_landsat_constellation(year):
     elif year <= 2021: return ['L7', 'L8']
     else: return ['L8', 'L9']
 
-def _landsat_blocklist_filter(sensor):
+def _blocklist_filter(sensor):
     """Build a scene exclusion filter from the live GEE blocklist module."""
     from M_blocklist import get_blocklist
-    blocked_ids = get_blocklist(sensor)
+    try:
+        blocked_ids = get_blocklist(sensor)
+    except Exception:
+        return None
     if not blocked_ids:
         return None
     return ee.Filter.Not(
         ee.Filter.inList('system:index', ee.List(blocked_ids))
     )
+
+_landsat_blocklist_filter = _blocklist_filter
 
 def get_quality_mosaic(sensor, year, start_date, end_date, bounds, month=None, method='minnbr'):
     """
@@ -187,7 +192,7 @@ def get_quality_mosaic(sensor, year, start_date, end_date, bounds, month=None, m
     if sensor == 'landsat':
         constellation = get_landsat_constellation(year)
         lst_collects = []
-        blocked_filter = _landsat_blocklist_filter(sensor)
+        blocked_filter = _blocklist_filter(sensor)
 
         def _filtered_landsat(collection_id, processor):
             collection = ee.ImageCollection(collection_id).filterDate(start_date, end_date).filterBounds(bounds)
@@ -203,18 +208,35 @@ def get_quality_mosaic(sensor, year, start_date, end_date, bounds, month=None, m
         for c in lst_collects[1:]: collection = collection.merge(c)
         multiplier = 100
     elif sensor == 'sentinel2':
-        collection = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED").filterDate(start_date, end_date).filterBounds(bounds) \
-            .linkCollection(ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'), ['cs']).map(process_s2)
+        collection = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED").filterDate(start_date, end_date).filterBounds(bounds)
+        blocked_filter = _blocklist_filter('sentinel2')
+        if blocked_filter is not None:
+            collection = collection.filter(blocked_filter)
+        collection = collection.linkCollection(
+            ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'), ['cs']
+        ).map(process_s2)
         multiplier = 0.01
     elif sensor == 'hls':
-        s30_col = ee.ImageCollection("NASA/HLS/HLSS30/v002").filterDate(start_date, end_date).filterBounds(bounds).map(process_hls_s30)
-        l30_col = ee.ImageCollection("NASA/HLS/HLSL30/v002").filterDate(start_date, end_date).filterBounds(bounds).map(process_hls_l30)
-        collection = s30_col.merge(l30_col)
+        s30_col = ee.ImageCollection("NASA/HLS/HLSS30/v002").filterDate(start_date, end_date).filterBounds(bounds)
+        l30_col = ee.ImageCollection("NASA/HLS/HLSL30/v002").filterDate(start_date, end_date).filterBounds(bounds)
+        s30_filter = _blocklist_filter('hls_s30')
+        l30_filter = _blocklist_filter('hls_l30')
+        if s30_filter is not None:
+            s30_col = s30_col.filter(s30_filter)
+        if l30_filter is not None:
+            l30_col = l30_col.filter(l30_filter)
+        collection = s30_col.map(process_hls_s30).merge(l30_col.map(process_hls_l30))
         multiplier = 100
     elif sensor == 'modis':
-        mod_col1 = ee.ImageCollection("MODIS/061/MOD09A1")
-        mod_col2 = ee.ImageCollection("MODIS/061/MYD09A1")
-        collection = mod_col1.merge(mod_col2).filterDate(start_date, end_date).filterBounds(bounds).map(process_modis)
+        mod_col1 = ee.ImageCollection("MODIS/061/MOD09A1").filterDate(start_date, end_date).filterBounds(bounds)
+        mod_col2 = ee.ImageCollection("MODIS/061/MYD09A1").filterDate(start_date, end_date).filterBounds(bounds)
+        terra_filter = _blocklist_filter('modis_terra')
+        aqua_filter = _blocklist_filter('modis_aqua')
+        if terra_filter is not None:
+            mod_col1 = mod_col1.filter(terra_filter)
+        if aqua_filter is not None:
+            mod_col2 = mod_col2.filter(aqua_filter)
+        collection = mod_col1.merge(mod_col2).map(process_modis)
         multiplier = 0.01
 
     # Redução Baseada no Método

@@ -373,16 +373,20 @@ def start_export(ui_obj, mode=None):
         return
 
     selected_sensors = {meta['sensor'].lower() for meta in selected}
-    if 'landsat' in selected_sensors:
-        try:
-            from M_blocklist import refresh_blocklists
-            blocklists = refresh_blocklists()
-            print(f"[BLOCKLIST] Refreshed live GEE lists: {len(blocklists.get('landsat', []))} Landsat scene IDs.")
-        except Exception as e:
-            message = f"Landsat export cancelled: could not refresh GEE blocklists: {e}"
-            print(f"[ERROR] {message}")
-            cell_log(message, type='error')
-            return
+    try:
+        from M_blocklist import refresh_blocklists
+        blocklists = refresh_blocklists(selected_sensors)
+        loaded = {sensor: len(ids) for sensor, ids in blocklists.items() if ids}
+        if loaded:
+            summary = ', '.join(f"{sensor}={count}" for sensor, count in sorted(loaded.items()))
+            print(f"[BLOCKLIST] Loaded scene exclusions: {summary}.")
+            cell_log(f"Blocklists loaded: {summary}", type='info')
+        else:
+            print("[BLOCKLIST] No lists available; continuing without scene exclusions.")
+    except Exception as e:
+        message = f"Blocklist refresh unavailable; continuing without scene exclusions: {e}"
+        print(f"[WARN] {message}")
+        cell_log(message, type='warning')
 
     from M1_export_logic import export_to_asset, export_to_gcs
     print(f" Starting {len(selected)} exports...")
