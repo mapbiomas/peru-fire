@@ -96,7 +96,7 @@ class PeriodPathTests(unittest.TestCase):
     def test_asset_collections_use_registry_folders(self):
         self.assertTrue(
             get_asset_mosaic_collection(sensor='landsat', periodicity='yearly', mosaic='minnbr')
-            .endswith('/LANDSAT/ANNUALLY/MINNBR')
+            .endswith('/LANDSAT/YEARLY/MINNBR')
         )
         self.assertTrue(
             get_asset_mosaic_collection(sensor='landsat', periodicity='monthly', mosaic='minnbr')

@@ -335,6 +335,13 @@ def _period_folder(periodicity=None):
     definition = PERIODS.get(key)
     return definition['folder'] if definition else key.upper()
 
+def _gee_folder(periodicity=None):
+    key = (periodicity or _single(GLOBAL_OPTS['PERIODICITY'])).lower()
+    definition = PERIODS.get(key)
+    if not definition:
+        return key.upper()
+    return definition.get('gee_folder', definition['folder'])
+
 def _gcs_mosaic_path(periodicity, temporal_id, mosaic=None):
     base = _gcs_library_base()
     period = _period_folder(periodicity)
@@ -397,9 +404,9 @@ def gcs_path(relative):
 
 def get_asset_mosaic_collection(sensor=None, periodicity=None, band=None, period=None, mosaic=None, period_key=None):
     if period_key:
-        folder_period = parse_period(period_key).folder
+        folder_period = _gee_folder(parse_period(period_key).periodicity)
     else:
-        folder_period = _period_folder(period or periodicity)
+        folder_period = _gee_folder(period or periodicity)
     m_name = (mosaic or GLOBAL_OPTS.get('MOSAIC_METHOD', 'minnbr')).upper()
     
     sensor_name = (sensor or _single(GLOBAL_OPTS['SENSOR'])).upper()

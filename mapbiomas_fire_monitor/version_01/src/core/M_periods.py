@@ -12,6 +12,7 @@ from datetime import datetime
 PERIODS = {
     'yearly': {
         'folder': 'ANNUALLY',
+        'gee_folder': 'YEARLY',
         'periods_per_year': 1,
         'months': 12,
         'key': '{year}',
@@ -22,6 +23,7 @@ PERIODS = {
     },
     'monthly': {
         'folder': 'MONTHLY',
+        'gee_folder': 'MONTHLY',
         'periods_per_year': 12,
         'months': 1,
         'key': '{year}_{index:02d}',
@@ -32,6 +34,7 @@ PERIODS = {
     },
     'semestral': {
         'folder': 'SEMIANNUAL',
+        'gee_folder': 'SEMIANNUAL',
         'periods_per_year': 2,
         'months': 6,
         'key': '{year}_S{index}',
@@ -42,6 +45,7 @@ PERIODS = {
     },
     'quarterly': {
         'folder': 'QUARTERLY',
+        'gee_folder': 'QUARTERLY',
         'periods_per_year': 4,
         'months': 3,
         'key': '{year}_Q{index}',

@@ -77,6 +77,10 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(FOLDER_TO_PERIODICITY['MONTHLY'], 'monthly')
         self.assertEqual(FOLDER_TO_PERIODICITY['ANNUALLY'], 'yearly')
 
+    def test_gee_folders_preserve_legacy_yearly(self):
+        self.assertEqual(PERIODS['yearly']['gee_folder'], 'YEARLY')
+        self.assertEqual(PERIODS['monthly']['gee_folder'], 'MONTHLY')
+
     def test_period_state_keys_keep_current_names(self):
         self.assertEqual(period_state_key('cogs', 'monthly'), 'cogs_monthly')
         self.assertEqual(period_state_key('cogs', 'yearly'), 'cogs_annually')
