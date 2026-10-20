@@ -91,8 +91,8 @@ authenticate(project=F'mapbiomas-{CONTRY_SELECTED}')
 set_global_opts(
     country=F'{CONTRY_SELECTED}',
     campaign='CAMPAIGN',                              # MONITOR_01 (main) / MONITOR_DEV (dev)
-    sensor=['sentinel2'],
-    periodicity=['monthly'],
+    sensor='sentinel2',                               # string for one; list only for >1
+    periodicity='monthly',                            # 'monthly' or 'yearly'
     mosaic_methods=['minnbr', 'minnbr_buffer'],
     personal_task_flag='TASK_FLAG',                   # MONITOR (main) / MONITOR_DEV (dev)
     language='en',

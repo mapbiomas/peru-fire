@@ -84,8 +84,8 @@ def _single(val):
 CONFIG = None
 
 GLOBAL_OPTS = {
-    'SENSOR': ['landsat'],
-    'PERIODICITY': ['yearly'],
+    'SENSOR': ['sentinel2'],
+    'PERIODICITY': ['monthly'],
     'MOSAIC_METHOD': 'minnbr',
     'PERSONAL_TASK_FLAG': 'CATALOG',
     'FIRE_POTENTIAL_FILTER': False,
@@ -217,8 +217,8 @@ def set_global_opts(
     asset_regions,
 
     # === Opcionais (pipeline) ===
-    sensor=['sentinel2'],
-    periodicity=['monthly'],
+    sensor='sentinel2',
+    periodicity='monthly',
     mosaic_methods=None,
     personal_task_flag='MONITOR',
     language='en',
@@ -228,19 +228,24 @@ def set_global_opts(
 
     All required parameters must be provided explicitly.
     No defaults for project-level configuration.
+
+    Passing convention: use a plain string for a single option and a list
+    only when selecting more than one (e.g. sensor='landsat' but
+    mosaic_methods=['minnbr', 'median']).
     """
     global GLOBAL_OPTS, CONFIG
 
-    requested_periods = periodicity if isinstance(periodicity, list) else [periodicity]
+    requested_sensors = sensor if isinstance(sensor, (list, tuple)) else [sensor]
+    requested_periods = periodicity if isinstance(periodicity, (list, tuple)) else [periodicity]
     requested_periods = [str(p).lower() for p in requested_periods]
     if len(requested_periods) != 1 or requested_periods[0] not in {'monthly', 'yearly'}:
-        raise ValueError("periodicity must contain exactly one value: 'monthly' or 'yearly'.")
+        raise ValueError("periodicity must be a single value: 'monthly' or 'yearly'.")
 
     selected_mosaics = None
     if mosaic_methods is not None:
         from M_mosaics import all_methods as _all_mosaic_methods
         valid_mosaics = set(_all_mosaic_methods())
-        requested_mosaics = mosaic_methods if isinstance(mosaic_methods, list) else [mosaic_methods]
+        requested_mosaics = mosaic_methods if isinstance(mosaic_methods, (list, tuple)) else [mosaic_methods]
         selected_mosaics = [m for m in requested_mosaics if m in valid_mosaics]
         if not selected_mosaics:
             raise ValueError(f"mosaic_methods must contain one or more of: {', '.join(sorted(valid_mosaics))}.")
@@ -265,7 +270,7 @@ def set_global_opts(
         CONFIG.clear()
         CONFIG.update(new_config)
 
-    GLOBAL_OPTS['SENSOR'] = sensor if isinstance(sensor, list) else [sensor]
+    GLOBAL_OPTS['SENSOR'] = requested_sensors
     GLOBAL_OPTS['PERIODICITY'] = requested_periods
     GLOBAL_OPTS['PERSONAL_TASK_FLAG'] = personal_task_flag
     GLOBAL_OPTS['LANGUAGE'] = language
@@ -279,8 +284,8 @@ def set_global_opts(
     L.load_locale(language)
 
     mosaics_str = ', '.join(CONFIG['mosaic_methods'])
-    sensor_str = ', '.join(s.upper() if isinstance(s, str) else str(s).upper() for s in sensor)
-    period_str = ', '.join(p.upper() if isinstance(p, str) else str(p).upper() for p in periodicity)
+    sensor_str = ', '.join(str(s).upper() for s in requested_sensors)
+    period_str = ', '.join(str(p).upper() for p in requested_periods)
     print(f"Global options: Sensor(s): {sensor_str} | Period(s): {period_str} | Mosaics: {mosaics_str} | Campaign: {CONFIG['campaign']} | Task Flag: {personal_task_flag}")
 
     if clean_cache:
