@@ -257,7 +257,10 @@ def classify_cell_with_cogs(cell_id, predict_fn, bands_config, norm_stats, out_g
                     dst.write(output_doy, 2, window=dst_win)
 
                     total_valid += n_valid
-                    burned = probs > 0.5
+                    # Product convention: any positive probability counts as
+                    # burned, using the same rounded int16 value stored in the
+                    # raster (band 1) and the dayOfYear mask (band 2).
+                    burned = np.round(probs * 1000) > 0
                     n_burned = int(burned.sum())
                     total_burned += n_burned
                     if n_burned > 0:

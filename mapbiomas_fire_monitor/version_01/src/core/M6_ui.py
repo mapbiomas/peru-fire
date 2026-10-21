@@ -19,6 +19,12 @@ _M6_DISCOVERY_CACHE = None
 _M6_UI_INSTANCE = None
 
 
+def invalidate_discovery_cache():
+    """Force the next refresh to rescan GCS for classified groups."""
+    global _M6_DISCOVERY_CACHE
+    _M6_DISCOVERY_CACHE = None
+
+
 class M6WorkplanUI:
     def __init__(self):
         global _M6_UI_INSTANCE

@@ -11,7 +11,7 @@ from M_lang import L as Lang
 from M4_data_extractor import extract_pixels_from_gcs, list_sample_collections_gcs, list_campaigns_gcs
 from M4_algorithms_dnn import ModelTrainer, _get_tf
 from M4_analytics import view_analytics, render_diagnostic_dashboard, render_model_card_html
-from M4_hub_manager import list_trained_models, _load_m4_metadata, _save_m4_metadata
+from M4_hub_manager import list_trained_models, register_model, _load_m4_metadata, _save_m4_metadata
 class ModelTrainerUI(PipelineStepUI):
     def __init__(self):
         super().__init__(
@@ -213,8 +213,12 @@ class ModelTrainerUI(PipelineStepUI):
         self.main_area.children = [sync_header, self.tab]
         super().display()
 
-        # Sync on startup (synchronous, after render)
-        self._sync_all()
+        # Startup refresh: use the cache when possible; never wipe it here.
+        # Full rebuilds stay behind the explicit "Sync Data" button.
+        try:
+            self._sync_repository(show_loader=False, force_refresh=False)
+        except Exception as e:
+            print(f"  [WARN] Startup refresh: {e}")
 
     def _build_guide_tab(self):
         return widgets.HTML(Lang.GUIDE_M4_HTML.format(
@@ -471,6 +475,17 @@ class ModelTrainerUI(PipelineStepUI):
 
     def _refresh_ui(self):
         self._refresh_canvas_hub()
+
+    def _rebuild_dest_section(self):
+        """Rebuild the destination section so the suggested training ID advances."""
+        try:
+            new_dest = self._build_dest_section()
+            children = list(self.new_training_tab.children)
+            if children:
+                children[-1] = new_dest
+                self.new_training_tab.children = children
+        except Exception as e:
+            print(f"  [WARN] Could not refresh destination section: {e}")
         
 
     def make_spinner(self, msg=Lang.LOADING):
@@ -1086,10 +1101,12 @@ def start_training(ui):
             }
         }
         
+        # Registra no cache sem rebuild global: sidebar e proximo ID na hora.
+        register_model(final_id, saved_meta)
         ui.live_training_info = None  # Remove o status de LIVE após conclusão
         ui._live_initialized = False
-        ui._sync_all()
-        ui._update_canvas()  # Pinta o card final!
+        ui._rebuild_dest_section()    # Avanca o Training ID sugerido
+        ui._update_canvas()           # Pinta o card final e atualiza a sidebar
         
     except Exception as e:
         print(f"Error saving: {e}")

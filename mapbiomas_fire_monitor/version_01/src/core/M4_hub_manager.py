@@ -76,25 +76,38 @@ def list_trained_models(force_refresh=False):
     try:
         from M0_auth_config import _gcs_models_base
         fs = _get_fs()
-        path = f"{CONFIG['bucket']}/{_gcs_models_base()}"
+        path = f"{CONFIG['bucket']}/{_gcs_models_base()}".rstrip('/')
         models = []
         if fs.exists(path):
-            trainings = fs.ls(path)
-            for t_dir in trainings:
+            # Discover every model metadata.json with one glob call
+            # (previously: one ls + one exists per model, ~0.5s each).
+            try:
+                meta_files = fs.glob(f"{path}/*/metadata.json")
+            except FileNotFoundError:
+                meta_files = []
+
+            meta_cache = _load_m4_metadata()
+            meta_paths = meta_cache.setdefault('meta', {})
+            for fpath in meta_files:
+                t_dir = fpath[:-len('/metadata.json')]
                 t_name = t_dir.split('/')[-1]
-                if t_name.startswith('training_'):
-                    if not fs.exists(f"{t_dir}/metadata.json"):
-                        print(f"[WARN] Ignoring model without metadata.json: {t_dir}")
-                        continue
-                    models.append(t_name)
-                    # Guarda o path em metadata
-                    meta_cache = _load_m4_metadata()
-                    if 'meta' not in meta_cache:
-                        meta_cache['meta'] = {}
-                    if t_name not in meta_cache['meta']:
-                        meta_cache['meta'][t_name] = {}
-                    meta_cache['meta'][t_name]['path'] = t_dir
-                    _save_m4_metadata(meta_cache)
+                if not t_name.startswith('training_'):
+                    continue
+                models.append(t_name)
+                meta_paths.setdefault(t_name, {})['path'] = t_dir
+            if models:
+                _save_m4_metadata(meta_cache)
+
+            # Warn about training_* folders that have no metadata.json.
+            found = set(models)
+            try:
+                entries = fs.ls(path)
+            except Exception:
+                entries = []
+            for entry in entries:
+                t_name = entry.rstrip('/').split('/')[-1]
+                if t_name.startswith('training_') and t_name not in found:
+                    print(f"[WARN] Ignoring model without metadata.json: {path}/{t_name}")
 
         # Atualiza CacheManager
         models = _normalize_models(models)
@@ -105,4 +118,33 @@ def list_trained_models(force_refresh=False):
     except Exception as e:
         print(f"[WARN] Could not scan trained models: {e}")
         return trained
+
+
+def register_model(model_id, metadata=None):
+    """Register a freshly trained model without rebuilding the whole cache.
+
+    Appends it to the CacheManager list and stores the rich metadata in
+    m4_ranking_cache.json, so the M4 sidebar and the suggested training ID
+    update immediately after training.
+    """
+    if not model_id:
+        return []
+    from M0_auth_config import gcs_models_path
+
+    state = CacheManager.get_state()
+    trained = _normalize_models(state.get('trained_models', []))
+    if model_id not in trained:
+        trained.append(model_id)
+    state['trained_models'] = trained
+    CacheManager._state = state
+    CacheManager.save()
+
+    cache = _load_m4_metadata()
+    if metadata:
+        cache.setdefault('metadata', {})[model_id] = metadata
+    cache.setdefault('meta', {}).setdefault(model_id, {})['path'] = (
+        f"{CONFIG['bucket']}/{gcs_models_path()}/{model_id}"
+    )
+    _save_m4_metadata(cache)
+    return trained
 

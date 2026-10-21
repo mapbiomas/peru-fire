@@ -129,6 +129,13 @@ def _run_classification(plan, out, progress_callback=None, n_workers=None):
             global_completed += groups_cells_count.get((model_id, period), 0)
             continue
 
+    # A finished classification run changes what M6 should discover next.
+    try:
+        from M6_ui import invalidate_discovery_cache
+        invalidate_discovery_cache()
+    except Exception:
+        pass
+
 
 def _classify_one_tile(cell, model_id, region_name, period, campaign,
                         predict_fn, bands_config, norm_stats, band_paths, band_order,

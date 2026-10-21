@@ -137,7 +137,9 @@ def compute_region_stats_from_mosaic(model_id, region, period, fs=None, logger=N
     os.remove(local_tmp)
 
     total_valid = int((prob_band != -9999).sum())
-    burned_mask = prob_band > 500  # 50.0% threshold
+    # Product convention: any positive probability counts as burned (same rule
+    # as the dayOfYear band in M5 and the GEE filters).
+    burned_mask = prob_band > 0
     n_burned = int(burned_mask.sum())
 
     resolution_m = _get_resolution_from_model(model_id)
@@ -379,7 +381,9 @@ def compute_region_stats_from_tiles(model_id, region, period, fs=None, logger=No
 
             valid_mask = prob_band != -9999
             n_valid = int(valid_mask.sum())
-            burned_mask = prob_band > 500
+            # Product convention: any positive probability counts as burned
+            # (same rule as the dayOfYear band in M5 and the GEE filters).
+            burned_mask = prob_band > 0
             n_burned = int(burned_mask.sum())
 
             total_valid += n_valid
@@ -397,7 +401,7 @@ def compute_region_stats_from_tiles(model_id, region, period, fs=None, logger=No
     pixel_area_m2 = resolution_m ** 2
     burned_area_ha = total_burned * pixel_area_m2 / 10000
     total_area_ha = total_valid * pixel_area_m2 / 10000 if total_valid else 0
-    mean_conf = sum_conf / total_burned if total_burned > 0 else 0.0
+    mean_conf = sum_conf / total_burned / 1000.0 if total_burned > 0 else 0.0
 
     row = {
         'model_id': model_id,
@@ -622,3 +626,12 @@ def run_m6_publish(upload_gee=True, groups=None, ui=None, logger=None):
 
     total = time.time() - _t0
     logger(f"\n  --- M6 publish done in {_fmt_time(total)} ---")
+
+    # Refresh the M6 cache/UI so the freshly published groups appear at once.
+    try:
+        from M6_ui import invalidate_discovery_cache, _M6_UI_INSTANCE
+        invalidate_discovery_cache()
+        if _M6_UI_INSTANCE is not None:
+            _M6_UI_INSTANCE.refresh()
+    except Exception:
+        pass

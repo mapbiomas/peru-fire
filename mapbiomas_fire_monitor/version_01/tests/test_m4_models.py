@@ -59,6 +59,11 @@ class NormalizeModelsTests(unittest.TestCase):
 
 
 class FakeFS:
+    MODELS = [
+        'bucket/prefix/CAMPAIGN_01/LIBRARY_MODELS/training_001_a_landsat',
+        'bucket/prefix/CAMPAIGN_01/LIBRARY_MODELS/training_002_b_landsat',
+    ]
+
     def __init__(self, metadata_for=()):
         self.metadata_for = set(metadata_for)
         self.removed = []
@@ -70,10 +75,15 @@ class FakeFS:
         return True
 
     def ls(self, path):
-        return [
-            'bucket/prefix/LIBRARY_MODELS/training_001_a_landsat',
-            'bucket/prefix/LIBRARY_MODELS/training_002_b_landsat',
-        ]
+        return list(self.MODELS)
+
+    def glob(self, pattern):
+        base = pattern.split('/*/')[0]
+        return sorted(
+            f"{model}/metadata.json"
+            for model in self.metadata_for
+            if model.startswith(base + '/')
+        )
 
     def rm(self, path, recursive=False):
         self.removed.append(path)
@@ -110,9 +120,42 @@ class ListTrainedModelsTests(unittest.TestCase):
         self.assertEqual(fs.removed, [])
 
     def test_only_models_with_metadata_are_listed(self):
-        fs = FakeFS(metadata_for={'bucket/prefix/LIBRARY_MODELS/training_001_a_landsat'})
+        fs = FakeFS(metadata_for={'bucket/prefix/CAMPAIGN_01/LIBRARY_MODELS/training_001_a_landsat'})
         self.assertEqual(self._run(fs), ['training_001_a_landsat'])
         self.assertEqual(fs.removed, [])
+
+
+class RegisterModelTests(unittest.TestCase):
+    def test_appends_model_and_stores_metadata(self):
+        state = {'trained_models': ['training_001_a_landsat']}
+        saved = {}
+
+        class FakeCache:
+            @staticmethod
+            def get_state():
+                return state
+
+            @staticmethod
+            def save(*args, **kwargs):
+                return None
+
+        with patch.object(hub, 'CacheManager', FakeCache), \
+             patch.object(hub, '_load_m4_metadata', return_value={}), \
+             patch.object(hub, '_save_m4_metadata',
+                          side_effect=lambda data: saved.update(data)), \
+             patch.object(M0_auth_config, 'gcs_models_path',
+                          return_value='prefix/CAMPAIGN_01/LIBRARY_MODELS'), \
+             patch.object(hub, 'CONFIG', {'bucket': 'bucket'}):
+            trained = hub.register_model('training_002_b_landsat', {'shortname': 'b'})
+
+        self.assertEqual(trained, ['training_001_a_landsat', 'training_002_b_landsat'])
+        self.assertEqual(state['trained_models'], trained)
+        self.assertEqual(saved['metadata']['training_002_b_landsat'], {'shortname': 'b'})
+        self.assertTrue(
+            saved['meta']['training_002_b_landsat']['path'].endswith(
+                '/training_002_b_landsat'
+            )
+        )
 
 
 if __name__ == '__main__':
