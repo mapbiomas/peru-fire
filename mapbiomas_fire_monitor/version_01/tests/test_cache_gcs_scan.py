@@ -5,6 +5,8 @@ from one GCS scan. After M2 deletes the chunks, gcs_chunks must be empty while
 cogs_* keeps the COG.
 """
 
+import copy
+import json
 import os
 import shutil
 import sys
@@ -120,6 +122,42 @@ class GcsCacheContractTests(unittest.TestCase):
             scan_gcs([COG], callback=lambda state: CacheManager.cogs_for('yearly')),
             [],
         )
+
+
+class StaleCachePersistenceTests(unittest.TestCase):
+    def test_mark_stale_persists_across_reload(self):
+        old_cwd = os.getcwd()
+        tmp = tempfile.mkdtemp()
+        writes = []
+        try:
+            os.chdir(tmp)
+            with patch.object(M_cache, 'CONFIG', CONFIG), \
+                 patch.object(M0_auth_config, 'CONFIG', CONFIG), \
+                 patch.object(M_cache, '_get_fs', return_value=FakeFS([])), \
+                 patch.object(
+                     M_gcs,
+                     'write_json',
+                     side_effect=lambda path, data: writes.append(copy.deepcopy(data)),
+                 ):
+                CacheManager.reset()
+                state = CacheManager.get_state()
+                CacheManager.save(state)
+                self.assertIsNotNone(writes[-1]['updated_at'])
+
+                CacheManager.mark_stale()
+
+                with open(CacheManager.CACHE_FILE, encoding='utf-8') as handle:
+                    local = json.load(handle)
+                self.assertIsNone(local['updated_at'])
+                self.assertIsNone(writes[-1]['updated_at'])
+
+                CacheManager.reset()
+                reloaded = CacheManager.load(force=True)
+                self.assertIsNone(reloaded['updated_at'])
+        finally:
+            os.chdir(old_cwd)
+            shutil.rmtree(tmp, ignore_errors=True)
+            CacheManager.reset()
 
 
 if __name__ == '__main__':

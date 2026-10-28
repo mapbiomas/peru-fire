@@ -447,8 +447,12 @@ class CacheManager:
 
 
     @staticmethod
-    def save(state=None):
-        """Salva cache no GCS."""
+    def save(state=None, touch=True):
+        """Salva cache no GCS.
+
+        touch=False preserva o updated_at atual (usado por mark_stale para
+        persistir a invalidação sem carimbar um timestamp novo).
+        """
         from M_gcs import write_json
         with CacheManager._lock:
             try:
@@ -457,7 +461,10 @@ class CacheManager:
                 if state is None:
                     state = CacheManager._state
                 
-                state['updated_at'] = datetime.datetime.utcnow().isoformat() + 'Z'
+                if touch:
+                    state['updated_at'] = datetime.datetime.utcnow().isoformat() + 'Z'
+                else:
+                    state.setdefault('updated_at', None)
                 state['country'] = CONFIG['country']
                 state['_cache_scope'] = CacheManager._scope()
                 
@@ -534,7 +541,7 @@ class CacheManager:
 
     @staticmethod
     def mark_stale():
-        """Invalida o carimbo do cache em memoria.
+        """Invalida o carimbo do cache em memoria e no disco/GCS.
 
         Usado depois de disparar novos exports: os arquivos so existirao no GCS
         daqui a pouco, mas o proximo modulo que abrir o cache deve reescanear
@@ -543,6 +550,7 @@ class CacheManager:
         with CacheManager._lock:
             if CacheManager._state:
                 CacheManager._state['updated_at'] = None
+                CacheManager.save(CacheManager._state, touch=False)
 
     @staticmethod
     def build_cache_from_classifications(fs=None, logger=None):
