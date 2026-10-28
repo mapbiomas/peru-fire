@@ -5,13 +5,82 @@ import threading
 import ipywidgets as widgets
 from IPython.display import display, clear_output
 
-from M0_auth_config import CONFIG, GLOBAL_OPTS, mosaic_name_for_period, is_edit_mode, get_sensor_start_year, resolve_years
+from M0_auth_config import (
+    CONFIG, GLOBAL_OPTS, mosaic_name_for_period, is_edit_mode,
+    get_sensor_start_year, resolve_years, period_cog_path, period_chunk_path,
+    get_asset_mosaic_collection,
+)
 from M_periods import list_periods, parse_period, period_state_key
 import M0_auth_config as config_module
 from M_cache import CacheManager
 from M_ui_components import PipelineStepUI, cell_log
 from M_lang import L as Lang
 from M1_export_logic import get_quality_mosaic, export_to_asset, export_to_gcs, clear_gcs_chunks, delete_gcs_band, delete_asset_band
+
+
+def resolve_output_state(row_type, has_chunks, has_cog, has_asset, is_active):
+    """Return (state, exists) for one M1 grid cell.
+
+    GCS rows are satisfied by either the exported chunks or the assembled
+    COG. ASSET rows only depend on the GEE asset. An active export task wins
+    over any existing output.
+    """
+    if row_type == 'ASSET':
+        exists = has_asset
+    else:
+        exists = bool(has_chunks or has_cog)
+    if is_active:
+        return 'RUN', exists
+    return ('OK' if exists else 'MISS'), exists
+
+
+def output_link_url(
+    row_type, has_chunks, has_cog, has_asset,
+    sensor, period, mosaic, period_key, band, mosaic_name,
+):
+    """Return the clickable target for an OK cell, or None."""
+    if row_type == 'ASSET':
+        if not has_asset:
+            return None
+        collection_id = get_asset_mosaic_collection(
+            sensor=sensor, period=period, band=band,
+            mosaic=mosaic, period_key=period_key,
+        )
+        return f"https://code.earthengine.google.com/?asset={collection_id}/{mosaic_name}"
+
+    if has_cog:
+        cog_dir = period_cog_path(period_key, mosaic=mosaic, sensor=sensor)
+        return f"https://storage.googleapis.com/{CONFIG['bucket']}/{cog_dir}/{mosaic_name}_cog.tif"
+
+    if has_chunks:
+        chunk_dir = period_chunk_path(period_key, mosaic=mosaic, sensor=sensor)
+        return f"https://console.cloud.google.com/storage/browser/{CONFIG['bucket']}/{chunk_dir}"
+
+    return None
+
+
+def make_link_cell(chk, url, width='auto'):
+    """Checkbox + clickable OK label, matching the M2 COG cells."""
+    status_html = widgets.HTML(
+        f'<a href="{url}" target="_blank" '
+        'style="font-size:10px;font-weight:700;color:#155724;text-decoration:underline;">OK ↗</a>',
+        layout=widgets.Layout(width='32px'),
+    )
+    cell = widgets.HBox(
+        [chk, status_html],
+        layout=widgets.Layout(
+            width=width,
+            min_height='34px',
+            justify_content='center',
+            align_items='center',
+            padding='0',
+            overflow='hidden',
+            margin='1px',
+        ),
+    )
+    cell.add_class('mfm-ok')
+    return cell
+
 
 class ExportDispatcherUI(PipelineStepUI):
     RELEASE_DAY = 2
@@ -40,7 +109,33 @@ class ExportDispatcherUI(PipelineStepUI):
         self.bands = CONFIG['bands_all']
         self.update_status(Lang.LOADING_CACHE)
         self.state = CacheManager.load() or {}
+        # Chunks/COGs written outside this session live only in GCS. Rebuild
+        # the cache when it is older than the TTL so the grid reflects the
+        # current GCS state without requiring a manual Sync.
+        if self._cache_is_stale():
+            try:
+                self.state = CacheManager.build_cache_from_gcs(
+                    logger=self.update_status, years=self.years,
+                )
+            except Exception as e:
+                print(f"[WARN] M1: could not sync GCS cache: {e}")
         self.gcs_chunks = self.state.get('gcs_chunks', {})
+
+    _CACHE_TTL_SECONDS = 300
+
+    def _cache_is_stale(self):
+        import datetime
+        raw = (self.state or {}).get('updated_at')
+        if not raw:
+            return True
+        try:
+            stamp = datetime.datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
+        except ValueError:
+            return True
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=datetime.timezone.utc)
+        age = (datetime.datetime.now(datetime.timezone.utc) - stamp).total_seconds()
+        return age > self._CACHE_TTL_SECONDS
 
     def _get_active_tasks(self):
         try:
@@ -112,6 +207,10 @@ class ExportDispatcherUI(PipelineStepUI):
             include_current=(period == 'yearly'),
             now=self.now,
         )
+        cogs_list = {
+            name.lower()
+            for name in self.state.get(period_state_key('cogs', period), [])
+        }
         for period_info in periods:
             if period_info.year < get_sensor_start_year(sensor):
                 continue
@@ -135,11 +234,15 @@ class ExportDispatcherUI(PipelineStepUI):
                     m_base_name = mosaic_name_for_period(date_str, mosaic=mosaic_method, sensor=sensor)
 
                     chunks_dict = self.state.get('gcs_chunks', {})
-                    exists_gcs = b in chunks_dict.get(m_base_name.lower(), [])
+                    has_chunks = b.lower() in {
+                        chunk.lower() for chunk in chunks_dict.get(m_base_name.lower(), [])
+                    }
 
                     assets_key = period_state_key('assets', period)
                     assets_list = self.state.get(assets_key, [])
-                    exists_gee = m_name.lower() in assets_list
+                    has_asset = m_name.lower() in {asset.lower() for asset in assets_list}
+
+                    has_cog = m_name.lower() in cogs_list
 
                     m_name_lower = m_name.lower()
                     # Busca precisa usando a flag pessoal: FLAG_TIPO_NOME
@@ -149,20 +252,26 @@ class ExportDispatcherUI(PipelineStepUI):
                     chk = widgets.Checkbox(value=False, indent=False, layout=L(width='18px', height='18px', margin='0'))
                     chk._meta = {'sensor': sensor, 'period': period, 'mosaic': mosaic_method, 'year': y, 'month': m, 'period_key': date_str, 'band': b, 'type': row_type}
 
-                    exists = exists_gcs if row_type == 'GCS' else exists_gee
+                    status, exists = resolve_output_state(
+                        row_type, has_chunks, has_cog, has_asset, is_active,
+                    )
                     chk._meta['exists'] = exists
                     chk._meta['active'] = is_active
-                    
-                    if is_active:
-                        status, css = 'RUN', 'mfm-run'
-                    elif exists:
-                        status, css = 'OK', 'mfm-ok'
-                    else:
-                        status, css = 'MISS', 'mfm-null'
+                    css = {'RUN': 'mfm-run', 'OK': 'mfm-ok', 'MISS': 'mfm-null'}[status]
 
                     chk.disabled = is_active or (exists and not is_edit_mode())
 
-                    cell = PipelineStepUI.make_status_cell(chk, status, css, width='auto')
+                    link = None
+                    if status == 'OK':
+                        link = output_link_url(
+                            row_type, has_chunks, has_cog, has_asset,
+                            sensor=sensor, period=period, mosaic=mosaic_method,
+                            period_key=date_str, band=b, mosaic_name=m_name,
+                        )
+                    if link:
+                        cell = make_link_cell(chk, link, width='auto')
+                    else:
+                        cell = PipelineStepUI.make_status_cell(chk, status, css, width='auto')
                     cell.layout.flex = '1'
                     self.chk_dict[f"{sensor}_{period}_{mosaic_method}_{date_str}_{row_type}_{b}"] = chk
                     cells.append(cell)

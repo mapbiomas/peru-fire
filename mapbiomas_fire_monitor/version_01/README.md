@@ -13,7 +13,7 @@ El modelo asume un procesamiento híbrido: la nube (Google Earth Engine y Google
    *Rutas:* GEE -> `projects/mapbiomas-peru/assets/FIRE/MONITOR/VERSION_01/MOSAICS_RAW` | GCS -> `mapbiomas-fire/sudamerica/peru/monitor/mosaics/raw`
 
 2. **[M2] Descarga y Mosaico Local** [✅ FINALIZADO]
-   Sincronización desde GCS, unión de bandas (`gdalbuildvrt` / `gdal_translate`) para generar Cloud Optimized GeoTIFFs (COGs) y re-carga a Earth Engine.
+   Sincronización desde GCS, unión de bandas (`gdalbuildvrt` / `gdal_translate`) para generar Cloud Optimized GeoTIFFs (COGs) y re-carga a Earth Engine. Después de generar el COG, M2 elimina los chunks de origen de esa banda; para reconstruir un COG hay que reexportarlos desde M1.
    *Rutas:* GEE -> `projects/mapbiomas-peru/assets/FIRE/MONITOR/VERSION_01/MOSAICS_COG`
 
 3. **[M3] Gestor de Muestras (`M3_toolkit.js`)** [✅ FINALIZADO]

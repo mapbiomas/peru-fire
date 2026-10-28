@@ -437,3 +437,5 @@ def start_mosaic_assembly(ui_obj):
             ui_obj._reload_current_tab()
         except Exception as e:
             print(f"[WARN] M2: could not refresh cache after assembly: {e}")
+            # Chunks were removed, so the old cache is no longer trustworthy.
+            CacheManager.mark_stale()

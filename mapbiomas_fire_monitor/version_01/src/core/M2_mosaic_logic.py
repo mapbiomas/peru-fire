@@ -15,16 +15,20 @@ from M0_auth_config import (
     get_temp_dir, check_command_exists
 )
 from M_periods import parse_period
-from M_gcs import upload, download
+from M_gcs import upload, download, rm_files
 
 # Mapeamento de Tipos de Dados Recomendado (IPAM/MapBiomas)
 BAND_DATATYPES = {
-    'blue': 'Int16', 'green': 'Int16', 'red': 'Int16', 
-    'nir': 'Int16', 'swir1': 'Int16', 'swir2': 'Int16',
+    'blue': 'Byte', 'green': 'Byte', 'red': 'Byte',
+    'nir': 'Byte', 'swir1': 'Byte', 'swir2': 'Byte',
     'nbr': 'Int16', 'dayOfYear': 'Int16',
     'classification': 'Byte', 'burned_area': 'Byte',
     'probability': 'Float32', 'score': 'Float32'
 }
+
+# O COG e o produto final; os chunks sao apenas arquivos intermediarios.
+# Removê-los depois do upload bem-sucedido evita manter duas copias no bucket.
+DELETE_CHUNKS_AFTER_COG = True
 
 def list_gcs_files(prefix, logger=None):
     """Lista shards no GCS usando gcsfs."""
@@ -176,6 +180,20 @@ def assemble_country_mosaic(year, month=None, period='monthly', bands=None, sens
                 upload(cog_local_path, dest)
                 
                 if logger: logger(f" Success: {cog_remote_name}", "success")
+                if DELETE_CHUNKS_AFTER_COG:
+                    try:
+                        rm_files(remote_shards)
+                        if logger:
+                            logger(
+                                f" Cleaned {len(remote_shards)} source chunks for {clean_b_name}.",
+                                "info",
+                            )
+                    except Exception as e:
+                        if logger:
+                            logger(
+                                f"[WARN] COG built but source chunks may remain for {clean_b_name}: {e}",
+                                "warning",
+                            )
                 results.append(f"gs://{dest}")
             finally:
                 if os.path.exists(band_tmp): shutil.rmtree(band_tmp)
